@@ -48,7 +48,7 @@ export class AIService {
     if (contextString && mapped.length > 0) {
       const last = mapped[mapped.length - 1];
       if (last.role === 'user') {
-        last.content = `${last.content}\n\n[WORKSPACE CONTEXT]\n${contextString}`;
+        last.content = `[CURRENT WORKSPACE - use ONLY this, do not guess or invent anything]\n${contextString}\n[END WORKSPACE]\n\nStudent: ${last.content}`;
       }
     }
 
@@ -69,6 +69,12 @@ export class AIService {
   async stream({ messages, contextData, onChunk, signal }) {
     const contextString = buildContext(contextData);
     const providerMessages = this._prepareMessages(messages, contextString);
+
+    console.group('[AIService] Outgoing request');
+    console.log('System prompt:\n', this._systemPrompt);
+    console.log('Messages sent to provider:', providerMessages);
+    console.log('Workspace context (raw):\n', contextString);
+    console.groupEnd();
 
     return this.provider.streamMessage({
       messages: providerMessages,

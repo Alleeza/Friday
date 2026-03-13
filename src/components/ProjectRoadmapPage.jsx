@@ -1,0 +1,315 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+
+const STAGE_GRAPHICS = ['🐰', '🕹️', '🥕', '🪨', '🛠️'];
+
+function buildStageProgress(plan, completedStepKeys) {
+  const stages = plan.stages.map((stage, index) => ({
+    ...stage,
+    title: stage.label,
+    graphic: STAGE_GRAPHICS[index % STAGE_GRAPHICS.length],
+    optionalSteps: (stage.optionalSteps || []).map((step) => ({
+      text: step.description,
+      xp: step.bonusXp,
+    })),
+    stepHelp: stage.steps.map(() => stage.why),
+  }));
+
+  const stageRequiredCompletedCounts = stages.map((stage) =>
+    stage.steps.filter((_, stepIndex) => completedStepKeys[`${stage.id}:${stepIndex}`]).length,
+  );
+
+  const done = stages.map((stage, stageIndex) => stageRequiredCompletedCounts[stageIndex] >= stage.steps.length);
+  const currentIndex = Math.max(0, done.findIndex((value) => !value));
+  const safeCurrentIndex = done.every(Boolean) ? Math.max(0, stages.length - 1) : currentIndex;
+  const currentStage = stages[safeCurrentIndex];
+  const currentStageCompletedCount = stageRequiredCompletedCounts[safeCurrentIndex] ?? 0;
+  const currentStageStepIndex = Math.min(currentStageCompletedCount, Math.max((currentStage?.steps.length || 1) - 1, 0));
+
+  const earnedRequiredXp = stages.reduce(
+    (sum, stage, stageIndex) =>
+      sum + stage.stepXp.slice(0, stageRequiredCompletedCounts[stageIndex] || 0).reduce((stageSum, xp) => stageSum + xp, 0),
+    0,
+  );
+  const totalRequiredXp = stages.reduce((sum, stage) => sum + stage.stepXp.reduce((stageSum, xp) => stageSum + xp, 0), 0);
+  const totalSteps = stages.reduce((sum, stage) => sum + stage.steps.length, 0);
+  const completedSteps = stageRequiredCompletedCounts.reduce((sum, count) => sum + count, 0);
+  const progressPct = totalSteps ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+  return {
+    stages,
+    done,
+    currentIndex: safeCurrentIndex,
+    currentStage,
+    currentStageCompletedCount,
+    currentStageStepIndex,
+    progressPct,
+    earnedRequiredXp,
+    totalRequiredXp,
+  };
+}
+
+function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
+  const palette = tone === 'bonus'
+    ? {
+        done: 'border-[#8fd0f8] bg-[#dff3ff] text-[#166b9a]',
+        active: 'border-[#25a8ef] bg-[#25a8ef] text-white',
+        idle: 'border-[#c7d5e7] bg-[#edf4ff] text-[#4b5f7a]',
+        badgeDone: 'border-[#25a8ef] bg-[#25a8ef] text-white',
+        badgeActive: 'border-white bg-white text-[#25a8ef]',
+        badgeIdle: 'border-[#8fb5de] bg-white text-[#8fb5de]',
+      }
+    : {
+        done: 'border-[#bfe7a1] bg-[#f3ffe8] text-[#3f7f13]',
+        active: 'border-[#58cc02] bg-[#58cc02] text-white',
+        idle: 'border-[#d7dbe1] bg-[#f5f7fb] text-slate-500',
+        badgeDone: 'border-duo-green bg-duo-green text-white',
+        badgeActive: 'border-white bg-white text-duo-green',
+        badgeIdle: 'border-slate-300 bg-white text-slate-400',
+      };
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`flex w-full items-start gap-2 rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold ${
+        done
+          ? palette.done
+          : active
+            ? palette.active
+            : palette.idle
+      }`}
+    >
+      <span
+        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 text-[10px] font-bold ${
+          done
+            ? palette.badgeDone
+            : active
+              ? palette.badgeActive
+              : palette.badgeIdle
+        }`}
+      >
+        {done ? (tone === 'bonus' ? '★' : '✓') : ''}
+      </span>
+      <span className={`flex-1 ${active ? 'font-bold' : ''}`}>{label}</span>
+      <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${done || active ? 'bg-white/90 text-[#4b5563]' : 'bg-white text-slate-500'}`}>
+        +{xp} XP
+      </span>
+    </button>
+  );
+}
+
+export function StageProgressSection({ setupData, plan }) {
+  const [completedStepKeys, setCompletedStepKeys] = useState({});
+  const [completedBonusKeys, setCompletedBonusKeys] = useState({});
+  const [showSteps, setShowSteps] = useState(true);
+  const [showBonusQuests, setShowBonusQuests] = useState(false);
+  const [selectedItem, setSelectedItem] = useState({ type: 'step', index: 0 });
+
+  const {
+    stages,
+    done,
+    currentIndex,
+    currentStage,
+    currentStageCompletedCount,
+    currentStageStepIndex,
+    progressPct,
+    earnedRequiredXp,
+    totalRequiredXp,
+  } = useMemo(() => buildStageProgress(plan, completedStepKeys), [plan, completedStepKeys]);
+
+  const safeStepIndex = Math.min(currentStageStepIndex, Math.max((currentStage?.steps.length || 1) - 1, 0));
+  const activeLinePct = stages.length ? ((Math.max(currentIndex, 0) + 0.5) / stages.length) * 100 : 0;
+  const visibleSteps = showSteps ? (currentStage?.steps || []) : (currentStage?.steps || []).slice(0, 1);
+  const selectedStepIndex = selectedItem.type === 'step'
+    ? Math.min(selectedItem.index, Math.max((currentStage?.steps.length || 1) - 1, 0))
+    : safeStepIndex;
+  const selectedBonusIndex = selectedItem.type === 'bonus'
+    ? Math.min(selectedItem.index, Math.max((currentStage?.optionalSteps?.length || 1) - 1, 0))
+    : 0;
+  const selectedBonus = currentStage?.optionalSteps?.[selectedBonusIndex] || null;
+  const selectedTitle = selectedItem.type === 'bonus'
+    ? selectedBonus?.text
+    : currentStage?.steps?.[selectedStepIndex] || currentStage?.objective;
+  const selectedDescription = selectedItem.type === 'bonus'
+    ? `Optional stretch goal for ${currentStage?.label?.toLowerCase()}. ${currentStage?.why || ''}`.trim()
+    : currentStage?.stepHelp?.[selectedStepIndex] || currentStage?.why;
+
+  useEffect(() => {
+    setSelectedItem({ type: 'step', index: safeStepIndex });
+  }, [currentStage?.id, safeStepIndex]);
+
+  return (
+    <section className="quest-card border border-[#e3e6eb] bg-[#f8fafc] p-6 shadow-[0_6px_0_rgba(148,163,184,0.12)]">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">Project Roadmap</p>
+          <h2 className="font-display text-5xl font-bold leading-none text-slate-800">Stage Progress</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-5 py-1.5 text-sm font-extrabold text-[#1b97dd]">
+            Stage {Math.min(currentIndex + 1, stages.length)} of {stages.length}
+          </div>
+          <div className="rounded-full border border-[#d3d7dd] bg-white px-5 py-1.5 text-sm font-extrabold text-slate-600">{progressPct}% complete</div>
+          <div className="rounded-full border border-[#bde59f] bg-[#eefadb] px-5 py-1.5 text-sm font-extrabold text-[#3f7f13]">
+            XP {earnedRequiredXp}/{totalRequiredXp}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative mb-6 px-2">
+        <div className="absolute left-2 right-2 top-5 h-[4px] rounded-full bg-[#d4dce6]" />
+        <div className="absolute left-2 top-5 h-[4px] rounded-full bg-[#25a8ef] transition-all" style={{ width: `${activeLinePct}%` }} />
+
+        <div
+          className="relative grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${Math.max(stages.length, 1)}, minmax(0, 1fr))` }}
+        >
+          {stages.map((stage, idx) => {
+            const isDone = done[idx];
+            const isActive = idx === currentIndex || (done.every(Boolean) && idx === stages.length - 1);
+            return (
+              <div key={stage.id} className="text-center">
+                <div
+                  className={`mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full border-[3px] text-sm font-extrabold ${
+                    isDone
+                      ? 'border-[#58cc02] bg-[#58cc02] text-white shadow-sm'
+                      : isActive
+                        ? 'border-[#25a8ef] bg-white text-[#25a8ef] shadow-sm'
+                        : 'border-[#b9c4d2] bg-white text-[#8f9cad]'
+                  }`}
+                >
+                  {isDone ? '✓' : idx + 1}
+                </div>
+                <p className={`text-[12px] font-bold leading-tight ${isActive ? 'text-[#25a8ef]' : 'text-slate-600'}`}>
+                  {stage.label}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <article className="rounded-3xl border border-[#d4d9df] bg-white p-4 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              {currentStage?.label?.toUpperCase()}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowSteps((prev) => !prev)}
+              className="rounded-full border border-[#d3d7dd] bg-white px-2.5 py-1 text-xs font-extrabold text-slate-600"
+            >
+              {showSteps ? '▾' : '▸'}
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {visibleSteps.map((step, idx) => {
+              const stepKey = `${currentStage.id}:${idx}`;
+              const isDone = idx < currentStageCompletedCount;
+              return (
+                <StepRow
+                  key={stepKey}
+                  active={selectedItem.type === 'step' && idx === selectedStepIndex}
+                  done={isDone}
+                  label={`Step ${idx + 1}: ${step}`}
+                  xp={currentStage.stepXp[idx] || 0}
+                  onToggle={() => {
+                    setSelectedItem({ type: 'step', index: idx });
+                    setCompletedStepKeys((prev) => ({ ...prev, [stepKey]: !prev[stepKey] }));
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {currentStage?.optionalSteps?.length ? (
+            <div className="pt-5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.09em] text-[#1b97dd]">Bonus Quests (Optional)</p>
+                <button
+                  type="button"
+                  onClick={() => setShowBonusQuests((prev) => !prev)}
+                  className="rounded-full border border-[#b8d6ef] bg-white px-2.5 py-1 text-xs font-extrabold text-[#1b97dd]"
+                >
+                  {showBonusQuests ? '▾' : '▸'}
+                </button>
+              </div>
+              {showBonusQuests ? (
+                <div className="space-y-2">
+                  {currentStage.optionalSteps.map((bonus, idx) => {
+                    const bonusKey = `${currentStage.id}:bonus:${idx}`;
+                    return (
+                      <StepRow
+                        key={bonusKey}
+                        tone="bonus"
+                        active={selectedItem.type === 'bonus' && idx === selectedBonusIndex}
+                        done={Boolean(completedBonusKeys[bonusKey])}
+                        label={bonus.text}
+                        xp={bonus.xp || 0}
+                        onToggle={() => {
+                          setSelectedItem({ type: 'bonus', index: idx });
+                          setCompletedBonusKeys((prev) => ({ ...prev, [bonusKey]: !prev[bonusKey] }));
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </article>
+
+        <article className="rounded-3xl border border-[#d4d9df] bg-white p-4 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
+          <div className="mb-3 flex items-center gap-3">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#ecf8ff] text-3xl">
+              {currentStage?.graphic || '🎯'}
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current Step</p>
+              <p className="text-sm font-bold text-slate-700">
+                {selectedItem.type === 'bonus'
+                  ? `Bonus Quest ${selectedBonusIndex + 1} of ${Math.max(currentStage?.optionalSteps?.length || 0, 1)}`
+                  : `Step ${selectedStepIndex + 1} of ${Math.max(currentStage?.steps.length || 0, 1)}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <p className="font-bold text-slate-800">{selectedTitle}</p>
+            <p className="font-semibold text-slate-600">{selectedDescription}</p>
+            {selectedItem.type === 'bonus' ? (
+              <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">Optional bonus quest</p>
+            ) : null}
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+export default function ProjectRoadmapPage({ setupData, plan, onStartBuilder, onBack }) {
+  return (
+    <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
+      <StageProgressSection setupData={setupData} plan={plan} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-2xl px-5 py-3 font-bold text-slate-500 hover:bg-slate-100"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={onStartBuilder}
+          className="duo-btn-blue inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3 text-lg"
+        >
+          Continue to Builder
+          <ArrowRight className="h-5 w-5" />
+        </button>
+      </div>
+    </main>
+  );
+}

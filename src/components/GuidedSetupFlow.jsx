@@ -1,33 +1,110 @@
-import { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Lightbulb, Gamepad2, Target, BrainCircuit, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star } from 'lucide-react';
 
+/* ─── Option data ─── */
+const STYLES = [
+  { id: 'platformer', label: 'Platformer', desc: 'Side-scrolling jump & run' },
+  { id: 'puzzle', label: 'Puzzle', desc: 'Logic and problem solving' },
+  { id: 'action', label: 'Action', desc: 'Fast-paced combat & reflexes' },
+  { id: 'arcade', label: 'Arcade', desc: 'Classic score-chasing fun' },
+];
+
+const GOALS = [
+  { id: 'collect', label: 'Collect items', icon: '🪙' },
+  { id: 'survive', label: 'Survive for time', icon: '⏱️' },
+  { id: 'reach', label: 'Reach the end', icon: '🏁' },
+  { id: 'highscore', label: 'High score', icon: '🏆' },
+  { id: 'defeat', label: 'Defeat enemies', icon: '⚔️' },
+];
+
+const DIFFICULTIES = [
+  { id: 'casual', label: 'Casual', desc: 'Relaxed pace, forgiving' },
+  { id: 'normal', label: 'Normal', desc: 'Balanced challenge' },
+  { id: 'hard', label: 'Hard', desc: 'Punishing, high stakes' },
+];
+
+/* ─── Shared Nav ─── */
+function TopNav({ step }) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1140px] items-center justify-between px-6 py-3.5 lg:px-10">
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#58cc02] shadow-[0_2px_0_#46a302]">
+            <Sparkles className="h-5 w-5 text-white" />
+          </div>
+          <span className="font-display text-[22px] leading-none text-slate-800">CodeQuest</span>
+        </div>
+
+        {/* Right side — progress indicators */}
+        <div className="flex items-center gap-3">
+          {/* Level badge */}
+          <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
+            <Star className="h-3.5 w-3.5" />
+            Level 1
+            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
+              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
+            </div>
+          </div>
+
+          {/* Streak */}
+          <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] font-bold text-slate-600 sm:flex">
+            <Flame className="h-3.5 w-3.5 text-orange-400" /> 0
+          </div>
+
+          {/* CTA */}
+          {step !== 'idea' && (
+            <button className="hidden rounded-xl bg-[#58cc02] px-4 py-2 text-[13px] font-bold text-white shadow-[0_2px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:block">
+              Create New Game
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ─── Main Component ─── */
 export default function GuidedSetupFlow({ onComplete }) {
-  const [step, setStep] = useState('idea'); // 'idea', 'analyzing', 'refine'
+  const [step, setStep] = useState('idea');
   const [idea, setIdea] = useState('');
-  
-  // Refinement fields
-  const [style, setStyle] = useState('Platformer');
-  const [difficulty, setDifficulty] = useState('Casual');
-  const [goal, setGoal] = useState('Collect all items');
-
+  const [style, setStyle] = useState('platformer');
+  const [goals, setGoals] = useState(['collect']);
+  const [difficulty, setDifficulty] = useState('normal');
   const [loadingText, setLoadingText] = useState('Analyzing idea...');
+  const formRef = useRef(null);
+
+  // ⌘+Enter / Ctrl+Enter keyboard shortcut
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const toggleGoal = (id) => {
+    setGoals((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
 
   const handleInitialSubmit = (e) => {
     e.preventDefault();
     if (!idea.trim()) return;
-    
     setStep('analyzing');
     setLoadingText('Analyzing your game idea...');
-    
-    // Simulate analyzing the idea
     setTimeout(() => {
       if (idea.length < 25) {
         setStep('refine');
       } else {
         setLoadingText('Generating sandbox environment...');
-        setTimeout(() => {
-          onComplete({ idea });
-        }, 1200);
+        setTimeout(() => onComplete({ idea }), 1200);
       }
     }, 1500);
   };
@@ -36,186 +113,303 @@ export default function GuidedSetupFlow({ onComplete }) {
     e.preventDefault();
     setStep('analyzing');
     setLoadingText('Synthesizing requirements...');
-    
     setTimeout(() => {
       setLoadingText('Generating sandbox environment...');
-      setTimeout(() => {
-        onComplete({ idea, style, difficulty, goal });
-      }, 1500);
+      const selectedStyle = STYLES.find((s) => s.id === style)?.label || style;
+      const selectedGoals = goals.map((g) => GOALS.find((x) => x.id === g)?.label || g);
+      const selectedDifficulty = DIFFICULTIES.find((d) => d.id === difficulty)?.label || difficulty;
+      setTimeout(() => onComplete({ idea, style: selectedStyle, difficulty: selectedDifficulty, goals: selectedGoals }), 1500);
     }, 1500);
   };
 
+  const selectedStyleLabel = STYLES.find((s) => s.id === style)?.label || '';
+  const selectedGoalLabels = goals.map((g) => GOALS.find((x) => x.id === g)?.label).filter(Boolean);
+  const selectedDiffLabel = DIFFICULTIES.find((d) => d.id === difficulty)?.label || '';
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center p-4">
-      {/* Top Left Logo */}
-      <div className="absolute left-6 top-6 flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#58cc02] shadow-[0_4px_0_#49a300]">
-          <Sparkles className="h-6 w-6 text-white" />
-        </div>
-        <h1 className="font-display text-2xl text-slate-800">CodeQuest</h1>
-      </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <TopNav step={step} />
 
-      <div className="w-full max-w-2xl">
-        
-        {/* Header Section */}
-        <div className="mb-8 text-center">
-          <h2 className="text-2xl font-display text-slate-800 mb-2">
-            {step === 'idea' && "What do you want to build?"}
-            {step === 'analyzing' && "Processing..."}
-            {step === 'refine' && "More Details"}
-          </h2>
-          <p className="text-lg font-semibold text-slate-500">
-            {step === 'idea' && "Let's turn your idea into a playable sandbox."}
-            {step === 'analyzing' && "Thinking about the best approach..."}
-            {step === 'refine' && "We need a bit more detail to make it great."}
-          </p>
-        </div>
+      {/* ═══════════════════════════════════════════
+          STEP 1 — HERO IDEA INPUT
+      ═══════════════════════════════════════════ */}
+      {step === 'idea' && (
+        <main className="h-[calc(100vh-57px)] overflow-hidden">
+          <div className="mx-auto flex h-full max-w-[1140px] items-center px-6 lg:px-10">
+            <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-        {/* Step 1: Idea Input */}
-        {step === 'idea' && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <form onSubmit={handleInitialSubmit} className="rounded-[32px] border-2 border-[#e5e7eb] bg-white p-6 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.08)] transition-all focus-within:border-[#1cb0f6] focus-within:shadow-[0_12px_40px_-12px_rgba(28,176,246,0.15)] md:p-8">
-              <label htmlFor="idea-input" className="mb-4 flex items-center gap-2 text-lg font-extrabold text-slate-700">
-                <Lightbulb className="h-5 w-5 text-amber-500" />
-                Describe your game idea
-              </label>
-              <textarea
-                id="idea-input"
-                autoFocus
-                value={idea}
-                onChange={(e) => setIdea(e.target.value)}
-                placeholder="e.g. A game where a bunny jumps over crabs and collects glowing coins..."
-                rows={4}
-                className="w-full resize-none rounded-2xl border-2 border-slate-200 bg-slate-50 p-4 text-lg font-semibold text-slate-700 placeholder:text-slate-400 focus:border-[#1cb0f6] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#1cb0f6]/10"
-              />
-              <div className="mt-6 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-400">
-                  {idea.length > 0 ? (idea.length < 25 ? 'Keep going... a bit more detail helps!' : 'Looks like a solid idea!') : 'Start typing...'}
+              {/* Hero container */}
+              <div className="relative overflow-hidden rounded-3xl border border-[#e0e6d8] bg-gradient-to-br from-[#fbfff6] via-white to-[#f6fbf0] p-8 shadow-[0_12px_48px_-12px_rgba(0,0,0,0.06)] md:p-10 lg:p-14">
+
+                {/* Decorative blobs */}
+                <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#58cc02]/[0.05] blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-[#1cb0f6]/[0.04] blur-3xl" />
+
+                {/* Label */}
+                <div className="relative mb-5">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d6eec2] bg-white px-4 py-1.5 text-[12px] font-bold uppercase tracking-[0.12em] text-[#4a8c12]">
+                    <Sparkles className="h-3 w-3" />
+                    Start New Project
+                  </span>
+                </div>
+
+                {/* Headline — single line */}
+                <h1 className="relative whitespace-nowrap font-display text-[2.5rem] leading-none text-slate-900 lg:text-[3rem]">
+                  What game do you want to build?
+                </h1>
+
+                {/* Supporting text */}
+                <p className="relative mt-3 max-w-[600px] text-base leading-relaxed text-slate-500">
+                  Describe your idea and our AI will generate a playable starting point.
                 </p>
-                <button
-                  type="submit"
-                  disabled={!idea.trim()}
-                  className="duo-btn-blue flex items-center gap-2 rounded-2xl px-6 py-3 text-lg disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Generate Plan
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
-        {/* Step 2: Analyzing / Loading */}
-        {step === 'analyzing' && (
-          <div className="flex animate-in fade-in zoom-in-95 duration-500 flex-col items-center justify-center rounded-[32px] border-2 border-[#e5e7eb] bg-white p-12 text-center shadow-[0_12px_40px_-12px_rgba(0,0,0,0.08)]">
-            <div className="relative flex h-24 w-24 items-center justify-center">
-              <div className="absolute inset-0 animate-ping rounded-full bg-[#1cb0f6] opacity-20"></div>
-              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1cb0f6] shadow-[0_4px_0_#1899d6]">
-                <BrainCircuit className="h-8 w-8 animate-pulse text-white" />
+                {/* Input area */}
+                <form ref={formRef} onSubmit={handleInitialSubmit} className="relative mt-8">
+                  <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+                    <label htmlFor="idea-input" className="flex items-center gap-2 border-b border-slate-100 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                      <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
+                      Game Idea
+                    </label>
+                    <textarea
+                      id="idea-input"
+                      autoFocus
+                      value={idea}
+                      onChange={(e) => setIdea(e.target.value)}
+                      placeholder="I want to make a game where a bunny collects carrots and avoids rocks."
+                      rows={3}
+                      className="w-full resize-none bg-transparent px-6 py-4 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-300 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Tip + CTA */}
+                  <div className="mt-5 flex items-center justify-between gap-4">
+                    <p className="text-[13px] font-medium text-slate-400">
+                      {idea.length > 0
+                        ? idea.length < 25
+                          ? 'Keep going — mention your player, goal, and obstacles.'
+                          : '✓ Looks like a solid idea'
+                        : (
+                          <span>
+                            <span className="text-slate-500">Tip:</span> mention your player, goal, and obstacles.
+                          </span>
+                        )}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <kbd className="hidden rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-400 shadow-[0_1px_0_rgba(0,0,0,0.06)] sm:inline-block">⌘ Enter</kbd>
+                      <button
+                        type="submit"
+                        disabled={!idea.trim()}
+                        className="flex items-center gap-2.5 rounded-2xl bg-[#58cc02] px-8 py-3 text-[15px] font-bold text-white shadow-[0_4px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-[0_2px_0_#46a302] disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
+                      >
+                        Create Plan & Start
+                        <ArrowRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </form>
               </div>
             </div>
-            <h3 className="mt-6 font-display text-2xl text-slate-800">{loadingText}</h3>
-            <p className="mt-2 font-semibold text-slate-500">Designing logic blocks and state...</p>
           </div>
-        )}
+        </main>
+      )}
 
-        {/* Step 3: Refinement Questions */}
-        {step === 'refine' && (
+      {/* ═══════════════════════════════════════════
+          STEP 2 — ANALYZING
+      ═══════════════════════════════════════════ */}
+      {step === 'analyzing' && (
+        <main className="flex h-[calc(100vh-57px)] items-center justify-center overflow-hidden">
+          <div className="animate-in fade-in zoom-in-95 duration-500 text-center">
+            <div className="relative mx-auto mb-8 flex h-16 w-16 items-center justify-center">
+              <div className="absolute inset-0 animate-ping rounded-full bg-[#58cc02] opacity-[0.1]" />
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#58cc02] shadow-[0_3px_0_#46a302]">
+                <BrainCircuit className="h-6 w-6 animate-pulse text-white" />
+              </div>
+            </div>
+            <h2 className="font-display text-2xl text-slate-800">{loadingText}</h2>
+            <p className="mt-2 text-[14px] text-slate-400">This usually takes a few seconds</p>
+            <div className="mt-8 flex items-center justify-center gap-2">
+              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '0ms' }} />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '150ms' }} />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ═══════════════════════════════════════════
+          STEP 3 — REFINE / MORE DETAILS
+      ═══════════════════════════════════════════ */}
+      {step === 'refine' && (
+        <main className="mx-auto max-w-[1140px] px-6 py-10 lg:px-10 lg:py-14">
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <form onSubmit={handleRefineSubmit} className="rounded-[32px] border-2 border-[#e5e7eb] bg-white p-6 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.08)] md:p-8">
-              <div className="mb-6 rounded-2xl bg-amber-50 p-4 text-amber-800 border-2 border-amber-200/50">
-                <p className="font-semibold"><strong>"{idea}"</strong> is a bit concise. Let's flesh it out to generate the best starting point.</p>
-              </div>
 
-              <div className="space-y-6">
-                <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500">
-                    <Gamepad2 className="h-4 w-4 text-purple-500" /> Game Style
-                  </label>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {['Platformer', 'Puzzle', 'Action', 'Arcade'].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setStyle(opt)}
-                        className={`rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition-all ${
-                          style === opt
-                            ? 'border-[#a855f7] bg-[#f3e8ff] text-[#7e22ce] shadow-[inset_0_-2px_0_rgba(168,85,247,0.3)]'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+            {/* Step breadcrumb */}
+            <div className="mb-8 flex items-center gap-3 text-[13px] font-medium text-slate-400">
+              <span className="flex items-center gap-1.5 text-[#46a302]">
+                <Check className="h-3.5 w-3.5" /> Idea entered
+              </span>
+              <span className="h-px w-5 bg-slate-200" />
+              <span className="rounded-full bg-[#58cc02] px-3 py-0.5 text-[12px] font-bold text-white">2</span>
+              <span className="font-semibold text-slate-700">Configure</span>
+              <span className="h-px w-5 bg-slate-200" />
+              <span>Generate</span>
+            </div>
+
+            {/* Page title */}
+            <div className="mb-12">
+              <h1 className="font-display text-[2.5rem] leading-tight text-slate-900">
+                More Details
+              </h1>
+              <p className="mt-3 max-w-2xl text-lg leading-relaxed text-slate-500">
+                Refine your idea to generate a better starting point. Select the options that best describe your game.
+              </p>
+            </div>
+
+            <form onSubmit={handleRefineSubmit}>
+
+              {/* ── Game Style ── */}
+              <section className="mb-12">
+                <h2 className="mb-1.5 text-sm font-bold uppercase tracking-wider text-slate-500">
+                  Game Style
+                </h2>
+                <p className="mb-5 text-[13px] text-slate-400">Choose one</p>
+                <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+                  {STYLES.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setStyle(opt.id)}
+                      className={`group relative rounded-2xl border-2 px-6 py-5 text-left transition-all ${style === opt.id
+                          ? 'border-[#58cc02] bg-[#f4fce8] shadow-[0_0_0_1px_#58cc02]'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
                         }`}
+                    >
+                      {style === opt.id && (
+                        <span className="absolute right-3.5 top-3.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#58cc02]">
+                          <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                        </span>
+                      )}
+                      <span className={`block text-[15px] font-bold ${style === opt.id ? 'text-[#2d6b01]' : 'text-slate-800'}`}>
+                        {opt.label}
+                      </span>
+                      <span className={`mt-1 block text-[13px] leading-snug ${style === opt.id ? 'text-[#4a9a0f]' : 'text-slate-400'}`}>
+                        {opt.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Player Goal ── */}
+              <section className="mb-12">
+                <h2 className="mb-1.5 text-sm font-bold uppercase tracking-wider text-slate-500">
+                  Player Goal
+                </h2>
+                <p className="mb-5 text-[13px] text-slate-400">Select up to 2</p>
+                <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+                  {GOALS.map((opt) => {
+                    const selected = goals.includes(opt.id);
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => toggleGoal(opt.id)}
+                        className={`group relative rounded-2xl border-2 px-5 py-5 text-left transition-all ${selected
+                            ? 'border-[#58cc02] bg-[#f4fce8] shadow-[0_0_0_1px_#58cc02]'
+                            : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                          }`}
                       >
-                        {opt}
+                        {selected && (
+                          <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#58cc02]">
+                            <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                          </span>
+                        )}
+                        <span className="mb-2 block text-xl">{opt.icon}</span>
+                        <span className={`block text-[14px] font-bold leading-snug ${selected ? 'text-[#2d6b01]' : 'text-slate-700'}`}>
+                          {opt.label}
+                        </span>
                       </button>
-                    ))}
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* ── Difficulty ── */}
+              <section className="mb-12">
+                <h2 className="mb-1.5 text-sm font-bold uppercase tracking-wider text-slate-500">
+                  Difficulty
+                </h2>
+                <p className="mb-5 text-[13px] text-slate-400">Choose one</p>
+                <div className="grid grid-cols-3 gap-3.5">
+                  {DIFFICULTIES.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setDifficulty(opt.id)}
+                      className={`group relative rounded-2xl border-2 px-6 py-5 text-left transition-all ${difficulty === opt.id
+                          ? 'border-[#58cc02] bg-[#f4fce8] shadow-[0_0_0_1px_#58cc02]'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                        }`}
+                    >
+                      {difficulty === opt.id && (
+                        <span className="absolute right-3.5 top-3.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#58cc02]">
+                          <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                        </span>
+                      )}
+                      <span className={`block text-[15px] font-bold ${difficulty === opt.id ? 'text-[#2d6b01]' : 'text-slate-800'}`}>
+                        {opt.label}
+                      </span>
+                      <span className={`mt-1 block text-[13px] leading-snug ${difficulty === opt.id ? 'text-[#4a9a0f]' : 'text-slate-400'}`}>
+                        {opt.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Configuration Summary ── */}
+              <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                <p className="mb-5 text-[12px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  Configuration Summary
+                </p>
+                <div className="grid grid-cols-3 gap-8">
+                  <div>
+                    <p className="text-[12px] font-medium text-slate-400">Style</p>
+                    <p className="mt-1 text-[16px] font-bold text-slate-800">{selectedStyleLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-medium text-slate-400">Goal</p>
+                    <p className="mt-1 text-[16px] font-bold text-slate-800">{selectedGoalLabels.join(' + ') || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-medium text-slate-400">Difficulty</p>
+                    <p className="mt-1 text-[16px] font-bold text-slate-800">{selectedDiffLabel}</p>
                   </div>
                 </div>
+              </section>
 
-                <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500">
-                    <Target className="h-4 w-4 text-rose-500" /> Player Goal
-                  </label>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {['Collect all items', 'Survive for time', 'Reach the end', 'High score', 'Defeat enemies'].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setGoal(opt)}
-                        className={`rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition-all ${
-                          goal === opt
-                            ? 'border-[#f43f5e] bg-[#ffe4e6] text-[#be123c] shadow-[inset_0_-2px_0_rgba(244,63,94,0.3)]'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-500">
-                    Difficulty Level
-                  </label>
-                  <div className="flex rounded-xl bg-slate-100 p-1">
-                    {['Casual', 'Normal', 'Hard'].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setDifficulty(opt)}
-                        className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
-                          difficulty === opt
-                            ? 'bg-white text-slate-800 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center justify-between border-t-2 border-slate-100 pt-6">
+              {/* ── Actions ── */}
+              <div className="flex items-center justify-between border-t border-slate-100 pt-7">
                 <button
                   type="button"
                   onClick={() => setStep('idea')}
-                  className="rounded-2xl px-6 py-3 font-bold text-slate-500 hover:bg-slate-100"
+                  className="flex items-center gap-2 rounded-xl px-5 py-3 text-[14px] font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 >
+                  <ArrowLeft className="h-4 w-4" />
                   Back
                 </button>
                 <button
                   type="submit"
-                  className="duo-btn-green flex items-center gap-2 rounded-2xl px-8 py-3 text-lg"
+                  className="flex items-center gap-2.5 rounded-2xl bg-[#58cc02] px-8 py-3.5 text-[16px] font-bold text-white shadow-[0_4px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-[0_2px_0_#46a302]"
                 >
-                  Generate Now
-                  <Sparkles className="h-5 w-5" />
+                  <Zap className="h-5 w-5" />
+                  Generate Game
                 </button>
               </div>
             </form>
           </div>
-        )}
-        
-      </div>
+        </main>
+      )}
     </div>
   );
 }

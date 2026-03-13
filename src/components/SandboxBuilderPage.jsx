@@ -4,6 +4,15 @@ import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
+import { sandboxAssets } from '../data/sandboxAssets';
+import { createDefaultAIService } from '../ai/createDefaultAIService.js';
+import {
+  getClaudeModels,
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+  getProviderOptions,
+} from '../ai/providerCatalog.js';
+import { useAIChat } from '../hooks/useAIChat';
 
 const eventOptions = ['game starts', 'sprite clicked', 'key pressed', 'timer reaches 0', 'score reaches 10'];
 const defaultEvent = eventOptions[0];
@@ -47,12 +56,6 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
-  if (selectedErrors.length) return `Fix ${selectedLabel}'s compile issues, then press Play again.`;
-  if (mode === 'play') return `Running ${selectedLabel}. Click the sprite or press a key to trigger more events.`;
-  return `For "${selectedBlock}", think event -> loop -> action.`;
-}
-
 export default function SandboxBuilderPage() {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
@@ -71,10 +74,104 @@ export default function SandboxBuilderPage() {
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
-    { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
-  ]);
+  const [selectedProvider, setSelectedProvider] = useState(() => getDefaultProviderName());
+  const [selectedModel, setSelectedModel] = useState(() => getDefaultModelForProvider(getDefaultProviderName()));
+  const [ollamaModels, setOllamaModels] = useState([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const providerOptions = useMemo(() => getProviderOptions(), []);
+  const modelOptions = useMemo(
+    () => (selectedProvider === 'claude' ? getClaudeModels() : ollamaModels),
+    [ollamaModels, selectedProvider]
+  );
+
+  const aiService = useMemo(
+    () => createDefaultAIService({ providerName: selectedProvider, model: selectedModel }),
+    [selectedModel, selectedProvider]
+  );
+
+  const { messages, sendMessage, addNotification, isStreaming, abortResponse } = useAIChat({
+    aiService,
+    contextData: {
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: sandboxAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    },
+  });
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (selectedProvider !== 'ollama') {
+      setIsLoadingModels(false);
+      return undefined;
+    }
+
+    const loadOllamaModels = async () => {
+      setIsLoadingModels(true);
+
+      try {
+        const response = await fetch('/api/ollama/api/tags');
+        if (!response.ok) {
+          throw new Error(`Could not load Ollama models (${response.status})`);
+        }
+
+        const data = await response.json();
+        const names = Array.isArray(data.models)
+          ? data.models
+              .map((model) => model?.name)
+              .filter((name) => typeof name === 'string' && name.trim())
+          : [];
+
+        if (ignore) return;
+
+        setOllamaModels(names);
+        setSelectedModel((current) => {
+          if (names.includes(current)) return current;
+          if (names.length) return names[0];
+          return getDefaultModelForProvider('ollama');
+        });
+      } catch (err) {
+        if (ignore) return;
+        setOllamaModels([]);
+        addNotification(`Couldn't load local Ollama models. ${err.message}`);
+        setSelectedModel((current) => current || getDefaultModelForProvider('ollama'));
+      } finally {
+        if (!ignore) setIsLoadingModels(false);
+      }
+    };
+
+    loadOllamaModels();
+    return () => {
+      ignore = true;
+    };
+  }, [addNotification, selectedProvider]);
+
+  useEffect(() => {
+    if (selectedProvider !== 'claude') return;
+    const claudeModels = getClaudeModels();
+    setSelectedModel((current) => (
+      claudeModels.includes(current) ? current : getDefaultModelForProvider('claude')
+    ));
+  }, [selectedProvider]);
+
+  const handleProviderChange = (nextProvider) => {
+    if (!nextProvider || nextProvider === selectedProvider) return;
+    abortResponse();
+    setSelectedProvider(nextProvider);
+    setSelectedModel(getDefaultModelForProvider(nextProvider));
+    addNotification(`Switched AI provider to ${nextProvider === 'ollama' ? 'Ollama Local' : 'Claude API'}.`);
+  };
+
+  const handleModelChange = (nextModel) => {
+    if (!nextModel || nextModel === selectedModel) return;
+    abortResponse();
+    setSelectedModel(nextModel);
+    addNotification(`Switched model to ${nextModel}.`);
+  };
 
   useEffect(() => {
     const instanceKeys = new Set(sceneInstances.map((instance) => instance.key));
@@ -128,8 +225,6 @@ export default function SandboxBuilderPage() {
     ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: template.parts, tone: template.tone, children: [] }
     : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: template.parts, tone: template.tone };
 
-  const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
-
   const addTopLevel = (template) => {
     if (!selectedInstanceKey || mode === 'play') return;
     pushHistorySnapshot();
@@ -138,7 +233,7 @@ export default function SandboxBuilderPage() {
     updateSelectedScript((blocks) => [...blocks, instance]);
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [selectedInstanceKey]: [] }));
-    pushAiMessage(`Added "${text}" to ${selectedLabel}.`);
+    addNotification(`Added "${text}" to ${selectedLabel}.`);
   };
 
   const addInsideLoop = (loopId, template) => {
@@ -149,7 +244,7 @@ export default function SandboxBuilderPage() {
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: [...block.children, instance] }));
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [selectedInstanceKey]: [] }));
-    pushAiMessage(`Dropped "${text}" inside the loop for ${selectedLabel}.`);
+    addNotification(`Dropped "${text}" inside the loop for ${selectedLabel}.`);
   };
 
   const handleDragStart = (e, template) => {
@@ -213,7 +308,7 @@ export default function SandboxBuilderPage() {
       const last = next.pop();
       setScriptsByInstanceKey(last.scriptsByInstanceKey);
       setSelectedBlock(last.selectedBlock);
-      pushAiMessage('Undid the last script edit.');
+      addNotification('Undid the last script edit.');
       return next;
     });
   };
@@ -302,7 +397,7 @@ export default function SandboxBuilderPage() {
     lastTickRef.current = 0;
     setMode('edit');
     setRuntimeSnapshot(null);
-    pushAiMessage('Stopped play mode. Edit the scripts and run again.');
+    addNotification('Stopped play mode. Edit the scripts and run again.');
   };
 
   const startRuntime = () => {
@@ -311,7 +406,7 @@ export default function SandboxBuilderPage() {
     if (Object.keys(errorsByKey).length) {
       const firstKey = Object.keys(errorsByKey)[0];
       setSelectedInstanceKey(firstKey);
-      pushAiMessage(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
+      addNotification(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
       return;
     }
     const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
@@ -319,7 +414,7 @@ export default function SandboxBuilderPage() {
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
-    pushAiMessage("Play started. The sandbox is now following each object's script.");
+    addNotification("Play started. The sandbox is now following each object's script.");
     const loop = (timestamp) => {
       if (!runtimeRef.current) return;
       const delta = lastTickRef.current ? Math.min(timestamp - lastTickRef.current, 50) : 16;
@@ -329,12 +424,6 @@ export default function SandboxBuilderPage() {
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
-  };
-
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
   };
 
   return (
@@ -352,12 +441,26 @@ export default function SandboxBuilderPage() {
       </section>
       <section className="grid gap-4 lg:grid-cols-12">
         <div className="h-[640px] lg:col-span-9"><GamePreviewCanvas mode={mode} runtimeSnapshot={runtimeSnapshot} onSceneChange={({ instances, selectedInstanceKey: nextKey }) => { setSceneInstances(instances); if (nextKey) setSelectedInstanceKey(nextKey); }} onPlay={startRuntime} onStop={stopRuntime} onSpriteClick={(instanceKey) => { runtimeRef.current?.dispatch('sprite clicked', { instanceKey }); if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot()); }} /></div>
-        <div className="h-[640px] lg:col-span-3"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+        <div className="h-[640px] lg:col-span-3">
+          <AIChatPanel
+            messages={messages}
+            onSend={sendMessage}
+            isStreaming={isStreaming}
+            onAbort={abortResponse}
+            providerOptions={providerOptions}
+            selectedProvider={selectedProvider}
+            onProviderChange={handleProviderChange}
+            modelOptions={modelOptions}
+            selectedModel={selectedModel}
+            onModelChange={handleModelChange}
+            isLoadingModels={isLoadingModels}
+          />
+        </div>
       </section>
       <section className="grid gap-4 lg:grid-cols-12">
         <div className="studio-panel rounded-[34px] border-[#ddd6c8] bg-[#f2f1eb] lg:col-span-3">
           <div className="mb-3 flex items-center justify-between"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Scene Objects</p></div>
-          <div className="space-y-2">{sceneInstances.length ? sceneInstances.map((instance) => <button key={instance.key} onClick={() => { if (mode === 'play') return; setSelectedInstanceKey(instance.key); setMessages((prev) => [...prev, { role: 'ai', text: `Selected ${getInstanceDisplayLabel(sceneInstances, instance.key)}. Script edits only affect this object.` }]); }} className={`w-full rounded-[22px] border-2 px-5 py-4 text-left text-base font-bold leading-none shadow-[inset_0_-2px_0_rgba(15,23,42,0.06)] transition ${selectedInstanceKey === instance.key ? 'border-[#13a4ff] bg-[#dff2ff] text-[#0d76ab]' : 'border-[#d7d8dc] bg-white text-slate-700 hover:border-[#cfd3da]'}`}>{instance.emoji} {getInstanceDisplayLabel(sceneInstances, instance.key)}</button>) : <p className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-slate-500">Drop objects into the sandbox to create script targets.</p>}</div>
+          <div className="space-y-2">{sceneInstances.length ? sceneInstances.map((instance) => <button key={instance.key} onClick={() => { if (mode === 'play') return; setSelectedInstanceKey(instance.key); addNotification(`Selected ${getInstanceDisplayLabel(sceneInstances, instance.key)}. Script edits only affect this object.`); }} className={`w-full rounded-[22px] border-2 px-5 py-4 text-left text-base font-bold leading-none shadow-[inset_0_-2px_0_rgba(15,23,42,0.06)] transition ${selectedInstanceKey === instance.key ? 'border-[#13a4ff] bg-[#dff2ff] text-[#0d76ab]' : 'border-[#d7d8dc] bg-white text-slate-700 hover:border-[#cfd3da]'}`}>{instance.emoji} {getInstanceDisplayLabel(sceneInstances, instance.key)}</button>) : <p className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-slate-500">Drop objects into the sandbox to create script targets.</p>}</div>
         </div>
         <div className="studio-panel lg:col-span-3">
           <div className="mb-3"><label htmlFor="block-category" className="mb-1 block text-sm font-extrabold uppercase tracking-wide text-slate-600">Block Category</label><select id="block-category" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full rounded-xl border border-duo-line bg-white px-3 py-2 text-sm font-bold text-slate-700">{Object.keys(palette).map((category) => <option key={category} value={category}>{category.toUpperCase()}</option>)}</select></div>

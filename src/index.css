@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #4b4b4b;
+  background-color: #f7f7f7;
+}
+
+body {
+  @apply font-body text-duo-text antialiased;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(88, 204, 2, 0.1), transparent 26%),
+    radial-gradient(circle at 88% 8%, rgba(28, 176, 246, 0.1), transparent 24%),
+    linear-gradient(180deg, #f8f8f8 0%, #f2f2f2 100%);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #bfbfbf #efefef;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #efefef;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bfbfbf;
+  border-radius: 999px;
+}
+
+@layer components {
+  .quest-card {
+    @apply rounded-3xl border border-duo-line bg-white p-4 shadow-soft;
+  }
+
+  .studio-panel {
+    @apply rounded-[22px] border border-[#ddd8cc] bg-[#f1efe8] p-4 shadow-soft;
+  }
+
+  .duo-btn-green {
+    @apply rounded-2xl border-b-4 border-duo-greenDark bg-duo-green px-5 py-2 font-display text-white transition hover:brightness-95 active:translate-y-[1px];
+  }
+
+  .duo-btn-blue {
+    @apply rounded-2xl border-b-4 border-duo-blueDark bg-duo-blue px-5 py-2 font-display text-white transition hover:brightness-95 active:translate-y-[1px];
+  }
+
+  .mascot {
+    @apply relative grid h-12 w-12 place-items-center rounded-2xl border-b-4 border-duo-greenDark bg-duo-green;
+  }
+
+  .mascot-eye {
+    @apply h-4 w-4 rounded-full bg-white;
+  }
+
+  .mascot-pupil {
+    @apply h-2 w-2 rounded-full bg-slate-700;
+  }
+}

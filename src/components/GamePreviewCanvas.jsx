@@ -183,7 +183,7 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
         <button type="button" onClick={handleRestart} disabled={mode !== 'edit' || !placedAssets.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
         {mode === 'play' ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={onPlay} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
       </div>
-      {mode === 'play' ? <div className="absolute left-4 top-4 z-10 rounded-2xl border border-[#d3dae3] bg-white/90 px-4 py-2 text-sm font-extrabold text-slate-700 shadow">Timer: {Math.ceil(runtimeSnapshot?.variables?.time ?? 0)}s</div> : null}
+      {mode === 'play' ? <div className="absolute left-4 top-4 z-10 rounded-2xl border border-[#d3dae3] bg-white/90 px-4 py-2 text-sm font-extrabold text-slate-700 shadow">Timer: {Math.ceil(runtimeSnapshot?.variables?.time ?? 0)}s | Score: {Math.round(runtimeSnapshot?.variables?.score ?? 0)}</div> : null}
       {visibleAssets.map((asset) => {
         const isSelected = selectedPlacedAssetKey === asset.key;
         const scale = asset.scale || 1;

@@ -32,6 +32,84 @@ function TypingDots() {
   );
 }
 
+function renderInlineMarkdown(text, keyPrefix) {
+  const parts = [];
+  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let matchIndex = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const [token] = match;
+    const start = match.index ?? 0;
+
+    if (start > lastIndex) {
+      parts.push(text.slice(lastIndex, start));
+    }
+
+    if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(
+        <strong key={`${keyPrefix}-strong-${matchIndex}`} className="font-extrabold text-slate-900">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      parts.push(
+        <em key={`${keyPrefix}-em-${matchIndex}`} className="italic text-slate-700">
+          {token.slice(1, -1)}
+        </em>
+      );
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      parts.push(
+        <code
+          key={`${keyPrefix}-code-${matchIndex}`}
+          className="rounded-md bg-slate-900/8 px-1.5 py-0.5 font-mono text-[0.92em] font-bold text-slate-700"
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    } else {
+      parts.push(token);
+    }
+
+    lastIndex = start + token.length;
+    matchIndex += 1;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
+
+function renderFormattedMessage(text) {
+  const lines = text.split('\n');
+
+  return lines.map((line, index) => {
+    const trimmed = line.trim();
+    const bulletMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+
+    if (!trimmed) {
+      return <div key={`spacer-${index}`} className="h-2" />;
+    }
+
+    if (bulletMatch) {
+      return (
+        <div key={`bullet-${index}`} className="flex items-start gap-2">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+          <span>{renderInlineMarkdown(bulletMatch[1], `bullet-${index}`)}</span>
+        </div>
+      );
+    }
+
+    return (
+      <p key={`line-${index}`}>
+        {renderInlineMarkdown(line, `line-${index}`)}
+      </p>
+    );
+  });
+}
+
 /**
  * AIChatPanel — Chat sidebar for Questy AI tutor.
  *
@@ -216,12 +294,12 @@ export default function AIChatPanel({
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide opacity-70">
                     {msg.role === 'you' ? 'You' : 'Questy'}
                   </p>
-                  <p className="font-semibold leading-snug">
-                    {msg.text || (showStreamingIndicator ? <TypingDots /> : null)}
+                  <div className="space-y-2 font-semibold leading-snug">
+                    {msg.text ? renderFormattedMessage(msg.text) : (showStreamingIndicator ? <TypingDots /> : null)}
                     {showStreamingIndicator && msg.text && (
                       <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-[#58cc02] align-middle" />
                     )}
-                  </p>
+                  </div>
                 </div>
               );
             })}

@@ -4,6 +4,15 @@ import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
+import { sandboxAssets } from '../data/sandboxAssets';
+import { createDefaultAIService } from '../ai/createDefaultAIService.js';
+import {
+  getClaudeModels,
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+  getProviderOptions,
+} from '../ai/providerCatalog.js';
+import { useAIChat } from '../hooks/useAIChat';
 
 const eventGroups = [
   {
@@ -114,12 +123,6 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
-  if (selectedErrors.length) return `Fix ${selectedLabel}'s compile issues, then press Play again.`;
-  if (mode === 'play') return `Running ${selectedLabel}. Click the sprite or press a key to trigger more events.`;
-  return `For "${selectedBlock}", think event -> loop -> action.`;
-}
-
 export default function SandboxBuilderPage() {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
@@ -142,6 +145,9 @@ export default function SandboxBuilderPage() {
     { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
     { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
   ]);
+  const addNotification = (text) => {
+    setMessages((prev) => [...prev, { role: 'ai', text }]);
+  };
   const dispatchRuntimeEvent = (eventType, payload = {}) => {
     runtimeRef.current?.dispatch(eventType, payload);
     if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
@@ -218,8 +224,6 @@ export default function SandboxBuilderPage() {
     ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: hydrateParts(template.parts), tone: template.tone, children: [] }
     : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: hydrateParts(template.parts), tone: template.tone };
 
-  const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
-
   const addTopLevel = (template) => {
     if (!selectedInstanceKey || mode === 'play') return;
     pushHistorySnapshot();
@@ -228,7 +232,7 @@ export default function SandboxBuilderPage() {
     updateSelectedScript((blocks) => [...blocks, instance]);
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [selectedInstanceKey]: [] }));
-    pushAiMessage(`Added "${text}" to ${selectedLabel}.`);
+    addNotification(`Added "${text}" to ${selectedLabel}.`);
   };
 
   const addInsideLoop = (loopId, template) => {
@@ -239,7 +243,7 @@ export default function SandboxBuilderPage() {
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: [...block.children, instance] }));
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [selectedInstanceKey]: [] }));
-    pushAiMessage(`Dropped "${text}" inside the loop for ${selectedLabel}.`);
+    addNotification(`Dropped "${text}" inside the loop for ${selectedLabel}.`);
   };
 
   const handleDragStart = (e, template) => {
@@ -303,7 +307,7 @@ export default function SandboxBuilderPage() {
       const last = next.pop();
       setScriptsByInstanceKey(last.scriptsByInstanceKey);
       setSelectedBlock(last.selectedBlock);
-      pushAiMessage('Undid the last script edit.');
+      addNotification('Undid the last script edit.');
       return next;
     });
   };
@@ -392,7 +396,7 @@ export default function SandboxBuilderPage() {
     lastTickRef.current = 0;
     setMode('edit');
     setRuntimeSnapshot(null);
-    pushAiMessage('Stopped play mode. Edit the scripts and run again.');
+    addNotification('Stopped play mode. Edit the scripts and run again.');
   };
 
   const startRuntime = () => {
@@ -401,7 +405,7 @@ export default function SandboxBuilderPage() {
     if (Object.keys(errorsByKey).length) {
       const firstKey = Object.keys(errorsByKey)[0];
       setSelectedInstanceKey(firstKey);
-      pushAiMessage(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
+      addNotification(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
       return;
     }
     const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
@@ -409,7 +413,7 @@ export default function SandboxBuilderPage() {
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
-    pushAiMessage("Play started. The sandbox is now following each object's script.");
+    addNotification("Play started. The sandbox is now following each object's script.");
     const loop = (timestamp) => {
       if (!runtimeRef.current) return;
       const delta = lastTickRef.current ? Math.min(timestamp - lastTickRef.current, 50) : 16;
@@ -423,7 +427,7 @@ export default function SandboxBuilderPage() {
 
   const sendChat = (text, canned) => {
     setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
+    const reply = canned || `For "${selectedBlock}", think event -> loop -> action.`;
     setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
   };
 
@@ -447,7 +451,7 @@ export default function SandboxBuilderPage() {
       <section className="grid gap-4 lg:grid-cols-12">
         <div className="studio-panel rounded-[34px] border-[#ddd6c8] bg-[#f2f1eb] lg:col-span-3">
           <div className="mb-3 flex items-center justify-between"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Scene Objects</p></div>
-          <div className="space-y-2">{sceneInstances.length ? sceneInstances.map((instance) => <button key={instance.key} onClick={() => { if (mode === 'play') return; setSelectedInstanceKey(instance.key); setMessages((prev) => [...prev, { role: 'ai', text: `Selected ${getInstanceDisplayLabel(sceneInstances, instance.key)}. Script edits only affect this object.` }]); }} className={`w-full rounded-[22px] border-2 px-5 py-4 text-left text-base font-bold leading-none shadow-[inset_0_-2px_0_rgba(15,23,42,0.06)] transition ${selectedInstanceKey === instance.key ? 'border-[#13a4ff] bg-[#dff2ff] text-[#0d76ab]' : 'border-[#d7d8dc] bg-white text-slate-700 hover:border-[#cfd3da]'}`}>{instance.emoji} {getInstanceDisplayLabel(sceneInstances, instance.key)}</button>) : <p className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-slate-500">Drop objects into the sandbox to create script targets.</p>}</div>
+          <div className="space-y-2">{sceneInstances.length ? sceneInstances.map((instance) => <button key={instance.key} onClick={() => { if (mode === 'play') return; setSelectedInstanceKey(instance.key); addNotification(`Selected ${getInstanceDisplayLabel(sceneInstances, instance.key)}. Script edits only affect this object.`); }} className={`w-full rounded-[22px] border-2 px-5 py-4 text-left text-base font-bold leading-none shadow-[inset_0_-2px_0_rgba(15,23,42,0.06)] transition ${selectedInstanceKey === instance.key ? 'border-[#13a4ff] bg-[#dff2ff] text-[#0d76ab]' : 'border-[#d7d8dc] bg-white text-slate-700 hover:border-[#cfd3da]'}`}>{instance.emoji} {getInstanceDisplayLabel(sceneInstances, instance.key)}</button>) : <p className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-slate-500">Drop objects into the sandbox to create script targets.</p>}</div>
         </div>
         <div className="studio-panel lg:col-span-3">
           <div className="mb-3"><label htmlFor="block-category" className="mb-1 block text-sm font-extrabold uppercase tracking-wide text-slate-600">Block Category</label><select id="block-category" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full rounded-xl border border-duo-line bg-white px-3 py-2 text-sm font-bold text-slate-700">{Object.keys(palette).map((category) => <option key={category} value={category}>{category.toUpperCase()}</option>)}</select></div>

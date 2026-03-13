@@ -15,7 +15,17 @@ function getTransform(asset) {
   return parts.join(' ') || 'none';
 }
 
-export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSceneChange, onPlay, onStop, onSpriteClick, currentXp = 100 }) {
+export default function GamePreviewCanvas({
+  mode = 'edit',
+  runtimeSnapshot,
+  selectedInstanceKey,
+  onSceneChange,
+  onSelectedInstanceChange,
+  onPlay,
+  onStop,
+  onSpriteClick,
+  currentXp = 100,
+}) {
   const canvasRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
   const movedDuringDragRef = useRef(false);
@@ -31,6 +41,16 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
 
   const trayAssets = useMemo(() => sandboxAssets, []);
   const selectedPlacedAsset = placedAssets.find((asset) => asset.key === selectedPlacedAssetKey) || null;
+
+  const updateSelection = (nextKey) => {
+    setSelectedPlacedAssetKey(nextKey);
+    onSelectedInstanceChange?.(nextKey);
+  };
+
+  useEffect(() => {
+    if (selectedInstanceKey === undefined) return;
+    setSelectedPlacedAssetKey((current) => (current === (selectedInstanceKey || null) ? current : selectedInstanceKey || null));
+  }, [selectedInstanceKey]);
 
   useEffect(() => {
     onSceneChange?.({ instances: placedAssets, selectedInstanceKey: selectedPlacedAssetKey });
@@ -67,7 +87,7 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
       const snapshot = { placedAssets: placedAssets.map((item) => ({ ...item })), selectedPlacedAssetKey };
       setPastStates((prev) => [...prev, snapshot]);
       setPlacedAssets((prev) => [...prev, placed]);
-      setSelectedPlacedAssetKey(placed.key);
+      updateSelection(placed.key);
     } catch {
       // ignore malformed drag payload
     }
@@ -78,13 +98,13 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
     const previous = pastStates[pastStates.length - 1];
     setPastStates((prev) => prev.slice(0, -1));
     setPlacedAssets(previous.placedAssets);
-    setSelectedPlacedAssetKey(previous.selectedPlacedAssetKey);
+    updateSelection(previous.selectedPlacedAssetKey);
   };
 
   const handleRestart = () => {
     if (mode !== 'edit' || !placedAssets.length) return;
     setPlacedAssets([]);
-    setSelectedPlacedAssetKey(null);
+    updateSelection(null);
     setPastStates([]);
     setDraggingPlacedAssetKey(null);
     setResizingPlacedAssetKey(null);
@@ -98,7 +118,7 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
     if (mode !== 'edit' || !canvasRef.current) return;
     e.stopPropagation();
     const rect = canvasRef.current.getBoundingClientRect();
-    setSelectedPlacedAssetKey(asset.key);
+    updateSelection(asset.key);
     setDraggingPlacedAssetKey(asset.key);
     setDragOffset({ x: e.clientX - rect.left - asset.x, y: e.clientY - rect.top - asset.y });
     moveStartSnapshotRef.current = { placedAssets: placedAssets.map((item) => ({ ...item })), selectedPlacedAssetKey };
@@ -148,7 +168,7 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
   const handleResizeHandlePointerDown = (e, asset) => {
     if (mode !== 'edit') return;
     e.stopPropagation();
-    setSelectedPlacedAssetKey(asset.key);
+    updateSelection(asset.key);
     setResizingPlacedAssetKey(asset.key);
     resizeStartRef.current = {
       pointerY: e.clientY,
@@ -174,7 +194,7 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
 
   return (
     <section ref={canvasRef} className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]" onClick={(e) => {
-      if (mode === 'edit' && e.target === e.currentTarget) setSelectedPlacedAssetKey(null);
+      if (mode === 'edit' && e.target === e.currentTarget) updateSelection(null);
     }} onPointerMove={handleCanvasPointerMove} onPointerUp={handleCanvasPointerUp} onPointerCancel={handleCanvasPointerUp} onLostPointerCapture={handleCanvasPointerUp} onDragOver={(e) => mode === 'edit' && e.preventDefault()} onDrop={onCanvasDrop}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.5)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.5)_1px,transparent_1px)] bg-[size:48px_48px] opacity-60" />
@@ -192,7 +212,7 @@ export default function GamePreviewCanvas({ mode = 'edit', runtimeSnapshot, onSc
         return (
           <div key={asset.key} className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 touch-none ${mode === 'edit' && draggingPlacedAssetKey === asset.key ? 'cursor-grabbing' : mode === 'edit' ? 'cursor-grab' : 'cursor-pointer'}`} style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize }} title={asset.label} onClick={(e) => {
             e.stopPropagation();
-            setSelectedPlacedAssetKey(asset.key);
+            updateSelection(asset.key);
             if (mode === 'play') onSpriteClick?.(asset.key);
           }} onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)} onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}>
             {isSelected && mode === 'edit' ? <><div className="absolute inset-0 border-[3px] border-[#19a2ff]" /><div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /></> : null}

@@ -1,9 +1,17 @@
 const EVENT_LABELS = new Set([
   'game starts',
   'sprite clicked',
+  'object is tapped',
   'key pressed',
+  'key is pressed',
   'timer reaches 0',
   'score reaches 10',
+  'touch ends (pro)',
+  'i get a message',
+  'message matches',
+  'bumps',
+  'is touching',
+  'is not touching (pro)',
 ]);
 
 function readTokenValue(token) {
@@ -25,6 +33,67 @@ function readBlockLabel(block) {
     .trim();
 }
 
+function normalizeSymbol(symbol) {
+  return (symbol || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function compilePredicateFromParts(parts = []) {
+  if (!parts.length) return null;
+  const first = normalizeSymbol(readTokenValue(parts[0]));
+  const second = normalizeSymbol(readTokenValue(parts[1]));
+  const third = normalizeSymbol(readTokenValue(parts[2]));
+  const fourth = normalizeSymbol(readTokenValue(parts[3]));
+
+  if (first === 'not') {
+    return { kind: 'not', value: readTokenValue(parts[1]) };
+  }
+  if (first === 'flipped') {
+    return { kind: 'flipped' };
+  }
+
+  if (second === 'bumps') {
+    return { kind: 'collision', operator: 'bumps', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
+  }
+  if (second === 'is touching') {
+    return { kind: 'collision', operator: 'touching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
+  }
+  if (second === 'is not touching' || (second === 'is not touching' && fourth === '(pro)')) {
+    return { kind: 'collision', operator: 'notTouching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
+  }
+
+  const comparisonMap = {
+    '=': 'eq',
+    '≠': 'neq',
+    '<': 'lt',
+    '>': 'gt',
+    '≤': 'lte',
+    '≥': 'gte',
+    'matches': 'matches',
+    'and': 'and',
+    'or': 'or',
+  };
+  const operator = comparisonMap[second];
+  if (!operator) return null;
+  return {
+    kind: operator === 'and' || operator === 'or' ? 'logic' : 'comparison',
+    operator,
+    left: readTokenValue(parts[0]),
+    right: readTokenValue(parts[2]),
+  };
+}
+
+function isReframedDesignBlock(label) {
+  const lowered = label.toLowerCase();
+  const keywords = [
+    'is tapped',
+    'is pressed',
+    'touch ends',
+    'i get a message',
+    'message matches',
+  ];
+  return keywords.some((keyword) => lowered.includes(keyword));
+}
+
 function compileInstruction(block, errors, path) {
   const label = readBlockLabel(block);
 
@@ -37,20 +106,33 @@ function compileInstruction(block, errors, path) {
 
     if (!body.length) errors.push(`${path}: "${label}" has no blocks inside it.`);
     if (loopLabel === 'forever') return { type: 'forever', body };
+    if (loopLabel === 'repeat') return { type: 'repeat', times: Math.max(0, Math.floor(readNumber(block.parts?.[1], 0))), body };
     if (loopLabel === 'while') return { type: 'while', condition: readTokenValue(block.parts?.[1]).toLowerCase(), body };
     errors.push(`${path}: Unsupported loop "${label}".`);
     return null;
   }
 
   const actionLabel = readTokenValue(block.parts?.[0]).toLowerCase();
+  const predicate = compilePredicateFromParts(block.parts || []);
+  if (predicate) return { type: 'waitUntil', condition: predicate };
   if (actionLabel === 'move forward') return { type: 'moveForward', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'turn degrees') return { type: 'turn', degrees: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'set rotation style') return { type: 'setRotationStyle', style: readTokenValue(block.parts?.[1]).toLowerCase() || 'dont rotate' };
   if (actionLabel === 'change x by') return { type: 'changeX', amount: readNumber(block.parts?.[1], 0) };
+  if (actionLabel === 'change y by') return { type: 'changeY', amount: readNumber(block.parts?.[1], 0) };
+  if (actionLabel === 'go to x') return { type: 'goTo', x: readNumber(block.parts?.[1], 0), y: readNumber(block.parts?.[3], 0) };
+  if (actionLabel === 'point in direction') return { type: 'pointDirection', degrees: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'wait') return { type: 'wait', durationMs: Math.max(0, readNumber(block.parts?.[1], 0) * 1000) };
   if (actionLabel === 'switch costume to') return { type: 'switchCostume', costume: readTokenValue(block.parts?.[1]) || 'default' };
   if (actionLabel === 'next costume') return { type: 'nextCostume' };
   if (actionLabel === 'play sound') return { type: 'playSound', sound: readTokenValue(block.parts?.[1]) || 'sound' };
+  if (actionLabel === 'say') return { type: 'say', text: readTokenValue(block.parts?.[1]) || 'Hi!' };
+  if (actionLabel === 'change score by') return { type: 'changeScore', amount: readNumber(block.parts?.[1], 0) };
+  if (actionLabel === 'set score to') return { type: 'setScore', value: readNumber(block.parts?.[1], 0) };
+  if (actionLabel === 'change timer by') return { type: 'changeTime', amount: readNumber(block.parts?.[1], 0) };
+  if (actionLabel === 'set timer to') return { type: 'setTime', value: readNumber(block.parts?.[1], 0) };
+  if (actionLabel === 'set alive to') return { type: 'setAlive', value: readTokenValue(block.parts?.[1]).toLowerCase() === 'true' };
+  if (isReframedDesignBlock(label.toLowerCase())) return { type: 'noop', label };
 
   errors.push(`${path}: Unsupported block "${label}".`);
   return null;

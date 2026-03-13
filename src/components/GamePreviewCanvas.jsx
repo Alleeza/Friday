@@ -118,7 +118,7 @@ export default function GamePreviewCanvas({
     if (mode !== 'edit' || !canvasRef.current) return;
     e.stopPropagation();
     const rect = canvasRef.current.getBoundingClientRect();
-    updateSelection(asset.key);
+    setSelectedPlacedAssetKey(asset.key);
     setDraggingPlacedAssetKey(asset.key);
     setDragOffset({ x: e.clientX - rect.left - asset.x, y: e.clientY - rect.top - asset.y });
     moveStartSnapshotRef.current = { placedAssets: placedAssets.map((item) => ({ ...item })), selectedPlacedAssetKey };
@@ -168,7 +168,7 @@ export default function GamePreviewCanvas({
   const handleResizeHandlePointerDown = (e, asset) => {
     if (mode !== 'edit') return;
     e.stopPropagation();
-    updateSelection(asset.key);
+    setSelectedPlacedAssetKey(asset.key);
     setResizingPlacedAssetKey(asset.key);
     resizeStartRef.current = {
       pointerY: e.clientY,

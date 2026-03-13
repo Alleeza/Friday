@@ -324,7 +324,6 @@ export default function SandboxBuilderPage() {
     updateSelectedScript((blocks) => [...blocks, instance]);
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [selectedInstanceKey]: [] }));
-    addNotification(`Added "${text}" to ${selectedLabel}.`);
   };
 
   const addInsideLoop = (loopId, template) => {
@@ -335,7 +334,6 @@ export default function SandboxBuilderPage() {
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: [...block.children, instance] }));
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [selectedInstanceKey]: [] }));
-    addNotification(`Dropped "${text}" inside the loop for ${selectedLabel}.`);
   };
 
   const handleDragStart = (e, template) => {
@@ -399,7 +397,6 @@ export default function SandboxBuilderPage() {
       const last = next.pop();
       setScriptsByInstanceKey(last.scriptsByInstanceKey);
       setSelectedBlock(last.selectedBlock);
-      addNotification('Undid the last script edit.');
       return next;
     });
   };
@@ -488,7 +485,6 @@ export default function SandboxBuilderPage() {
     lastTickRef.current = 0;
     setMode('edit');
     setRuntimeSnapshot(null);
-    addNotification('Stopped play mode. Edit the scripts and run again.');
   };
 
   const startRuntime = () => {
@@ -497,7 +493,6 @@ export default function SandboxBuilderPage() {
     if (Object.keys(errorsByKey).length) {
       const firstKey = Object.keys(errorsByKey)[0];
       setSelectedInstanceKey(firstKey);
-      addNotification(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
       return;
     }
     const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
@@ -505,7 +500,6 @@ export default function SandboxBuilderPage() {
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
-    addNotification("Play started. The sandbox is now following each object's script.");
     const loop = (timestamp) => {
       if (!runtimeRef.current) return;
       const delta = lastTickRef.current ? Math.min(timestamp - lastTickRef.current, 50) : 16;
@@ -536,7 +530,7 @@ export default function SandboxBuilderPage() {
       <section className="grid gap-4 lg:grid-cols-12">
         <div className="studio-panel rounded-[34px] border-[#ddd6c8] bg-[#f2f1eb] lg:col-span-3">
           <div className="mb-3 flex items-center justify-between"><p className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Scene Objects</p></div>
-          <div className="space-y-2">{sceneInstances.length ? sceneInstances.map((instance) => <button key={instance.key} onClick={() => { if (mode === 'play') return; setSelectedInstanceKey(instance.key); addNotification(`Selected ${getInstanceDisplayLabel(sceneInstances, instance.key)}. Script edits only affect this object.`); }} className={`w-full rounded-[22px] border-2 px-5 py-4 text-left text-base font-bold leading-none shadow-[inset_0_-2px_0_rgba(15,23,42,0.06)] transition ${selectedInstanceKey === instance.key ? 'border-[#13a4ff] bg-[#dff2ff] text-[#0d76ab]' : 'border-[#d7d8dc] bg-white text-slate-700 hover:border-[#cfd3da]'}`}>{instance.emoji} {getInstanceDisplayLabel(sceneInstances, instance.key)}</button>) : <p className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-slate-500">Drop objects into the sandbox to create script targets.</p>}</div>
+          <div className="space-y-2">{sceneInstances.length ? sceneInstances.map((instance) => <button key={instance.key} onClick={() => { if (mode === 'play') return; setSelectedInstanceKey(instance.key); }} className={`w-full rounded-[22px] border-2 px-5 py-4 text-left text-base font-bold leading-none shadow-[inset_0_-2px_0_rgba(15,23,42,0.06)] transition ${selectedInstanceKey === instance.key ? 'border-[#13a4ff] bg-[#dff2ff] text-[#0d76ab]' : 'border-[#d7d8dc] bg-white text-slate-700 hover:border-[#cfd3da]'}`}>{instance.emoji} {getInstanceDisplayLabel(sceneInstances, instance.key)}</button>) : <p className="rounded-2xl bg-white px-4 py-4 text-sm font-bold text-slate-500">Drop objects into the sandbox to create script targets.</p>}</div>
         </div>
         <div className="studio-panel lg:col-span-3">
           <div className="mb-3"><label htmlFor="block-category" className="mb-1 block text-sm font-extrabold uppercase tracking-wide text-slate-600">Block Category</label><select id="block-category" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full rounded-xl border border-duo-line bg-white px-3 py-2 text-sm font-bold text-slate-700">{Object.keys(palette).map((category) => <option key={category} value={category}>{category.toUpperCase()}</option>)}</select></div>

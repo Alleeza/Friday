@@ -13,6 +13,7 @@ import {
   getProviderOptions,
 } from '../ai/providerCatalog.js';
 import { useAIChat } from '../hooks/useAIChat';
+import { StageProgressSection } from './ProjectRoadmapPage';
 
 const eventGroups = [
   {
@@ -123,7 +124,7 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-export default function SandboxBuilderPage() {
+export default function SandboxBuilderPage({ initialSetupData = null, projectPlan = null }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -433,6 +434,7 @@ export default function SandboxBuilderPage() {
 
   return (
     <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
+      {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
       <section className="quest-card flex items-center justify-between gap-4 rounded-[34px] border-[#d6eec2] bg-[#f7fff1] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.09)]">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-quest-muted">Friday Sandbox</p>

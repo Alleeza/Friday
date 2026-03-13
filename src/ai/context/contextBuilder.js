@@ -95,9 +95,7 @@ export function buildContext({
       labelSeen[inst.label] = (labelSeen[inst.label] ?? 0) + 1;
       const displayLabel =
         labelCounts[inst.label] > 1 ? `${inst.label} ${labelSeen[inst.label]}` : inst.label;
-      lines.push(
-        `  - ${inst.emoji} ${displayLabel} at position (${Math.round(inst.x)}, ${Math.round(inst.y)}), scale ${inst.scale.toFixed(1)}, rotation ${Math.round(inst.rotation)}°`
-      );
+      lines.push(`  - ${inst.emoji} ${displayLabel}`);
     }
   }
   lines.push('');
@@ -167,11 +165,13 @@ export function buildContext({
     lines.push('');
   }
 
-  // --- Available (unplaced) assets ---
-  const placedIds = new Set(sceneInstances.map((i) => i.id));
-  const unplaced = availableAssets.filter((a) => !placedIds.has(a.id));
-  if (unplaced.length > 0) {
-    lines.push(`Available assets not yet on canvas: ${unplaced.map((a) => `${a.emoji} ${a.label}`).join(', ')}`);
+  // --- Available assets ---
+  if (availableAssets.length > 0) {
+    const placedIds = new Set(sceneInstances.map((i) => i.id));
+    const unplaced = availableAssets.filter((a) => !placedIds.has(a.id));
+    const placed = availableAssets.filter((a) => placedIds.has(a.id));
+    if (placed.length > 0) lines.push(`Assets on canvas: ${placed.map((a) => `${a.emoji} ${a.label}`).join(', ')}`);
+    if (unplaced.length > 0) lines.push(`Assets available to add: ${unplaced.map((a) => `${a.emoji} ${a.label}`).join(', ')}`);
   }
 
   return lines.join('\n');

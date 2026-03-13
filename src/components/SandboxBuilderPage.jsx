@@ -141,16 +141,108 @@ export default function SandboxBuilderPage() {
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
-    { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
-  ]);
-  const addNotification = (text) => {
-    setMessages((prev) => [...prev, { role: 'ai', text }]);
-  };
+  const [selectedProvider, setSelectedProvider] = useState(() => getDefaultProviderName());
+  const [selectedModel, setSelectedModel] = useState(() => getDefaultModelForProvider(getDefaultProviderName()));
+  const [ollamaModels, setOllamaModels] = useState([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const providerOptions = useMemo(() => getProviderOptions(), []);
+  const modelOptions = useMemo(
+    () => (selectedProvider === 'claude' ? getClaudeModels() : ollamaModels),
+    [ollamaModels, selectedProvider]
+  );
+
+  const aiService = useMemo(
+    () => createDefaultAIService({ providerName: selectedProvider, model: selectedModel }),
+    [selectedModel, selectedProvider]
+  );
+
+  const { messages, sendMessage, addNotification, isStreaming, abortResponse } = useAIChat({
+    aiService,
+    contextData: {
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: sandboxAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    },
+  });
+
   const dispatchRuntimeEvent = (eventType, payload = {}) => {
     runtimeRef.current?.dispatch(eventType, payload);
     if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+  };
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (selectedProvider !== 'ollama') {
+      setIsLoadingModels(false);
+      return undefined;
+    }
+
+    const loadOllamaModels = async () => {
+      setIsLoadingModels(true);
+
+      try {
+        const response = await fetch('/api/ollama/api/tags');
+        if (!response.ok) {
+          throw new Error(`Could not load Ollama models (${response.status})`);
+        }
+
+        const data = await response.json();
+        const names = Array.isArray(data.models)
+          ? data.models
+              .map((model) => model?.name)
+              .filter((name) => typeof name === 'string' && name.trim())
+          : [];
+
+        if (ignore) return;
+
+        setOllamaModels(names);
+        setSelectedModel((current) => {
+          if (names.includes(current)) return current;
+          if (names.length) return names[0];
+          return getDefaultModelForProvider('ollama');
+        });
+      } catch (err) {
+        if (ignore) return;
+        setOllamaModels([]);
+        addNotification(`Couldn't load local Ollama models. ${err.message}`);
+        setSelectedModel((current) => current || getDefaultModelForProvider('ollama'));
+      } finally {
+        if (!ignore) setIsLoadingModels(false);
+      }
+    };
+
+    loadOllamaModels();
+    return () => {
+      ignore = true;
+    };
+  }, [addNotification, selectedProvider]);
+
+  useEffect(() => {
+    if (selectedProvider !== 'claude') return;
+    const claudeModels = getClaudeModels();
+    setSelectedModel((current) => (
+      claudeModels.includes(current) ? current : getDefaultModelForProvider('claude')
+    ));
+  }, [selectedProvider]);
+
+  const handleProviderChange = (nextProvider) => {
+    if (!nextProvider || nextProvider === selectedProvider) return;
+    abortResponse();
+    setSelectedProvider(nextProvider);
+    setSelectedModel(getDefaultModelForProvider(nextProvider));
+    addNotification(`Switched AI provider to ${nextProvider === 'ollama' ? 'Ollama Local' : 'Claude API'}.`);
+  };
+
+  const handleModelChange = (nextModel) => {
+    if (!nextModel || nextModel === selectedModel) return;
+    abortResponse();
+    setSelectedModel(nextModel);
+    addNotification(`Switched model to ${nextModel}.`);
   };
 
   useEffect(() => {
@@ -425,12 +517,6 @@ export default function SandboxBuilderPage() {
     rafRef.current = requestAnimationFrame(loop);
   };
 
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || `For "${selectedBlock}", think event -> loop -> action.`;
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
-  };
-
   return (
     <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
       <section className="quest-card flex items-center justify-between gap-4 rounded-[34px] border-[#d6eec2] bg-[#f7fff1] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.09)]">
@@ -444,9 +530,8 @@ export default function SandboxBuilderPage() {
           <p className={`text-2xl font-display ${mode === 'play' ? 'text-[#1cb0f6]' : 'text-[#58cc02]'}`}>{mode === 'play' ? 'Play' : 'Edit'}</p>
         </div>
       </section>
-      <section className="grid gap-4 lg:grid-cols-12">
-        <div className="h-[640px] lg:col-span-9"><GamePreviewCanvas mode={mode} runtimeSnapshot={runtimeSnapshot} onSceneChange={({ instances, selectedInstanceKey: nextKey }) => { setSceneInstances(instances); if (nextKey) setSelectedInstanceKey(nextKey); }} onPlay={startRuntime} onStop={stopRuntime} onSpriteClick={(instanceKey) => { dispatchRuntimeEvent('sprite clicked', { instanceKey }); dispatchRuntimeEvent('object is tapped', { instanceKey }); }} /></div>
-        <div className="h-[640px] lg:col-span-3"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+      <section>
+        <div className="h-[640px]"><GamePreviewCanvas mode={mode} runtimeSnapshot={runtimeSnapshot} onSceneChange={({ instances, selectedInstanceKey: nextKey }) => { setSceneInstances(instances); if (nextKey) setSelectedInstanceKey(nextKey); }} onPlay={startRuntime} onStop={stopRuntime} onSpriteClick={(instanceKey) => { dispatchRuntimeEvent('sprite clicked', { instanceKey }); dispatchRuntimeEvent('object is tapped', { instanceKey }); }} /></div>
       </section>
       <section className="grid gap-4 lg:grid-cols-12">
         <div className="studio-panel rounded-[34px] border-[#ddd6c8] bg-[#f2f1eb] lg:col-span-3">
@@ -464,7 +549,20 @@ export default function SandboxBuilderPage() {
           <div className="mt-4 rounded-3xl border border-[#d6dbe2] bg-white p-4"><p className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Runtime Log</p><div className="mt-3 max-h-32 space-y-2 overflow-y-auto text-sm font-semibold text-slate-600">{runtimeLogs.length ? runtimeLogs.map((log, idx) => <p key={`${log}-${idx}`}>{log}</p>) : <p>No runtime events yet. Press Play and interact with the sandbox.</p>}</div></div>
         </div>
       </section>
-      {draggingScriptBlock && mode !== 'play' ? <div className={`fixed bottom-6 right-6 z-50 rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-lg transition ${trashActive ? 'border-rose-700 bg-rose-600 text-white scale-105' : 'border-rose-400 bg-rose-500 text-white'}`} onDragOver={(e) => { e.preventDefault(); if (!trashActive) setTrashActive(true); }} onDragLeave={() => setTrashActive(false)} onDrop={handleTrashDrop}>Drop to delete</div> : null}
+      <AIChatPanel
+        messages={messages}
+        onSend={sendMessage}
+        isStreaming={isStreaming}
+        onAbort={abortResponse}
+        providerOptions={providerOptions}
+        selectedProvider={selectedProvider}
+        onProviderChange={handleProviderChange}
+        modelOptions={modelOptions}
+        selectedModel={selectedModel}
+        onModelChange={handleModelChange}
+        isLoadingModels={isLoadingModels}
+      />
+      {draggingScriptBlock && mode !== 'play' ? <div className={`fixed bottom-6 right-24 z-50 rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-lg transition sm:right-28 ${trashActive ? 'border-rose-700 bg-rose-600 text-white scale-105' : 'border-rose-400 bg-rose-500 text-white'}`} onDragOver={(e) => { e.preventDefault(); if (!trashActive) setTrashActive(true); }} onDragLeave={() => setTrashActive(false)} onDrop={handleTrashDrop}>Drop to delete</div> : null}
     </main>
   );
 }

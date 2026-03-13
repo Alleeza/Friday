@@ -1,4 +1,10 @@
 const MAX_STEPS_PER_TICK = 24;
+const STAGE_BOUNDS = {
+  minX: 48,
+  maxX: 1180,
+  minY: 96,
+  maxY: 560,
+};
 
 function evaluateCondition(condition, variables) {
   switch ((condition || '').toLowerCase()) {
@@ -29,6 +35,11 @@ function createAssetState(instance) {
     lastSound: null,
     facing: 1,
   };
+}
+
+function clampPosition(asset) {
+  asset.x = Math.max(STAGE_BOUNDS.minX, Math.min(STAGE_BOUNDS.maxX, asset.x));
+  asset.y = Math.max(STAGE_BOUNDS.minY, Math.min(STAGE_BOUNDS.maxY, asset.y));
 }
 
 function cloneSnapshot(state) {
@@ -69,6 +80,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
         asset.x += Math.cos(radians) * instruction.amount;
         asset.y += Math.sin(radians) * instruction.amount;
         asset.facing = instruction.amount >= 0 ? 1 : -1;
+        clampPosition(asset);
         break;
       }
       case 'turn':
@@ -80,6 +92,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
       case 'changeX':
         asset.x += instruction.amount;
         asset.facing = instruction.amount >= 0 ? 1 : -1;
+        clampPosition(asset);
         break;
       case 'switchCostume':
         asset.costume = instruction.costume;
@@ -109,11 +122,11 @@ export function createScriptRuntime({ instances, programsByKey }) {
       if (frame.index >= frame.instructions.length) {
         if (frame.loopType === 'forever') {
           frame.index = 0;
-          continue;
+          return true;
         }
         if (frame.loopType === 'while' && evaluateCondition(frame.condition, state.variables)) {
           frame.index = 0;
-          continue;
+          return true;
         }
         task.frames.pop();
         continue;

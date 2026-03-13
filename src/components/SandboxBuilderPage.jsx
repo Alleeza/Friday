@@ -57,6 +57,7 @@ export default function SandboxBuilderPage() {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
+  const lastSnapshotPublishRef = useRef(0);
   const [sceneInstances, setSceneInstances] = useState([]);
   const [selectedInstanceKey, setSelectedInstanceKey] = useState(null);
   const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState({});
@@ -300,12 +301,18 @@ export default function SandboxBuilderPage() {
     rafRef.current = null;
     runtimeRef.current = null;
     lastTickRef.current = 0;
+    lastSnapshotPublishRef.current = 0;
     setMode('edit');
     setRuntimeSnapshot(null);
     pushAiMessage('Stopped play mode. Edit the scripts and run again.');
   };
 
   const startRuntime = () => {
+    if (!sceneInstances.length) {
+      pushAiMessage('Place at least one object in the sandbox before pressing Play.');
+      return;
+    }
+
     const { programsByKey, errorsByKey } = compileScriptsByInstance(scriptsByInstanceKey);
     setCompileErrorsByInstance(errorsByKey);
     if (Object.keys(errorsByKey).length) {
@@ -319,13 +326,17 @@ export default function SandboxBuilderPage() {
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
+    lastSnapshotPublishRef.current = 0;
     pushAiMessage("Play started. The sandbox is now following each object's script.");
     const loop = (timestamp) => {
       if (!runtimeRef.current) return;
       const delta = lastTickRef.current ? Math.min(timestamp - lastTickRef.current, 50) : 16;
       lastTickRef.current = timestamp;
       runtimeRef.current.tick(delta);
-      setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+      if (!lastSnapshotPublishRef.current || timestamp - lastSnapshotPublishRef.current >= 80) {
+        lastSnapshotPublishRef.current = timestamp;
+        setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -351,7 +362,7 @@ export default function SandboxBuilderPage() {
         </div>
       </section>
       <section className="grid gap-4 lg:grid-cols-12">
-        <div className="h-[640px] lg:col-span-9"><GamePreviewCanvas mode={mode} runtimeSnapshot={runtimeSnapshot} onSceneChange={({ instances, selectedInstanceKey: nextKey }) => { setSceneInstances(instances); if (nextKey) setSelectedInstanceKey(nextKey); }} onPlay={startRuntime} onStop={stopRuntime} onSpriteClick={(instanceKey) => { runtimeRef.current?.dispatch('sprite clicked', { instanceKey }); if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot()); }} /></div>
+        <div className="h-[640px] lg:col-span-9"><GamePreviewCanvas mode={mode} runtimeSnapshot={runtimeSnapshot} selectedInstanceKey={selectedInstanceKey} onSceneChange={({ instances, selectedInstanceKey: nextKey }) => { setSceneInstances(instances); setSelectedInstanceKey(nextKey || null); }} onSelectedInstanceChange={(nextKey) => setSelectedInstanceKey(nextKey || null)} onPlay={startRuntime} onStop={stopRuntime} onSpriteClick={(instanceKey) => { runtimeRef.current?.dispatch('sprite clicked', { instanceKey }); if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot()); }} /></div>
         <div className="h-[640px] lg:col-span-3"><AIChatPanel messages={messages} onSend={sendChat} /></div>
       </section>
       <section className="grid gap-4 lg:grid-cols-12">

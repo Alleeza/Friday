@@ -9,12 +9,12 @@ let shuttingDown = false;
 function assertSupportedNodeVersion() {
   const [majorRaw] = String(process.versions.node || '').split('.');
   const major = Number.parseInt(majorRaw, 10);
-  if (Number.isNaN(major) || major >= 22) return;
+  if (Number.isNaN(major) || major >= 20) return;
 
   process.stderr.write(
-    `[dev] Node ${process.versions.node} detected. This project requires Node 22+ because the backend uses "node:sqlite".\n`,
+    `[dev] Node ${process.versions.node} detected. This project requires Node 20+.\n`,
   );
-  process.stderr.write('[dev] Run: nvm install 22 && nvm use 22\n');
+  process.stderr.write('[dev] Run: nvm install 20 && nvm use 20\n');
   process.exit(1);
 }
 

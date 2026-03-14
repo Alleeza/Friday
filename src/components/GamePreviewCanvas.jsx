@@ -93,6 +93,8 @@ export default function GamePreviewCanvas({
   const movedDuringDragRef = useRef(false);
   const resizeStartRef = useRef(null);
   const resizedDuringDragRef = useRef(false);
+  const wheelResizeSnapshotRef = useRef(null);
+  const wheelResizeTimeoutRef = useRef(null);
   const backdropMoveStartRef = useRef(null);
   const backdropMovedDuringDragRef = useRef(false);
   const backdropResizeStartRef = useRef(null);
@@ -176,6 +178,12 @@ export default function GamePreviewCanvas({
       current === (selectedInstanceKey || null) ? current : selectedInstanceKey || null
     ));
   }, [selectedInstanceKey]);
+
+  useEffect(() => () => {
+    if (wheelResizeTimeoutRef.current) {
+      clearTimeout(wheelResizeTimeoutRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isEditMode || !trayOpen) return undefined;
@@ -583,14 +591,25 @@ export default function GamePreviewCanvas({
   const handleSelectedAssetWheel = (e, asset) => {
     if (!isEditMode) return;
     e.preventDefault();
-    const currentScale = asset.scale || 1;
-    const nextScale = Math.max(0.6, Math.min(1.8, Math.round((currentScale + (e.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
-    if (nextScale === currentScale) return;
-    const snapshot = buildSnapshot(placedAssets, asset.key, backdropState);
-    setPastStates((prev) => [...prev, snapshot]);
-    setPlacedAssets((prev) => prev.map((item) => (
-      item.key === asset.key ? { ...item, scale: nextScale } : item
-    )));
+    if (!wheelResizeSnapshotRef.current) {
+      wheelResizeSnapshotRef.current = buildSnapshot(placedAssets, asset.key, backdropState);
+      setPastStates((prev) => [...prev, wheelResizeSnapshotRef.current]);
+    }
+
+    setPlacedAssets((prev) => prev.map((item) => {
+      if (item.key !== asset.key) return item;
+      const currentScale = item.scale || 1;
+      const nextScale = Math.max(0.6, Math.min(1.8, Math.round((currentScale + (e.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+      return nextScale === currentScale ? item : { ...item, scale: nextScale };
+    }));
+
+    if (wheelResizeTimeoutRef.current) {
+      clearTimeout(wheelResizeTimeoutRef.current);
+    }
+    wheelResizeTimeoutRef.current = setTimeout(() => {
+      wheelResizeSnapshotRef.current = null;
+      wheelResizeTimeoutRef.current = null;
+    }, 180);
   };
 
   const visibleAssets = placedAssets.map((asset) => getVisualAsset(asset, runtimeSnapshot));

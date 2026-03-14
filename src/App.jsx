@@ -65,6 +65,7 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState('setup');
   const [saveState, setSaveState] = useState('idle');
   const [publishState, setPublishState] = useState('idle');
+  const [hasSavedProjectOnce, setHasSavedProjectOnce] = useState(false);
 
   useEffect(() => () => {
     if (publishTimeoutRef.current) window.clearTimeout(publishTimeoutRef.current);
@@ -85,6 +86,7 @@ export default function App() {
         setProjectPlan(deriveProjectPlan(normalized.setupData));
         lastSavedSnapshotRef.current = JSON.stringify(normalized);
         setSaveState(savedProject ? 'saved' : 'idle');
+        setHasSavedProjectOnce(Boolean(savedProject));
         setStorageError('');
       })
       .catch((error) => {
@@ -160,6 +162,7 @@ export default function App() {
       setProjectState(normalized);
       setProjectPlan(deriveProjectPlan(normalized.setupData));
       lastSavedSnapshotRef.current = JSON.stringify(normalized);
+      setHasSavedProjectOnce(true);
       setStorageError('');
       setSaveState('saved');
     } catch (error) {
@@ -227,6 +230,7 @@ export default function App() {
         onPublishProject={handlePublishProject}
         saveState={saveState}
         publishState={publishState}
+        hasSavedProjectOnce={hasSavedProjectOnce}
         projectPlan={projectPlan}
       />
     </>

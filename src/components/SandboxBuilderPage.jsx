@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Flame, Pencil, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Flame, Pencil, Star, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -279,6 +279,7 @@ export default function SandboxBuilderPage({
   const lastSnapshotPublishRef = useRef(0);
   const lastPublishedProjectRef = useRef('');
   const quickEditorRef = useRef(null);
+  const draggingScriptPayloadRef = useRef(null);
   const initialSceneInstances = useMemo(
     () => {
       const persistedScene = normalizeSceneState(initialProjectState?.scene).placedAssets;
@@ -296,7 +297,7 @@ export default function SandboxBuilderPage({
     return Object.keys(persistedScripts).length ? persistedScripts : cloneValue(initialSetupData?.initialScripts, {});
   });
   const [selectedBlock, setSelectedBlock] = useState(`When ${defaultEvent}`);
-  const [selectedCategory, setSelectedCategory] = useState('Movement');
+  const [openCategories, setOpenCategories] = useState(() => new Set());
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
   const [dragOverTopBlockId, setDragOverTopBlockId] = useState(null);
   const [dragOverChildKey, setDragOverChildKey] = useState(null);
@@ -399,10 +400,6 @@ export default function SandboxBuilderPage({
     () => Object.keys(palette).filter((category) => !hiddenPaletteCategories.has(String(category).toLowerCase())),
     [],
   );
-  const paletteBlocks = useMemo(() => {
-    if (availableCategoryNames.includes(selectedCategory)) return palette[selectedCategory] || [];
-    return palette[availableCategoryNames[0]] || [];
-  }, [availableCategoryNames, selectedCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
@@ -429,15 +426,18 @@ export default function SandboxBuilderPage({
   const selectedEvent = getEventValue(activeEventSection?.eventBlock || primaryEventBlock);
   const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
   const assetOptions = useMemo(() => {
-    const dynamic = sceneInstances.map((instance) => ({
-      value: instance.key,
-      label: `${instance.emoji} ${getInstanceDisplayLabel(sceneInstances, instance.key)}`,
-    }));
-    return [{ value: 'Self', label: '🙂 Self' }, ...dynamic];
-  }, [sceneInstances]);
+    const selfEmoji = selectedInstance?.emoji || '🙂';
+    const dynamic = sceneInstances
+      .filter((instance) => instance.key !== editorInstanceKey)
+      .map((instance) => ({
+        value: instance.key,
+        label: `${instance.emoji} ${getInstanceDisplayLabel(sceneInstances, instance.key)}`,
+      }));
+    return [{ value: 'Self', label: `${selfEmoji} Self` }, ...dynamic];
+  }, [editorInstanceKey, sceneInstances, selectedInstance]);
   const collisionTargetOptions = useMemo(() => {
     const dynamic = assetOptions.filter((option) => option.value !== 'Self' && option.value !== editorInstanceKey);
-    return dynamic.length ? dynamic : [{ value: 'Self', label: '🙂 Self' }];
+    return dynamic.length ? dynamic : [assetOptions[0] || { value: 'Self', label: '🙂 Self' }];
   }, [assetOptions, editorInstanceKey]);
   const activeEventParts = activeEventSection?.eventBlock.parts || primaryEventBlock?.parts || [];
   const rawSelectedEventLeft = readTokenValue(activeEventParts[2]);
@@ -478,9 +478,12 @@ export default function SandboxBuilderPage({
   }, [activeEventBlockId, eventSections]);
 
   useEffect(() => {
-    if (availableCategoryNames.includes(selectedCategory)) return;
-    if (availableCategoryNames[0]) setSelectedCategory(availableCategoryNames[0]);
-  }, [availableCategoryNames, selectedCategory]);
+    setOpenCategories((prev) => {
+      const next = new Set(prev);
+      availableCategoryNames.forEach((category) => next.add(category));
+      return next;
+    });
+  }, [availableCategoryNames]);
 
   const selectInstance = (instanceKey, openEditor = false) => {
     setFocusedInstanceKey(instanceKey || null);
@@ -739,6 +742,29 @@ export default function SandboxBuilderPage({
     setPendingEventValue('');
   };
 
+  const removeEventSection = (eventBlockId) => {
+    if (!eventBlockId || mode === 'play') return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => {
+      const startIndex = blocks.findIndex((block) => block.id === eventBlockId);
+      if (startIndex === -1) return blocks;
+      let endIndex = blocks.length;
+      for (let index = startIndex + 1; index < blocks.length; index += 1) {
+        if (isEventBlock(blocks[index])) {
+          endIndex = index;
+          break;
+        }
+      }
+      return [...blocks.slice(0, startIndex), ...blocks.slice(endIndex)];
+    });
+    if (activeEventBlockId === eventBlockId) {
+      const fallbackSection = eventSections.find((section) => section.eventBlock.id !== eventBlockId) || null;
+      setActiveEventBlockId(fallbackSection?.eventBlock.id || null);
+      setSelectedBlock(`When ${fallbackSection ? getEventValue(fallbackSection.eventBlock) || 'add event' : 'add event'}`);
+    }
+    setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+  };
+
   const removeTopLevelBlock = (blockId) => {
     pushHistorySnapshot();
     updateSelectedScript((blocks) => blocks.filter((block) => block.id !== blockId));
@@ -765,18 +791,23 @@ export default function SandboxBuilderPage({
       setDraggingScriptBlock(payload);
       setTrashActive(false);
     });
-    const dragPayload = JSON.stringify({ kind: 'script-block', ...payload });
+    const dragData = { kind: payload.kind || 'script-block', ...payload };
+    draggingScriptPayloadRef.current = dragData;
+    const dragPayload = JSON.stringify(dragData);
     e.dataTransfer.setData('application/json', dragPayload);
     e.dataTransfer.setData('text/plain', dragPayload);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleScriptBlockDragEnd = () => {
-    setDraggingScriptBlock(null);
-    setDraggingPaletteBlock(false);
-    setTrashActive(false);
-    setDragOverTopBlockId(null);
-    setDragOverChildKey(null);
+    requestAnimationFrame(() => {
+      draggingScriptPayloadRef.current = null;
+      setDraggingScriptBlock(null);
+      setDraggingPaletteBlock(false);
+      setTrashActive(false);
+      setDragOverTopBlockId(null);
+      setDragOverChildKey(null);
+    });
   };
 
   const moveTopLevelBlockBefore = (sourceId, targetId) => {
@@ -885,20 +916,37 @@ export default function SandboxBuilderPage({
     if (payload.scope === 'child') removeNestedBlock(payload.loopId, payload.id);
   };
 
+  const removeDraggedEventThread = (payload) => {
+    if (!payload) return;
+    removeEventSection(payload.id);
+  };
+
+  const readDragPayload = (e) => {
+    const rawJson = e.dataTransfer.getData('application/json');
+    const rawText = e.dataTransfer.getData('text/plain');
+
+    for (const raw of [rawJson, rawText]) {
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        // Ignore malformed drag data and keep trying fallbacks.
+      }
+    }
+
+    return draggingScriptPayloadRef.current || draggingScriptBlock;
+  };
+
   const handleTrashDrop = (e) => {
     e.preventDefault();
     setTrashActive(false);
-    try {
-      const raw = e.dataTransfer.getData('application/json');
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed?.kind === 'script-block') removeDraggedScriptBlock(parsed);
-      else if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
-    } catch {
-      if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
-    } finally {
-      setDraggingScriptBlock(null);
-      setDraggingPaletteBlock(false);
-    }
+    const payload = readDragPayload(e);
+    if (payload?.kind === 'event-thread') removeDraggedEventThread(payload);
+    else if (payload?.kind === 'script-block') removeDraggedScriptBlock(payload);
+    draggingScriptPayloadRef.current = null;
+    setDraggingScriptBlock(null);
+    setDraggingPaletteBlock(false);
   };
 
   const stopRuntime = () => {
@@ -1264,6 +1312,9 @@ export default function SandboxBuilderPage({
         className={`inline-flex max-w-[500px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-4 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
           active ? 'ring-4 ring-[#f6bfd1]/70' : ''
         }`}
+        draggable={mode !== 'play'}
+        onDragStart={(e) => handleScriptBlockDragStart(e, { kind: 'event-thread', id: eventBlock.id })}
+        onDragEnd={handleScriptBlockDragEnd}
       >
         <button
           type="button"
@@ -1399,7 +1450,7 @@ export default function SandboxBuilderPage({
         >
           <Pencil size={18} strokeWidth={3} />
         </button>
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-white/12">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/12">
           <span className="grid grid-cols-2 gap-0.5">
             {Array.from({ length: 4 }).map((_, i) => (
               <span key={`${eventBlock.id}-dots-${i}`} className="h-1.5 w-1.5 rounded-full bg-white/95" />
@@ -1472,6 +1523,35 @@ export default function SandboxBuilderPage({
             <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
               {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
               {renderAddEventPill()}
+            </div>
+          ) : null}
+
+          {draggingScriptBlock && mode !== 'play' ? (
+            <div
+              className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+              onDragOver={(e) => {
+                const payload = readDragPayload(e);
+                if (!payload || payload.kind === 'palette-template') return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (!trashActive) setTrashActive(true);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                if (trashActive) setTrashActive(false);
+              }}
+              onDrop={handleTrashDrop}
+            >
+              <div
+                className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                  trashActive
+                    ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                    : 'border-rose-200 bg-white/95 text-rose-500'
+                }`}
+                aria-label="Delete dragged item"
+              >
+                <Trash2 size={28} strokeWidth={2.6} />
+              </div>
             </div>
           ) : null}
 
@@ -1604,36 +1684,51 @@ export default function SandboxBuilderPage({
                 </div>
 
                 <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
+                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-[#f8f6ef] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
                     <div className="mb-4 px-1">
-                      <label htmlFor="block-category" className="mb-3 block text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</label>
-                      <select
-                        id="block-category"
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full rounded-[18px] border border-[#d3dae3] bg-white px-4 py-3 text-[15px] font-extrabold uppercase tracking-[0.04em] text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)] outline-none"
-                      >
-                        {availableCategoryNames.map((category) => (
-                          <option key={category} value={category}>
-                            {formatCategoryLabel(category)}
-                          </option>
-                        ))}
-                      </select>
+                      <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</p>
                     </div>
-                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-                      {paletteBlocks.map((block) => (
-                        <LogicBlock
-                          key={block.id}
-                          parts={hydrateParts(block.parts)}
-                          tone={block.tone}
-                          compact
-                          assetOptions={assetOptions}
-                          draggable={mode !== 'play'}
-                          onDragStart={(e) => handleDragStart(e, block)}
-                          onDragEnd={handlePaletteDragEnd}
-                          onClick={() => addTopLevel(block)}
-                        />
-                      ))}
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                      {availableCategoryNames.map((category) => {
+                        const isOpen = openCategories.has(category);
+                        const categoryBlocks = palette[category] || [];
+                        return (
+                          <section key={category} className="rounded-[24px] bg-transparent">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCategories((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(category)) next.delete(category);
+                                  else next.add(category);
+                                  return next;
+                                });
+                              }}
+                              className="flex w-full items-center justify-between px-1 py-2 text-left text-[15px] font-black uppercase tracking-[0.04em] text-slate-900"
+                            >
+                              <span>{formatCategoryLabel(category)}</span>
+                              {isOpen ? <ChevronUp size={24} strokeWidth={3} /> : <ChevronDown size={24} strokeWidth={3} />}
+                            </button>
+                            {isOpen ? (
+                              <div className="space-y-3 pb-3 pt-2">
+                                {categoryBlocks.map((block) => (
+                                  <LogicBlock
+                                    key={block.id}
+                                    parts={hydrateParts(block.parts)}
+                                    tone={block.tone}
+                                    compact
+                                    assetOptions={assetOptions}
+                                    draggable={mode !== 'play'}
+                                    onDragStart={(e) => handleDragStart(e, block)}
+                                    onDragEnd={handlePaletteDragEnd}
+                                    onClick={() => addTopLevel(block)}
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </section>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1682,35 +1777,13 @@ export default function SandboxBuilderPage({
       <section>
         <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
       </section>
-      {(draggingScriptBlock || draggingPaletteBlock) && mode !== 'play' ? (
+      {draggingPaletteBlock && mode !== 'play' ? (
         <div className="pointer-events-none fixed inset-0 z-[80]">
           <div
             className={`absolute inset-0 transition ${
-              draggingPaletteBlock
-                ? 'bg-slate-950/70'
-                : draggingScriptBlock && trashActive && !isOverValidScriptDropTarget
-                  ? 'bg-slate-950/70'
-                  : 'bg-transparent'
+              draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
             }`}
           />
-          {draggingScriptBlock ? <div className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
-            <div
-              className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
-                trashActive
-                  ? 'scale-110 border-rose-700 bg-rose-600 text-white opacity-100'
-                  : 'border-rose-200 bg-white/95 text-rose-500 opacity-100'
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!trashActive) setTrashActive(true);
-              }}
-              onDragLeave={() => setTrashActive(false)}
-              onDrop={handleTrashDrop}
-              aria-label="Delete dragged block"
-            >
-              <Trash2 size={34} strokeWidth={2.6} />
-            </div>
-          </div> : null}
         </div>
       ) : null}
       </main>

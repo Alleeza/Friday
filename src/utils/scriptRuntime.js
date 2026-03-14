@@ -61,6 +61,7 @@ function createAssetState(instance) {
     costume: 'default',
     costumeIndex: 0,
     lastSound: null,
+    soundTick: 0,
     lastSpeed: 0,
     invisibility: 0,
     facing: 1,
@@ -289,6 +290,7 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
         break;
       case 'playSound':
         asset.lastSound = instruction.sound;
+        asset.soundTick += 1;
         log(`${asset.label} plays ${instruction.sound}`);
         break;
       case 'say':

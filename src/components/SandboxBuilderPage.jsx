@@ -9,6 +9,7 @@ import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 import { StageProgressSection } from './ProjectRoadmapPage';
 import { sandboxAssets } from '../data/sandboxAssets';
+import { soundOptions } from '../data/soundLibrary';
 import questyImage from '../imgages/profile.png';
 
 const eventOptions = [
@@ -62,7 +63,7 @@ const palette = {
     { id: 'point-direction', tone: 'movement', parts: ['Point in direction', { label: '90', numeric: true }] },
   ],
   'Looks & Sounds': [
-    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
+    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: soundOptions }] },
     { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
     { id: 'hide', tone: 'looks', parts: ['Hide object'] },
     { id: 'show', tone: 'looks', parts: ['Show object'] },

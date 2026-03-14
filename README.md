@@ -33,7 +33,16 @@ npm run dev
 
 6. Open the local Vite URL shown in the terminal, usually `http://localhost:5173`.
 
-Project saves and published share snapshots are stored in Supabase. The browser keeps only a stable local editor ID so each device can reopen its own draft while the actual project data works on Vercel and across refreshes.
+Project saves and published share snapshots are stored in Supabase. The browser keeps only a stable local editor ID so each device can reopen its own draft while the actual project data works on Vercel and across refreshes. Each publish creates a new read-only snapshot and a new share link, so one editor can share multiple versions of the same game.
+
+If you already created `published_projects` with `project_id` as the primary key, migrate it before deploying this change:
+
+```sql
+alter table public.published_projects drop constraint if exists published_projects_pkey;
+alter table public.published_projects add primary key (share_id);
+create index if not exists published_projects_project_id_idx
+  on public.published_projects (project_id);
+```
 
 ## Vercel deployment
 

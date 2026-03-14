@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Flame, Pencil, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Flame, Pencil, Star, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -296,7 +296,7 @@ export default function SandboxBuilderPage({
     return Object.keys(persistedScripts).length ? persistedScripts : cloneValue(initialSetupData?.initialScripts, {});
   });
   const [selectedBlock, setSelectedBlock] = useState(`When ${defaultEvent}`);
-  const [selectedCategory, setSelectedCategory] = useState('Movement');
+  const [openCategories, setOpenCategories] = useState(() => new Set());
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
   const [dragOverTopBlockId, setDragOverTopBlockId] = useState(null);
   const [dragOverChildKey, setDragOverChildKey] = useState(null);
@@ -399,10 +399,6 @@ export default function SandboxBuilderPage({
     () => Object.keys(palette).filter((category) => !hiddenPaletteCategories.has(String(category).toLowerCase())),
     [],
   );
-  const paletteBlocks = useMemo(() => {
-    if (availableCategoryNames.includes(selectedCategory)) return palette[selectedCategory] || [];
-    return palette[availableCategoryNames[0]] || [];
-  }, [availableCategoryNames, selectedCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
@@ -481,9 +477,12 @@ export default function SandboxBuilderPage({
   }, [activeEventBlockId, eventSections]);
 
   useEffect(() => {
-    if (availableCategoryNames.includes(selectedCategory)) return;
-    if (availableCategoryNames[0]) setSelectedCategory(availableCategoryNames[0]);
-  }, [availableCategoryNames, selectedCategory]);
+    setOpenCategories((prev) => {
+      const next = new Set(prev);
+      availableCategoryNames.forEach((category) => next.add(category));
+      return next;
+    });
+  }, [availableCategoryNames]);
 
   const selectInstance = (instanceKey, openEditor = false) => {
     setFocusedInstanceKey(instanceKey || null);
@@ -1684,36 +1683,51 @@ export default function SandboxBuilderPage({
                 </div>
 
                 <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
+                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-[#f8f6ef] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
                     <div className="mb-4 px-1">
-                      <label htmlFor="block-category" className="mb-3 block text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</label>
-                      <select
-                        id="block-category"
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full rounded-[18px] border border-[#d3dae3] bg-white px-4 py-3 text-[15px] font-extrabold uppercase tracking-[0.04em] text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)] outline-none"
-                      >
-                        {availableCategoryNames.map((category) => (
-                          <option key={category} value={category}>
-                            {formatCategoryLabel(category)}
-                          </option>
-                        ))}
-                      </select>
+                      <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</p>
                     </div>
-                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-                      {paletteBlocks.map((block) => (
-                        <LogicBlock
-                          key={block.id}
-                          parts={hydrateParts(block.parts)}
-                          tone={block.tone}
-                          compact
-                          assetOptions={assetOptions}
-                          draggable={mode !== 'play'}
-                          onDragStart={(e) => handleDragStart(e, block)}
-                          onDragEnd={handlePaletteDragEnd}
-                          onClick={() => addTopLevel(block)}
-                        />
-                      ))}
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                      {availableCategoryNames.map((category) => {
+                        const isOpen = openCategories.has(category);
+                        const categoryBlocks = palette[category] || [];
+                        return (
+                          <section key={category} className="rounded-[24px] bg-transparent">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCategories((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(category)) next.delete(category);
+                                  else next.add(category);
+                                  return next;
+                                });
+                              }}
+                              className="flex w-full items-center justify-between px-1 py-2 text-left text-[15px] font-black uppercase tracking-[0.04em] text-slate-900"
+                            >
+                              <span>{formatCategoryLabel(category)}</span>
+                              {isOpen ? <ChevronUp size={24} strokeWidth={3} /> : <ChevronDown size={24} strokeWidth={3} />}
+                            </button>
+                            {isOpen ? (
+                              <div className="space-y-3 pb-3 pt-2">
+                                {categoryBlocks.map((block) => (
+                                  <LogicBlock
+                                    key={block.id}
+                                    parts={hydrateParts(block.parts)}
+                                    tone={block.tone}
+                                    compact
+                                    assetOptions={assetOptions}
+                                    draggable={mode !== 'play'}
+                                    onDragStart={(e) => handleDragStart(e, block)}
+                                    onDragEnd={handlePaletteDragEnd}
+                                    onClick={() => addTopLevel(block)}
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </section>
+                        );
+                      })}
                     </div>
                   </div>
 

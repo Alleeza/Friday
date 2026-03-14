@@ -23,7 +23,7 @@ export function createDefaultAIService(options = {}) {
   return new AIService(
     new ClaudeProvider({
       model,
-      apiUrl: import.meta.env.VITE_CLAUDE_API_URL || '/api/claude',
+      apiUrl: import.meta.env.VITE_CLAUDE_API_URL || '/api/claude/messages',
     })
   );
 }

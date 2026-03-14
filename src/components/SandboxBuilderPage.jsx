@@ -1053,7 +1053,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
               className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
                 trashActive
                   ? 'scale-110 border-rose-700 bg-rose-600 text-white opacity-100'
-                  : 'border-transparent bg-transparent text-transparent opacity-0'
+                  : 'border-rose-200 bg-white/95 text-rose-500 opacity-100'
               }`}
               onDragOver={(e) => {
                 e.preventDefault();

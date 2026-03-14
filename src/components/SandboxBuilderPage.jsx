@@ -435,17 +435,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   return (
     <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
       {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
-      <section className="quest-card flex items-center justify-between gap-4 rounded-[34px] border-[#d6eec2] bg-[#f7fff1] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.09)]">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-quest-muted">Friday Sandbox</p>
-          <h1 className="font-display text-4xl text-slate-800">Instance-Based Sandbox Builder</h1>
-          <p className="mt-2 max-w-3xl text-base font-semibold text-slate-600">Each placed object has its own script. Press Play to compile all scripts and drive the sandbox from runtime state.</p>
-        </div>
-        <div className="rounded-3xl border border-[#d3dae3] bg-white px-5 py-3 text-right shadow-soft">
-          <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Mode</p>
-          <p className={`text-2xl font-display ${mode === 'play' ? 'text-[#1cb0f6]' : 'text-[#58cc02]'}`}>{mode === 'play' ? 'Play' : 'Edit'}</p>
-        </div>
-      </section>
       <section className="grid gap-4 lg:grid-cols-12">
         <div className="h-[640px] lg:col-span-9"><GamePreviewCanvas mode={mode} runtimeSnapshot={runtimeSnapshot} onSceneChange={({ instances, selectedInstanceKey: nextKey }) => { setSceneInstances(instances); if (nextKey) setSelectedInstanceKey(nextKey); }} onPlay={startRuntime} onStop={stopRuntime} onSpriteClick={(instanceKey) => { dispatchRuntimeEvent('sprite clicked', { instanceKey }); dispatchRuntimeEvent('object is tapped', { instanceKey }); }} /></div>
         <div className="h-[640px] lg:col-span-3"><AIChatPanel messages={messages} onSend={sendChat} /></div>

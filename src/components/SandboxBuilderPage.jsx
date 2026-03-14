@@ -9,6 +9,10 @@ import { createScriptRuntime } from '../utils/scriptRuntime';
 import { StageProgressSection } from './ProjectRoadmapPage';
 import { sandboxAssets } from '../data/sandboxAssets';
 import questyImage from '../imgages/profile.png';
+import GamificationHUD from './GamificationHUD';
+import MissionPanel from './MissionPanel';
+import AchievementPanel from './AchievementPanel';
+import { useGamification } from '../hooks/useGamification';
 
 const eventOptions = [
   'game starts',
@@ -235,17 +239,7 @@ function BuilderTopNav({ onCreateNewGame }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
-            <Star className="h-3.5 w-3.5" />
-            Level 1
-            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
-              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] font-bold text-slate-600 sm:flex">
-            <Flame className="h-3.5 w-3.5 text-orange-400" /> 0
-          </div>
+          <GamificationHUD />
 
           <button
             type="button"
@@ -273,6 +267,7 @@ export default function SandboxBuilderPage({
   projectPlan = null,
   onCreateNewGame,
 }) {
+  const { processEvent } = useGamification();
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -506,6 +501,8 @@ export default function SandboxBuilderPage({
     setActiveEventBlockId(null);
   };
 
+  const prevInstanceKeysRef = useRef(new Set(initialSceneInstances.map(i => i.key)));
+
   const handleSceneChange = useCallback(({ instances, selectedInstanceKey: nextKey, sceneState }) => {
     setSceneInstances(instances);
     if (sceneState) setPersistedSceneState(sceneState);
@@ -513,7 +510,15 @@ export default function SandboxBuilderPage({
     setEditorInstanceKey((current) => (
       current && !instances.some((instance) => instance.key === current) ? null : current
     ));
-  }, []);
+    // Detect newly added objects for gamification
+    const prevKeys = prevInstanceKeysRef.current;
+    instances.forEach((instance) => {
+      if (!prevKeys.has(instance.key)) {
+        processEvent({ type: 'ObjectAdded', payload: { type: instance.id, key: instance.key, label: instance.label } });
+      }
+    });
+    prevInstanceKeysRef.current = new Set(instances.map(i => i.key));
+  }, [processEvent]);
 
   useEffect(() => {
     if (!editorInstanceKey) return undefined;
@@ -566,6 +571,8 @@ export default function SandboxBuilderPage({
     });
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+    // Fire gamification BlockUsed event
+    processEvent({ type: 'BlockUsed', payload: { blockType: template.tone, blockId: template.id, action: text } });
   };
 
   const addInsideLoop = (loopId, template) => {
@@ -576,6 +583,8 @@ export default function SandboxBuilderPage({
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: [...block.children, instance] }));
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+    // Fire gamification BlockUsed event
+    processEvent({ type: 'BlockUsed', payload: { blockType: template.tone, blockId: template.id, action: text } });
   };
 
   const handleDragStart = (e, template) => {
@@ -1493,7 +1502,9 @@ export default function SandboxBuilderPage({
         />
       ) : null}
       <section>
-        <div className="relative h-[720px] w-full">
+        <div className="flex w-full" style={{ height: '720px' }}>
+          <MissionPanel />
+          <div className="relative flex-1 h-full">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
@@ -1772,6 +1783,8 @@ export default function SandboxBuilderPage({
               </div>
             </div>
           ) : null}
+          </div>
+          <AchievementPanel />
         </div>
       </section>
       <section>

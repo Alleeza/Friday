@@ -156,6 +156,11 @@ function cloneScripts(scriptsByInstanceKey) {
   return JSON.parse(JSON.stringify(scriptsByInstanceKey));
 }
 
+function cloneValue(value, fallback) {
+  if (value == null) return fallback;
+  return JSON.parse(JSON.stringify(value));
+}
+
 function collectPlanAssetIds(plan, sceneInstances = []) {
   const ids = new Set(sceneInstances.map((instance) => instance?.id).filter(Boolean));
 
@@ -271,6 +276,7 @@ export default function SandboxBuilderPage({
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
+  const lastPublishedProjectRef = useRef('');
   const quickEditorRef = useRef(null);
   const initialSceneInstances = useMemo(
     () => {
@@ -324,6 +330,9 @@ export default function SandboxBuilderPage({
       scene: normalizeSceneState(persistedSceneState),
       scriptsByInstanceKey: normalizeScriptsByInstance(scriptsByInstanceKey),
     };
+    const snapshot = JSON.stringify(nextProjectState);
+    if (snapshot === lastPublishedProjectRef.current) return;
+    lastPublishedProjectRef.current = snapshot;
     onProjectStateChange?.(nextProjectState);
   }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
 

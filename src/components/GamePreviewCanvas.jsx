@@ -646,6 +646,11 @@ export default function GamePreviewCanvas({
           className={`absolute left-1/2 top-1/2 z-0 aspect-[16/9] w-full max-w-none -translate-x-1/2 -translate-y-1/2 ${isEditMode && !backdropState?.locked ? 'cursor-grab' : ''} ${draggingBackdrop ? 'cursor-grabbing' : ''}`}
           style={{ transform: `translate(-50%, -50%) ${backdropTransform}` }}
           onPointerDown={handleBackdropPointerDown}
+          onClick={(e) => {
+            if (!isEditMode) return;
+            if (e.target instanceof HTMLElement && e.target.closest('button')) return;
+            updateSelection(null);
+          }}
         >
           <img src={selectedBackdrop.src} alt={selectedBackdrop.label} className="h-full w-full select-none object-cover" draggable={false} onDragStart={(e) => e.preventDefault()} />
           {isEditMode && backdropState && !backdropState.locked ? (

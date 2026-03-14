@@ -145,7 +145,7 @@ function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
 export function StageProgressSection({ setupData, plan, workspaceState = null, provider = null }) {
   const [completedStepKeys, setCompletedStepKeys] = useState({});
   const [completedBonusKeys, setCompletedBonusKeys] = useState({});
-  const [showSteps, setShowSteps] = useState(true);
+  const [showSteps, setShowSteps] = useState(false);
   const [showBonusQuests, setShowBonusQuests] = useState(false);
   const [selectedItem, setSelectedItem] = useState({ type: 'step', index: 0 });
   // Track which steps were auto-completed (vs manually toggled) so the checker can revert them
@@ -165,7 +165,9 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
 
   const safeStepIndex = Math.min(currentStageStepIndex, Math.max((currentStage?.steps.length || 1) - 1, 0));
   const activeLinePct = stages.length ? ((Math.max(currentIndex, 0) + 0.5) / stages.length) * 100 : 0;
-  const visibleSteps = showSteps ? (currentStage?.steps || []) : (currentStage?.steps || []).slice(0, 1);
+  const visibleSteps = showSteps
+    ? (currentStage?.steps || []).map((step, index) => ({ step, index }))
+    : (currentStage?.steps?.length ? [{ step: currentStage.steps[safeStepIndex], index: safeStepIndex }] : []);
   const selectedStepIndex = selectedItem.type === 'step'
     ? Math.min(selectedItem.index, Math.max((currentStage?.steps.length || 1) - 1, 0))
     : safeStepIndex;
@@ -243,24 +245,24 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
   }, [currentStage, workspaceState, workspaceDebugText, stepDebugInfo]);
 
   return (
-    <section className="quest-card border border-[#e3e6eb] bg-[#f8fafc] p-6 shadow-[0_6px_0_rgba(148,163,184,0.12)]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <section className="quest-card border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">Project Roadmap</p>
-          <h2 className="font-display text-5xl font-bold leading-none text-slate-800">Stage Progress</h2>
+          <h2 className="font-display text-4xl font-bold leading-none text-slate-800">Stage Progress</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-5 py-1.5 text-sm font-extrabold text-[#1b97dd]">
+          <div className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-4 py-1 text-sm font-extrabold text-[#1b97dd]">
             Stage {Math.min(currentIndex + 1, stages.length)} of {stages.length}
           </div>
-          <div className="rounded-full border border-[#d3d7dd] bg-white px-5 py-1.5 text-sm font-extrabold text-slate-600">{progressPct}% complete</div>
-          <div className="rounded-full border border-[#bde59f] bg-[#eefadb] px-5 py-1.5 text-sm font-extrabold text-[#3f7f13]">
+          <div className="rounded-full border border-[#d3d7dd] bg-white px-4 py-1 text-sm font-extrabold text-slate-600">{progressPct}% complete</div>
+          <div className="rounded-full border border-[#bde59f] bg-[#eefadb] px-4 py-1 text-sm font-extrabold text-[#3f7f13]">
             XP {earnedRequiredXp}/{totalRequiredXp}
           </div>
         </div>
       </div>
 
-      <div className="relative mb-6 px-2">
+      <div className="relative mb-4 px-2">
         <div className="absolute left-2 right-2 top-5 h-[4px] rounded-full bg-[#d4dce6]" />
         <div className="absolute left-2 top-5 h-[4px] rounded-full bg-[#25a8ef] transition-all" style={{ width: `${activeLinePct}%` }} />
 
@@ -294,7 +296,7 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <article className="rounded-3xl border border-[#d4d9df] bg-white p-4 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
+        <article className="rounded-3xl border border-[#d4d9df] bg-white p-3.5 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
               {currentStage?.label?.toUpperCase()}
@@ -302,24 +304,24 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
             <button
               type="button"
               onClick={() => setShowSteps((prev) => !prev)}
-              className="rounded-full border border-[#d3d7dd] bg-white px-2.5 py-1 text-xs font-extrabold text-slate-600"
+              className="rounded-full border border-[#d3d7dd] bg-white px-3 py-1 text-xs font-extrabold text-slate-600"
             >
               {showSteps ? '▾' : '▸'}
             </button>
           </div>
           <div className="mt-3 space-y-2">
-            {visibleSteps.map((step, idx) => {
-              const stepKey = `${currentStage.id}:${idx}`;
+            {visibleSteps.map(({ step, index }) => {
+              const stepKey = `${currentStage.id}:${index}`;
               const isDone = Boolean(completedStepKeys[stepKey]);
               return (
                 <StepRow
                   key={stepKey}
-                  active={selectedItem.type === 'step' && idx === selectedStepIndex}
+                  active={selectedItem.type === 'step' && index === selectedStepIndex}
                   done={isDone}
-                  label={`Step ${idx + 1}: ${step}`}
-                  xp={currentStage.stepXp[idx] || 0}
+                  label={`Step ${index + 1}: ${step}`}
+                  xp={currentStage.stepXp[index] || 0}
                   onToggle={() => {
-                    setSelectedItem({ type: 'step', index: idx });
+                    setSelectedItem({ type: 'step', index });
                     setCompletedStepKeys((prev) => {
                       const next = { ...prev, [stepKey]: !prev[stepKey] };
                       // Track manual toggles so the auto-checker never reverts them
@@ -374,9 +376,9 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
           ) : null}
         </article>
 
-        <article className="rounded-3xl border border-[#d4d9df] bg-white p-4 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#ecf8ff] text-3xl">
+        <article className="rounded-3xl border border-[#d4d9df] bg-white p-3.5 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
+          <div className="mb-2 flex items-center gap-3">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#ecf8ff] text-2xl">
               {currentStage?.graphic || '🎯'}
             </div>
             <div>
@@ -389,7 +391,7 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
             </div>
           </div>
 
-          <div className="space-y-3 text-sm">
+          <div className="space-y-2 text-sm">
             <p className="font-bold text-slate-800">{selectedTitle}</p>
             <p className="font-semibold text-slate-600">{selectedDescription}</p>
             {selectedItem.type === 'bonus' ? (

@@ -1087,6 +1087,26 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     </div>
                   </div>
                 </div>
+                {draggingScriptBlock ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-6">
+                    <div
+                      className={`pointer-events-auto grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                        trashActive
+                          ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                          : 'border-rose-200 bg-white/95 text-rose-500'
+                      }`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!trashActive) setTrashActive(true);
+                      }}
+                      onDragLeave={() => setTrashActive(false)}
+                      onDrop={handleTrashDrop}
+                      aria-label="Delete dragged block"
+                    >
+                      <Trash2 size={34} strokeWidth={2.6} />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1109,35 +1129,15 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           />
         </div>
       </section>
-      {(draggingScriptBlock || draggingPaletteBlock) && mode !== 'play' ? (
+      {draggingPaletteBlock && mode !== 'play' ? (
         <div className="pointer-events-none fixed inset-0 z-[80]">
           <div
             className={`absolute inset-0 transition ${
               draggingPaletteBlock
                 ? 'bg-slate-950/70'
-                : draggingScriptBlock && trashActive && !isOverValidScriptDropTarget
-                  ? 'bg-slate-950/70'
-                  : 'bg-transparent'
+                : 'bg-transparent'
             }`}
           />
-          {draggingScriptBlock ? <div className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
-            <div
-              className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
-                trashActive
-                  ? 'scale-110 border-rose-700 bg-rose-600 text-white opacity-100'
-                  : 'border-rose-200 bg-white/95 text-rose-500 opacity-100'
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!trashActive) setTrashActive(true);
-              }}
-              onDragLeave={() => setTrashActive(false)}
-              onDrop={handleTrashDrop}
-              aria-label="Delete dragged block"
-            >
-              <Trash2 size={34} strokeWidth={2.6} />
-            </div>
-          </div> : null}
         </div>
       ) : null}
     </main>

@@ -1,5 +1,6 @@
 import { MessageCircle, Minimize2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import questyImage from '../imgages/profile.png';
 
 const quickReplies = [
   'Give me a hint',
@@ -10,10 +11,12 @@ const quickReplies = [
 
 function TutorAvatar() {
   return (
-    <div className="relative h-14 w-14 rounded-2xl border-b-4 border-[#49a300] bg-[#58cc02] shadow-[0_4px_0_rgba(73,163,0,0.45)]">
-      <div className="absolute left-3 top-4 h-4 w-4 rounded-full bg-white"><div className="ml-1 mt-1 h-2 w-2 rounded-full bg-slate-700" /></div>
-      <div className="absolute right-3 top-4 h-4 w-4 rounded-full bg-white"><div className="ml-1 mt-1 h-2 w-2 rounded-full bg-slate-700" /></div>
-      <div className="absolute bottom-3 left-1/2 h-0 w-0 -translate-x-1/2 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-yellow-400" />
+    <div className="relative h-14 w-14 overflow-hidden rounded-2xl border-b-4 border-[#49a300] bg-[#58cc02] shadow-[0_4px_0_rgba(73,163,0,0.45)]">
+      <img
+        src={questyImage}
+        alt="Questy"
+        className="h-full w-full object-cover object-top"
+      />
     </div>
   );
 }
@@ -124,13 +127,6 @@ export default function AIChatPanel({
   onSend,
   isStreaming = false,
   onAbort,
-  providerOptions = [],
-  selectedProvider = '',
-  onProviderChange,
-  modelOptions = [],
-  selectedModel = '',
-  onModelChange,
-  isLoadingModels = false,
 }) {
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -138,9 +134,12 @@ export default function AIChatPanel({
   const [lastViewedMessageKey, setLastViewedMessageKey] = useState('');
   const messagesEndRef = useRef(null);
 
-  const latestMessage = messages[messages.length - 1];
-  const latestMessageKey = latestMessage ? `${messages.length}:${latestMessage.role}:${latestMessage.text}` : '';
-  const hasConversation = messages.some((msg) => msg.role === 'you' || msg.role === 'ai');
+  const conversationMessages = messages.filter((msg) => msg.role === 'you' || msg.role === 'ai');
+  const latestMessage = conversationMessages[conversationMessages.length - 1];
+  const latestMessageKey = latestMessage
+    ? `${conversationMessages.length}:${latestMessage.role}:${latestMessage.text}`
+    : '';
+  const hasConversation = conversationMessages.length > 0;
   const hasUnreadMessages = Boolean(latestMessageKey) && latestMessageKey !== lastViewedMessageKey;
 
   const openChat = () => {
@@ -156,7 +155,7 @@ export default function AIChatPanel({
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isOpen]);
+  }, [conversationMessages, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -224,40 +223,6 @@ export default function AIChatPanel({
             </div>
           </div>
 
-          <div className="border-b border-[#d9dde3] bg-white px-4 py-3">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Provider</span>
-                <select
-                  value={selectedProvider}
-                  onChange={(e) => onProviderChange?.(e.target.value)}
-                  disabled={isStreaming}
-                  className="w-full rounded-2xl border border-[#d4d9df] bg-white px-3 py-2 text-sm font-bold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
-                >
-                  {providerOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Model</span>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => onModelChange?.(e.target.value)}
-                  disabled={isStreaming || !modelOptions.length}
-                  className="w-full rounded-2xl border border-[#d4d9df] bg-white px-3 py-2 text-sm font-bold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
-                >
-                  {modelOptions.map((model) => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <p className="mt-2 text-[11px] font-semibold text-slate-400">
-              {isLoadingModels ? 'Loading models from Ollama…' : `Using ${selectedProvider || 'provider'} / ${selectedModel || 'model'}`}
-            </p>
-          </div>
-
           <div className="flex-1 space-y-2 overflow-y-auto bg-[#f3f7fb] px-4 py-4">
             {showWelcomeHint ? (
               <div className="flex h-full min-h-40 items-center justify-center px-6 text-center">
@@ -267,20 +232,9 @@ export default function AIChatPanel({
                 </div>
               </div>
             ) : null}
-            {messages.map((msg, i) => {
-              const isLast = i === messages.length - 1;
+            {conversationMessages.map((msg, i) => {
+              const isLast = i === conversationMessages.length - 1;
               const showStreamingIndicator = isStreaming && isLast && msg.role === 'ai';
-
-              if (msg.role === 'system') {
-                return (
-                  <div
-                    key={`system-${i}`}
-                    className="mx-auto max-w-[92%] rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1.5 text-center text-[11px] font-semibold text-slate-400"
-                  >
-                    {msg.text}
-                  </div>
-                );
-              }
 
               return (
                 <div

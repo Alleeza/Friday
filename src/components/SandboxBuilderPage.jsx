@@ -1,76 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, X } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { Pencil, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
-
-const eventOptions = [
-  'game starts',
-  'sprite clicked',
-  'object is tapped',
-  'key pressed',
-  'key is pressed',
-  'timer reaches 0',
-  'score reaches 10',
-  'bumps',
-  'is touching',
-  'is not touching (pro)',
-];
-const defaultEvent = 'game starts';
-
-const palette = {
-  Collisions: [
-    { id: 'bumps', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'bumps', { type: 'asset', value: 'Self' }] },
-    { id: 'touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is touching', { type: 'asset', value: 'Self' }] },
-    { id: 'not-touching-pro', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is not touching', { type: 'asset', value: 'Self' }, '(PRO)'] },
-  ],
-  Conditionals: [
-    { id: 'cond-eq', tone: 'condition', parts: [{ label: 'A' }, '=', { label: 'B' }] },
-    { id: 'cond-neq', tone: 'condition', parts: [{ label: 'A' }, '≠', { label: 'B' }] },
-    { id: 'cond-lt', tone: 'condition', parts: [{ label: 'A' }, '<', { label: 'B' }] },
-    { id: 'cond-gt', tone: 'condition', parts: [{ label: 'A' }, '>', { label: 'B' }] },
-    { id: 'cond-lte', tone: 'condition', parts: [{ label: 'A' }, '≤', { label: 'B' }] },
-    { id: 'cond-gte', tone: 'condition', parts: [{ label: 'A' }, '≥', { label: 'B' }] },
-    { id: 'cond-and', tone: 'condition', parts: [{ label: 'A' }, 'and', { label: 'B' }] },
-    { id: 'cond-or', tone: 'condition', parts: [{ label: 'A' }, 'or', { label: 'B' }] },
-    { id: 'cond-not', tone: 'condition', parts: ['not', { label: 'A' }] },
-    { id: 'cond-flipped', tone: 'condition', parts: ['flipped'] },
-    { id: 'cond-matches', tone: 'condition', parts: [{ label: 'A' }, 'matches', { label: 'B' }] },
-  ],
-  Movement: [
-    { id: 'move-forward', tone: 'movement', parts: ['Move Forward', { label: '12' }] },
-    { id: 'turn', tone: 'movement', parts: ['Turn degrees', { label: '15' }] },
-    { id: 'set-rotation', tone: 'movement', parts: ['Set rotation style', { type: 'dropdown', value: 'dont rotate', options: ['dont rotate', 'left-right', 'all around'] }] },
-    { id: 'change-x', tone: 'movement', parts: ['Change X by', { label: '6' }] },
-    { id: 'change-y', tone: 'movement', parts: ['Change Y by', { label: '6' }] },
-    { id: 'go-to', tone: 'movement', parts: ['Go to X', { label: '320' }, 'Y', { label: '220' }] },
-    { id: 'point-direction', tone: 'movement', parts: ['Point in direction', { label: '90' }] },
-  ],
-  'Looks & Sounds': [
-    { id: 'switch-costume', tone: 'looks', parts: ['Switch costume to', { type: 'dropdown', value: 'bunny jump', options: ['bunny jump', 'tree glow', 'crab legs'] }] },
-    { id: 'next-costume', tone: 'sound', parts: ['Next costume'] },
-    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
-    { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
-  ],
-  Control: [
-    { id: 'forever', tone: 'control', type: 'loop', parts: ['Forever'] },
-    { id: 'repeat', tone: 'control', type: 'loop', parts: ['Repeat', { label: '5' }, 'times'] },
-    { id: 'while', tone: 'control', type: 'loop', parts: ['While', { type: 'dropdown', value: 'time > 0', options: ['score < 10', 'score >= 10', 'is alive', 'time > 0', 'time <= 0'] }] },
-    { id: 'wait', tone: 'control', parts: ['Wait', { label: '1' }, 'seconds'] },
-  ],
-  Variables: [
-    { id: 'change-score', tone: 'variables', parts: ['Change score by', { label: '1' }] },
-    { id: 'set-score', tone: 'variables', parts: ['Set score to', { label: '0' }] },
-    { id: 'change-time', tone: 'variables', parts: ['Change timer by', { label: '2' }] },
-    { id: 'set-time', tone: 'variables', parts: ['Set timer to', { label: '30' }] },
-    { id: 'set-alive', tone: 'variables', parts: ['Set alive to', { type: 'dropdown', value: 'true', options: ['true', 'false'] }] },
-  ],
-};
-
-function createSeedScript(eventName = defaultEvent) {
+import { BLOCK_PALETTE, DEFAULT_EVENT, EVENT_OPTIONS } from '../data/builderCapabilities.js';
+import { sandboxAssets } from '../data/sandboxAssets';
+import { createDefaultAIService } from '../ai/createDefaultAIService.js';
+import {
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+} from '../ai/providerCatalog.js';
+import { useAIChat } from '../hooks/useAIChat';
+import { StageProgressSection } from './ProjectRoadmapPage';
+function createSeedScript(eventName = DEFAULT_EVENT) {
   return [{ id: 'event-start', type: 'block', parts: ['When', eventName], tone: 'events' }];
+}
+
+function cloneValue(value, fallback) {
+  if (value == null) return fallback;
+  return JSON.parse(JSON.stringify(value));
 }
 
 function blockText(parts = []) {
@@ -121,32 +72,71 @@ export default function SandboxBuilderPage({
   onProjectStateChange,
   onSaveProject,
   saveState = 'idle',
+  projectPlan = null,
 }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
+  const quickEditorRef = useRef(null);
+  const initialSceneInstances = useMemo(
+    () => {
+      const persistedScene = normalizeSceneState(initialProjectState?.scene).placedAssets;
+      return persistedScene.length ? persistedScene : cloneValue(initialSetupData?.initialScene, []);
+    },
+    [initialProjectState, initialSetupData]
+  );
   const [persistedSceneState, setPersistedSceneState] = useState(() => normalizeSceneState(initialProjectState?.scene));
-  const [sceneInstances, setSceneInstances] = useState(() => normalizeSceneState(initialProjectState?.scene).placedAssets);
+  const [sceneInstances, setSceneInstances] = useState(() => initialSceneInstances);
   const [focusedInstanceKey, setFocusedInstanceKey] = useState(() => initialProjectState?.scene?.selectedPlacedAssetKey || null);
   const [editorInstanceKey, setEditorInstanceKey] = useState(null);
   const [editorStage, setEditorStage] = useState('event');
-  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => normalizeScriptsByInstance(initialProjectState?.scriptsByInstanceKey));
-  const [selectedBlock, setSelectedBlock] = useState(`When ${defaultEvent}`);
+  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => {
+    const persistedScripts = normalizeScriptsByInstance(initialProjectState?.scriptsByInstanceKey);
+    return Object.keys(persistedScripts).length ? persistedScripts : cloneValue(initialSetupData?.initialScripts, {});
+  });
+  const [selectedBlock, setSelectedBlock] = useState(`When ${DEFAULT_EVENT}`);
   const [selectedCategory, setSelectedCategory] = useState('Movement');
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
   const [dragOverTopBlockId, setDragOverTopBlockId] = useState(null);
   const [dragOverChildKey, setDragOverChildKey] = useState(null);
   const [draggingScriptBlock, setDraggingScriptBlock] = useState(null);
+  const [draggingPaletteBlock, setDraggingPaletteBlock] = useState(false);
   const [trashActive, setTrashActive] = useState(false);
   const [historyStack, setHistoryStack] = useState([]);
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
-    { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
-  ]);
+  const selectedProvider = getDefaultProviderName();
+  const selectedModel = getDefaultModelForProvider(selectedProvider);
+
+  const aiService = useMemo(
+    () => createDefaultAIService({ providerName: selectedProvider, model: selectedModel }),
+    [selectedModel, selectedProvider]
+  );
+
+  const { messages, sendMessage, addNotification, isStreaming, abortResponse } = useAIChat({
+    aiService,
+    contextData: {
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: sandboxAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    },
+  });
+
+  const dispatchRuntimeEvent = (eventType, payload = {}) => {
+    runtimeRef.current?.dispatch(eventType, payload);
+    if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+  };
+
+  useEffect(() => {
+    if (messages.length) return;
+    addNotification('Build one object at a time. Each placed object gets its own script.');
+    addNotification('Press Play to compile every script and make the sandbox follow the code.');
+  }, [addNotification, messages.length]);
 
   useEffect(() => {
     const instanceKeys = new Set(sceneInstances.map((instance) => instance.key));
@@ -171,7 +161,6 @@ export default function SandboxBuilderPage({
   useEffect(() => {
     if (mode !== 'play') return undefined;
     const onKeyDown = () => {
-      runtimeRef.current?.dispatch('key pressed');
       runtimeRef.current?.dispatch('key is pressed');
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };
@@ -191,12 +180,30 @@ export default function SandboxBuilderPage({
     });
   }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
 
-  const paletteBlocks = useMemo(() => palette[selectedCategory] || [], [selectedCategory]);
+  useEffect(() => {
+    if (mode === 'play') return undefined;
+    const clearDragUi = () => {
+      setDraggingScriptBlock(null);
+      setDraggingPaletteBlock(false);
+      setTrashActive(false);
+      setDragOverTopBlockId(null);
+      setDragOverChildKey(null);
+      setDragOverLoopId(null);
+    };
+    window.addEventListener('dragend', clearDragUi);
+    window.addEventListener('drop', clearDragUi);
+    return () => {
+      window.removeEventListener('dragend', clearDragUi);
+      window.removeEventListener('drop', clearDragUi);
+    };
+  }, [mode]);
+  const paletteBlocks = useMemo(() => BLOCK_PALETTE[selectedCategory] || [], [selectedCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
   const selectedInstance = sceneInstances.find((instance) => instance.key === editorInstanceKey) || null;
-  const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || defaultEvent;
+  const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || DEFAULT_EVENT;
+  const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
   const assetOptions = useMemo(() => {
     const dynamic = sceneInstances.map((instance) => ({
       value: instance.key,
@@ -241,6 +248,19 @@ export default function SandboxBuilderPage({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [editorInstanceKey]);
 
+  useEffect(() => {
+    if (!editorInstanceKey || editorStage !== 'event' || mode === 'play') return undefined;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (quickEditorRef.current?.contains(target)) return;
+      if (target.closest('[data-sandbox-canvas-root="true"]')) return;
+      closeEditor();
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [editorInstanceKey, editorStage, mode]);
+
   const pushHistorySnapshot = () => {
     setHistoryStack((prev) => [...prev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
   };
@@ -254,7 +274,7 @@ export default function SandboxBuilderPage({
     ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: hydrateParts(template.parts), tone: template.tone, children: [] }
     : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: hydrateParts(template.parts), tone: template.tone };
 
-  const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
+  const pushAiMessage = addNotification;
 
   const addTopLevel = (template) => {
     if (!editorInstanceKey || mode === 'play') return;
@@ -279,10 +299,19 @@ export default function SandboxBuilderPage({
   };
 
   const handleDragStart = (e, template) => {
+    flushSync(() => {
+      setDraggingPaletteBlock(true);
+      setTrashActive(false);
+    });
     const payload = JSON.stringify({ kind: 'palette-template', template });
     e.dataTransfer.setData('application/json', payload);
     e.dataTransfer.setData('text/plain', payload);
     e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handlePaletteDragEnd = () => {
+    setDraggingPaletteBlock(false);
+    setTrashActive(false);
   };
 
   const parseDragTemplate = (e) => {
@@ -347,8 +376,10 @@ export default function SandboxBuilderPage({
   };
 
   const handleScriptBlockDragStart = (e, payload) => {
-    setDraggingScriptBlock(payload);
-    setTrashActive(false);
+    flushSync(() => {
+      setDraggingScriptBlock(payload);
+      setTrashActive(false);
+    });
     const dragPayload = JSON.stringify({ kind: 'script-block', ...payload });
     e.dataTransfer.setData('application/json', dragPayload);
     e.dataTransfer.setData('text/plain', dragPayload);
@@ -357,6 +388,7 @@ export default function SandboxBuilderPage({
 
   const handleScriptBlockDragEnd = () => {
     setDraggingScriptBlock(null);
+    setDraggingPaletteBlock(false);
     setTrashActive(false);
     setDragOverTopBlockId(null);
     setDragOverChildKey(null);
@@ -480,6 +512,7 @@ export default function SandboxBuilderPage({
       if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
     } finally {
       setDraggingScriptBlock(null);
+      setDraggingPaletteBlock(false);
     }
   };
 
@@ -531,12 +564,6 @@ export default function SandboxBuilderPage({
     rafRef.current = requestAnimationFrame(loop);
   };
 
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
-  };
-
   const quickEditorPosition = selectedInstance
     ? (() => {
         const x = selectedInstance.x || 0;
@@ -560,6 +587,7 @@ export default function SandboxBuilderPage({
             const parsed = parseScriptDragPayload(e);
             if (!parsed) return;
             e.preventDefault();
+            if (trashActive) setTrashActive(false);
             setDragOverTopBlockId(block.id);
           }}
           onDragLeave={() => dragOverTopBlockId === block.id && setDragOverTopBlockId(null)}
@@ -592,6 +620,7 @@ export default function SandboxBuilderPage({
               if (mode === 'play') return;
               e.preventDefault();
               e.stopPropagation();
+              if (trashActive) setTrashActive(false);
               if (dragOverLoopId !== block.id) setDragOverLoopId(block.id);
             }}
             onDragLeave={() => setDragOverLoopId((current) => (current === block.id ? null : current))}
@@ -617,6 +646,7 @@ export default function SandboxBuilderPage({
                       if (!parsed) return;
                       e.preventDefault();
                       e.stopPropagation();
+                      if (trashActive) setTrashActive(false);
                       setDragOverChildKey(`${block.id}:${child.id}:before`);
                     }}
                     onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}:before` && setDragOverChildKey(null)}
@@ -638,6 +668,7 @@ export default function SandboxBuilderPage({
                       if (!parsed || parsed.scope !== 'child') return;
                       e.preventDefault();
                       e.stopPropagation();
+                      if (trashActive) setTrashActive(false);
                       setDragOverChildKey(`${block.id}:${child.id}`);
                     }}
                     onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}` && setDragOverChildKey(null)}
@@ -675,6 +706,7 @@ export default function SandboxBuilderPage({
                   if (!parsed) return;
                   e.preventDefault();
                   e.stopPropagation();
+                  if (trashActive) setTrashActive(false);
                   setDragOverChildKey(`${block.id}:end`);
                 }}
                 onDragLeave={() => dragOverChildKey === `${block.id}:end` && setDragOverChildKey(null)}
@@ -703,6 +735,7 @@ export default function SandboxBuilderPage({
           const parsed = parseScriptDragPayload(e);
           if (!parsed || block.id === 'event-start') return;
           e.preventDefault();
+          if (trashActive) setTrashActive(false);
           setDragOverTopBlockId(block.id);
         }}
         onDragLeave={() => dragOverTopBlockId === block.id && setDragOverTopBlockId(null)}
@@ -736,17 +769,14 @@ export default function SandboxBuilderPage({
 
   return (
     <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      <section className="quest-card flex items-center justify-between gap-4 rounded-[34px] border-[#d6eec2] bg-[#f7fff1] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.09)]">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-quest-muted">Friday Sandbox</p>
-          <h1 className="font-display text-4xl text-slate-800">Instance-Based Sandbox Builder</h1>
-          <p className="mt-2 max-w-3xl text-base font-semibold text-slate-600">Each placed object has its own script. Press Play to compile all scripts and drive the sandbox from runtime state.</p>
-        </div>
-        <div className="rounded-3xl border border-[#d3dae3] bg-white px-5 py-3 text-right shadow-soft">
-          <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Mode</p>
-          <p className={`text-2xl font-display ${mode === 'play' ? 'text-[#1cb0f6]' : 'text-[#58cc02]'}`}>{mode === 'play' ? 'Play' : 'Edit'}</p>
-        </div>
-      </section>
+      {projectPlan ? (
+        <StageProgressSection
+          setupData={initialSetupData}
+          plan={projectPlan}
+          workspaceState={{ sceneInstances, scriptsByInstanceKey, runtimeSnapshot }}
+          provider={aiService?.provider ?? null}
+        />
+      ) : null}
       <section>
         <div className="relative h-[640px] w-full">
           <GamePreviewCanvas
@@ -776,35 +806,33 @@ export default function SandboxBuilderPage({
           />
 
           {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
-            <div className="absolute inset-0 z-30" onClick={closeEditor}>
-              <div
-                className="absolute inline-flex max-w-[360px] items-center gap-2 rounded-[22px] border-b-4 border-[#b72d63] bg-[#d22d72] pl-4 pr-4 py-2.5 text-white shadow-[0_8px_18px_rgba(183,45,99,0.26)]"
-                style={quickEditorPosition}
-                onClick={(event) => event.stopPropagation()}
+            <div
+              ref={quickEditorRef}
+              className="absolute z-30 inline-flex max-w-[360px] items-center gap-2 rounded-[22px] border-b-4 border-[#b72d63] bg-[#d22d72] pl-4 pr-4 py-2.5 text-white shadow-[0_8px_18px_rgba(183,45,99,0.26)]"
+              style={quickEditorPosition}
+            >
+              <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
+              <select
+                value={selectedEvent}
+                onChange={(e) => handleEventChange(e.target.value)}
+                className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
               >
-                <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
-                <select
-                  value={selectedEvent}
-                  onChange={(e) => handleEventChange(e.target.value)}
-                  className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
-                >
-                  {eventOptions.map((eventName) => (
-                    <option key={eventName} value={eventName}>
-                      {eventName}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setEditorStage('expanded')}
-                  className="grid h-10 w-10 place-items-center rounded-[18px] bg-white/22 shadow-[inset_0_-2px_0_rgba(255,255,255,0.08)]"
-                  aria-label="Open block editor"
-                >
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-[#d22d72]">
-                    <Pencil size={18} strokeWidth={3} />
-                  </span>
-                </button>
-              </div>
+                {EVENT_OPTIONS.map((eventName) => (
+                  <option key={eventName} value={eventName}>
+                    {eventName}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setEditorStage('expanded')}
+                className="grid h-10 w-10 place-items-center rounded-[18px] bg-white/22 shadow-[inset_0_-2px_0_rgba(255,255,255,0.08)]"
+                aria-label="Open block editor"
+              >
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-[#d22d72]">
+                  <Pencil size={18} strokeWidth={3} />
+                </span>
+              </button>
             </div>
           ) : null}
 
@@ -826,7 +854,7 @@ export default function SandboxBuilderPage({
                       disabled={!editorInstanceKey || mode === 'play'}
                       className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
                     >
-                      {eventOptions.map((eventName) => (
+                      {EVENT_OPTIONS.map((eventName) => (
                         <option key={eventName} value={eventName} className="bg-white text-slate-800">
                           {eventName}
                         </option>
@@ -863,7 +891,7 @@ export default function SandboxBuilderPage({
                         onChange={(e) => setSelectedCategory(e.target.value)}
                         className="w-full rounded-[18px] border border-[#d3dae3] bg-white px-4 py-3 text-[15px] font-extrabold uppercase tracking-[0.04em] text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)] outline-none"
                       >
-                        {Object.keys(palette).map((category) => (
+                        {Object.keys(BLOCK_PALETTE).map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
@@ -880,6 +908,7 @@ export default function SandboxBuilderPage({
                           assetOptions={assetOptions}
                           draggable={mode !== 'play'}
                           onDragStart={(e) => handleDragStart(e, block)}
+                          onDragEnd={handlePaletteDragEnd}
                           onClick={() => addTopLevel(block)}
                         />
                       ))}
@@ -905,6 +934,7 @@ export default function SandboxBuilderPage({
                         const parsed = parseScriptDragPayload(e);
                         if (!template && !parsed) return;
                         e.preventDefault();
+                        if (trashActive) setTrashActive(false);
                         if (parsed) setDragOverTopBlockId('script-canvas');
                       }}
                       onDragLeave={() => dragOverTopBlockId === 'script-canvas' && setDragOverTopBlockId(null)}
@@ -931,6 +961,7 @@ export default function SandboxBuilderPage({
                             const parsed = parseScriptDragPayload(e);
                             if (!parsed) return;
                             e.preventDefault();
+                            if (trashActive) setTrashActive(false);
                             setDragOverTopBlockId('script-end');
                           }}
                           onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
@@ -959,6 +990,7 @@ export default function SandboxBuilderPage({
                                       const parsed = parseScriptDragPayload(e);
                                       if (!parsed || parsed.id === block.id) return;
                                       e.preventDefault();
+                                      if (trashActive) setTrashActive(false);
                                       setDragOverTopBlockId(`${block.id}:after`);
                                     }}
                                     onDragLeave={() => dragOverTopBlockId === `${block.id}:after` && setDragOverTopBlockId(null)}
@@ -984,6 +1016,7 @@ export default function SandboxBuilderPage({
                                   const parsed = parseScriptDragPayload(e);
                                   if (!parsed) return;
                                   e.preventDefault();
+                                  if (trashActive) setTrashActive(false);
                                   setDragOverTopBlockId('script-end');
                                 }}
                                 onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
@@ -1013,15 +1046,52 @@ export default function SandboxBuilderPage({
                     </div>
                   </div>
                 </div>
+                {draggingScriptBlock ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-6">
+                    <div
+                      className={`pointer-events-auto grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                        trashActive
+                          ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                          : 'border-rose-200 bg-white/95 text-rose-500'
+                      }`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!trashActive) setTrashActive(true);
+                      }}
+                      onDragLeave={() => setTrashActive(false)}
+                      onDrop={handleTrashDrop}
+                      aria-label="Delete dragged block"
+                    >
+                      <Trash2 size={34} strokeWidth={2.6} />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
         </div>
       </section>
       <section>
-        <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+        <div className="w-full">
+          <AIChatPanel
+            messages={messages}
+            onSend={sendMessage}
+            isStreaming={isStreaming}
+            onAbort={abortResponse}
+          />
+        </div>
       </section>
-      {draggingScriptBlock && mode !== 'play' ? <div className={`fixed bottom-6 right-6 z-50 rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-lg transition ${trashActive ? 'border-rose-700 bg-rose-600 text-white scale-105' : 'border-rose-400 bg-rose-500 text-white'}`} onDragOver={(e) => { e.preventDefault(); if (!trashActive) setTrashActive(true); }} onDragLeave={() => setTrashActive(false)} onDrop={handleTrashDrop}>Drop to delete</div> : null}
+      {draggingPaletteBlock && mode !== 'play' ? (
+        <div className="pointer-events-none fixed inset-0 z-[80]">
+          <div
+            className={`absolute inset-0 transition ${
+              draggingPaletteBlock
+                ? 'bg-slate-950/70'
+                : 'bg-transparent'
+            }`}
+          />
+        </div>
+      ) : null}
     </main>
   );
 }

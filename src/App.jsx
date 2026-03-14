@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getFallbackPlan } from './ai/planning/fallbackPlans';
+import { loadProjectState, saveProjectState } from './api/projectState';
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
-import { loadProjectState, saveProjectState } from './api/projectState';
+import { createBunnyCarrotExampleProject } from './data/exampleProjects';
 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
 const emptyProjectState = {
@@ -39,10 +41,16 @@ function writeResumeBuilderFlag(value) {
   window.localStorage.setItem(BUILDER_RESUME_KEY, value ? 'true' : 'false');
 }
 
+function deriveProjectPlan(setupData) {
+  if (!setupData) return null;
+  return setupData.plan || getFallbackPlan(setupData.idea || '', 0);
+}
+
 export default function App() {
   const lastSavedSnapshotRef = useRef('');
   const [isLoading, setIsLoading] = useState(true);
   const [projectState, setProjectState] = useState(emptyProjectState);
+  const [projectPlan, setProjectPlan] = useState(null);
   const [storageError, setStorageError] = useState('');
   const [shouldResumeBuilder, setShouldResumeBuilder] = useState(false);
   const [saveState, setSaveState] = useState('idle');
@@ -55,6 +63,7 @@ export default function App() {
         if (cancelled) return;
         const normalized = normalizeProjectState(savedProject);
         setProjectState(normalized);
+        setProjectPlan(deriveProjectPlan(normalized.setupData));
         lastSavedSnapshotRef.current = JSON.stringify(normalized);
         setSaveState(savedProject ? 'saved' : 'idle');
         setStorageError('');
@@ -90,17 +99,24 @@ export default function App() {
   }, [projectState]);
   const shouldOpenBuilder = shouldResumeBuilder || hasSetupData || hasSavedBuilderState;
 
-  const handleSetupComplete = useCallback((setupData) => {
+  const handleSetupComplete = useCallback((nextSetupData) => {
     writeResumeBuilderFlag(true);
     setShouldResumeBuilder(true);
-    setProjectState((current) => ({ ...current, setupData }));
+    setProjectState((current) => ({ ...current, setupData: nextSetupData }));
+    setProjectPlan(deriveProjectPlan(nextSetupData));
     setSaveState('idle');
   }, []);
 
+  const handleLaunchExample = useCallback(() => {
+    handleSetupComplete(createBunnyCarrotExampleProject());
+  }, [handleSetupComplete]);
+
   const handleProjectStateChange = useCallback((nextProjectState) => {
+    const normalized = normalizeProjectState(nextProjectState);
     writeResumeBuilderFlag(true);
     setShouldResumeBuilder(true);
-    setProjectState(normalizeProjectState(nextProjectState));
+    setProjectState(normalized);
+    setProjectPlan(deriveProjectPlan(normalized.setupData));
   }, []);
 
   const handleSaveProject = useCallback(async () => {
@@ -109,6 +125,7 @@ export default function App() {
       const savedProject = await saveProjectState(projectState);
       const normalized = normalizeProjectState(savedProject || projectState);
       setProjectState(normalized);
+      setProjectPlan(deriveProjectPlan(normalized.setupData));
       lastSavedSnapshotRef.current = JSON.stringify(normalized);
       setStorageError('');
       setSaveState('saved');
@@ -137,7 +154,7 @@ export default function App() {
             Storage offline: {storageError}
           </div>
         ) : null}
-        <GuidedSetupFlow onComplete={handleSetupComplete} />
+        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} />
       </>
     );
   }
@@ -155,6 +172,7 @@ export default function App() {
         onProjectStateChange={handleProjectStateChange}
         onSaveProject={handleSaveProject}
         saveState={saveState}
+        projectPlan={projectPlan}
       />
     </>
   );

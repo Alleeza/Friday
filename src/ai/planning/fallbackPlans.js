@@ -26,8 +26,8 @@ const COLLECTOR_ARCHETYPE = {
   suggestion: null,
   entities: {
     assets: ['bunny', 'carrot'],
-    blocks: ['Move Forward', 'Forever', 'When game starts'],
-    events: ['When game starts', 'When key pressed'],
+    blocks: ['Move Forward', 'Forever'],
+    events: ['When game starts', 'When bumps'],
   },
   checkpoints: ['Get your Bunny moving', 'Add something to collect'],
   stages: [
@@ -44,6 +44,12 @@ const COLLECTOR_ARCHETYPE = {
         'What number makes the movement feel right — fast or slow?',
       ],
       stepXp: [5, 10, 10, 5],
+      stepChecks: [
+        [{ type: 'hasAsset', value: 'bunny' }],
+        [{ type: 'eventIs', asset: 'bunny', event: 'game starts' }],
+        [{ type: 'scriptOnAssetContains', asset: 'bunny', blocks: ['Forever'] }],
+        [{ type: 'blockValueOnAsset', asset: 'bunny', block: 'Move Forward', partIndex: 1, op: '!=', value: '12' }],
+      ],
       optionalSteps: [
         { description: 'Can you make the Bunny turn as it moves?', bonusXp: 10 },
       ],
@@ -56,10 +62,15 @@ const COLLECTOR_ARCHETYPE = {
       success: 'The Carrot is on the canvas and the Bunny can reach it',
       steps: [
         'Drag a Carrot onto the canvas',
-        'Think: should the Carrot do anything when the game starts?',
-        'What event could make the Carrot react when the Bunny arrives?',
+        'Choose the event that should make the Carrot react when the Bunny arrives',
+        'Add an action so the Carrot actually responds when it is bumped',
       ],
       stepXp: [5, 10, 15],
+      stepChecks: [
+        [{ type: 'hasAsset', value: 'carrot' }],
+        [{ type: 'eventIs', asset: 'carrot', event: 'bumps' }],
+        [{ type: 'minBlockCount', asset: 'carrot', min: 1 }],
+      ],
       optionalSteps: [
         { description: 'Add a second Carrot in a different position', bonusXp: 5 },
       ],
@@ -75,8 +86,8 @@ const MAZE_ARCHETYPE = {
   suggestion: null,
   entities: {
     assets: ['bunny', 'rock', 'goal'],
-    blocks: ['Move Forward', 'Change X By', 'Forever', 'When key pressed'],
-    events: ['When game starts', 'When key pressed'],
+    blocks: ['Move Forward'],
+    events: ['When key pressed', 'When bumps'],
   },
   checkpoints: ['Set up the maze', 'Add a goal to reach'],
   stages: [
@@ -92,6 +103,11 @@ const MAZE_ARCHETYPE = {
         'Think about where the Bunny should start — far from the Goal',
       ],
       stepXp: [5, 10, 5],
+      stepChecks: [
+        [{ type: 'assetCount', asset: 'rock', min: 2 }],
+        [{ type: 'aiCheck', condition: 'There are multiple Rocks placed on the canvas with visible gaps between them forming a navigable path' }],
+        [{ type: 'hasAsset', value: 'bunny' }],
+      ],
       optionalSteps: [
         { description: 'Add more Rocks to make the path trickier', bonusXp: 5 },
       ],
@@ -108,6 +124,15 @@ const MAZE_ARCHETYPE = {
         'Try pressing Play and pressing a key — does your Bunny move?',
       ],
       stepXp: [10, 10, 10],
+      stepChecks: [
+        [{ type: 'eventIs', asset: 'bunny', event: 'key pressed' }],
+        [{ type: 'hasBlockOnAsset', asset: 'bunny', block: 'Move Forward' }],
+        [
+          { type: 'eventIs', asset: 'bunny', event: 'key pressed' },
+          { type: 'hasBlockOnAsset', asset: 'bunny', block: 'Move Forward' },
+          { type: 'assetMoved', asset: 'bunny', minDistance: 1 },
+        ],
+      ],
       optionalSteps: [
         { description: 'Make the Bunny face the direction it is moving', bonusXp: 10 },
       ],
@@ -120,10 +145,15 @@ const MAZE_ARCHETYPE = {
       success: 'There is a Goal at the end of the path with its own script',
       steps: [
         'Place a Goal flag near the end of your maze path',
-        'Think: what should happen when the Bunny reaches the Goal?',
-        'Which event on the Goal could fire when the player clicks it?',
+        'Set the Goal to react when the Bunny reaches it',
+        'Add an action so the Goal actually responds when reached',
       ],
       stepXp: [5, 10, 15],
+      stepChecks: [
+        [{ type: 'hasAsset', value: 'goal' }],
+        [{ type: 'eventIs', asset: 'goal', event: 'bumps' }],
+        [{ type: 'minBlockCount', asset: 'goal', min: 1 }],
+      ],
       optionalSteps: [
         { description: 'Can you make the Goal play a sound?', bonusXp: 5 },
       ],
@@ -156,6 +186,11 @@ const EXPLORER_ARCHETYPE = {
         'Think about the spacing — does it feel like an open world?',
       ],
       stepXp: [5, 5, 5],
+      stepChecks: [
+        [{ type: 'hasAsset', value: 'bunny' }],
+        [{ type: 'hasAsset', value: 'tree' }],
+        [{ type: 'aiCheck', condition: 'The Bunny and Trees are placed with noticeable spacing so the scene feels like an open world' }],
+      ],
       optionalSteps: [
         { description: 'Add a third type of object to your world', bonusXp: 5 },
       ],
@@ -172,6 +207,11 @@ const EXPLORER_ARCHETYPE = {
         'Try adding a turn — does the Bunny change direction?',
       ],
       stepXp: [10, 10, 10],
+      stepChecks: [
+        [{ type: 'eventIs', asset: 'bunny', event: 'game starts' }],
+        [{ type: 'scriptOnAssetContains', asset: 'bunny', blocks: ['Forever', 'Move Forward'] }],
+        [{ type: 'scriptOnAssetContains', asset: 'bunny', blocks: ['Forever', 'Turn degrees'] }],
+      ],
       optionalSteps: [
         { description: 'Can you make two objects move at the same time?', bonusXp: 10 },
       ],

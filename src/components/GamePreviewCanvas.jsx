@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Play, RotateCcw, Save, Shapes, Square, Undo2, X } from 'lucide-react';
+import { Image, Play, RotateCcw, Save, Shapes, Square, Trash2, Undo2, X } from 'lucide-react';
 import { backdropAssets, sandboxAssets } from '../data/sandboxAssets';
 
 function getVisualAsset(asset, runtimeSnapshot) {
@@ -76,6 +76,7 @@ export default function GamePreviewCanvas({
 }) {
   const canvasRef = useRef(null);
   const backdropRef = useRef(null);
+  const trashZoneRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
   const movedDuringDragRef = useRef(false);
   const resizeStartRef = useRef(null);
@@ -97,6 +98,7 @@ export default function GamePreviewCanvas({
   const [resizingBackdrop, setResizingBackdrop] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [backdropDragOffset, setBackdropDragOffset] = useState({ x: 0, y: 0 });
+  const [trashHover, setTrashHover] = useState(false);
 
   const trayAssets = useMemo(
     () => (trayTab === 'backdrops' ? backdropAssets : sandboxAssets),
@@ -124,14 +126,12 @@ export default function GamePreviewCanvas({
     onSceneChange?.({
       instances: placedAssets,
       selectedInstanceKey: selectedPlacedAssetKey,
-      selectedBackdrop: selectedBackdrop
-        ? { ...selectedBackdrop, ...backdropState }
-        : null,
+      selectedBackdrop: selectedBackdrop ? { ...selectedBackdrop, ...backdropState } : null,
       sceneState,
     });
   }, [backdropState, placedAssets, selectedBackdrop, selectedPlacedAssetKey, onSceneChange]);
 
-  const onAssetDragStart = (e, asset, kind) => {
+  const onAssetDragStart = (e, asset, kind = 'sprite') => {
     if (mode !== 'edit') return;
     e.dataTransfer.setData('application/json', JSON.stringify({ kind, asset }));
     e.dataTransfer.effectAllowed = 'copy';
@@ -191,7 +191,6 @@ export default function GamePreviewCanvas({
         if (payload.asset.id !== backdropState?.id) applyBackdrop(payload.asset);
         return;
       }
-
       if (payload?.kind !== 'sprite' || !payload.asset) return;
 
       const asset = payload.asset;
@@ -236,6 +235,7 @@ export default function GamePreviewCanvas({
     setResizingPlacedAssetKey(null);
     setDraggingBackdrop(false);
     setResizingBackdrop(false);
+    setTrashHover(false);
     moveStartSnapshotRef.current = null;
     resizeStartRef.current = null;
     backdropMoveStartRef.current = null;
@@ -244,6 +244,20 @@ export default function GamePreviewCanvas({
     resizedDuringDragRef.current = false;
     backdropMovedDuringDragRef.current = false;
     backdropResizedDuringDragRef.current = false;
+  };
+
+  const isPointerOverTrash = (clientX, clientY) => {
+    const rect = trashZoneRef.current?.getBoundingClientRect();
+    if (!rect) return false;
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  };
+
+  const deletePlacedAsset = (assetKey) => {
+    if (!assetKey) return;
+    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    setPastStates((prev) => [...prev, snapshot]);
+    setPlacedAssets((prev) => prev.filter((asset) => asset.key !== assetKey));
+    updateSelection(selectedPlacedAssetKey === assetKey ? null : selectedPlacedAssetKey);
   };
 
   const handlePlacedAssetPointerDown = (e, asset) => {
@@ -276,7 +290,10 @@ export default function GamePreviewCanvas({
     if (!backdropState || backdropState.locked) return;
     const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
     setPastStates((prev) => [...prev, snapshot]);
-    setBackdropState((prev) => (prev ? { ...clampBackdropState(prev, canvasRef.current?.getBoundingClientRect()), locked: true } : prev));
+    setBackdropState((prev) => (prev ? {
+      ...clampBackdropState(prev, canvasRef.current?.getBoundingClientRect()),
+      locked: true,
+    } : prev));
   };
 
   const handleCanvasPointerMove = (e) => {
@@ -305,8 +322,10 @@ export default function GamePreviewCanvas({
 
     if (resizingPlacedAssetKey && resizeStartRef.current) {
       const start = resizeStartRef.current;
+      const deltaX = e.clientX - start.pointerX;
       const deltaY = e.clientY - start.pointerY;
-      const nextScale = Math.max(0.6, Math.min(1.8, Math.round((start.scale - deltaY / 220) * 10) / 10));
+      const projectedDelta = ((deltaX * start.directionX) + (deltaY * start.directionY)) / 2;
+      const nextScale = Math.max(0.6, Math.min(1.8, Math.round((start.scale + projectedDelta / 220) * 10) / 10));
       setPlacedAssets((prev) => prev.map((asset) => (
         asset.key !== resizingPlacedAssetKey ? asset : { ...asset, scale: nextScale }
       )));
@@ -327,9 +346,10 @@ export default function GamePreviewCanvas({
       asset.key !== draggingPlacedAssetKey ? asset : { ...asset, x, y }
     )));
     movedDuringDragRef.current = true;
+    setTrashHover(isPointerOverTrash(e.clientX, e.clientY));
   };
 
-  const handleCanvasPointerUp = () => {
+  const handleCanvasPointerUp = (e) => {
     if (mode !== 'edit') return;
 
     if (draggingBackdrop) {
@@ -351,10 +371,14 @@ export default function GamePreviewCanvas({
     }
 
     if (draggingPlacedAssetKey) {
-      if (movedDuringDragRef.current && moveStartSnapshotRef.current) {
+      const shouldDelete = Boolean(e) && isPointerOverTrash(e.clientX, e.clientY);
+      if (shouldDelete) {
+        deletePlacedAsset(draggingPlacedAssetKey);
+      } else if (movedDuringDragRef.current && moveStartSnapshotRef.current) {
         setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
       }
       setDraggingPlacedAssetKey(null);
+      setTrashHover(false);
       moveStartSnapshotRef.current = null;
       movedDuringDragRef.current = false;
     }
@@ -369,13 +393,16 @@ export default function GamePreviewCanvas({
     }
   };
 
-  const handleResizeHandlePointerDown = (e, asset) => {
+  const handleResizeHandlePointerDown = (e, asset, directionX, directionY) => {
     if (mode !== 'edit') return;
     e.stopPropagation();
     updateSelection(asset.key);
     setResizingPlacedAssetKey(asset.key);
     resizeStartRef.current = {
+      pointerX: e.clientX,
       pointerY: e.clientY,
+      directionX,
+      directionY,
       scale: asset.scale || 1,
       snapshot: buildSnapshot(placedAssets, asset.key, backdropState),
     };
@@ -443,15 +470,12 @@ export default function GamePreviewCanvas({
   const backdropTransform = backdropState
     ? `translate(${backdropState.x}px, ${backdropState.y}px) scale(${backdropState.scale})`
     : 'none';
-  const saveLabel = saveState === 'saving'
-    ? 'Saving...'
-    : saveState === 'saved'
-      ? 'Saved'
-      : 'Save';
+  const saveLabel = saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save';
 
   return (
     <section
       ref={canvasRef}
+      data-sandbox-canvas-root="true"
       className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]"
       onClick={(e) => {
         if (mode === 'edit' && e.target === e.currentTarget) updateSelection(null);
@@ -474,54 +498,22 @@ export default function GamePreviewCanvas({
           {mode === 'edit' && backdropState && !backdropState.locked ? (
             <>
               <div className="pointer-events-none absolute inset-0 border-[3px] border-[#19a2ff]" />
-              <button
-                type="button"
-                onPointerDown={handleBackdropResizePointerDown}
-                data-direction-x="-1"
-                data-direction-y="-1"
-                className="absolute -left-[7px] -top-[7px] z-10 h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white"
-                aria-label="Resize backdrop"
-              />
-              <button
-                type="button"
-                onPointerDown={handleBackdropResizePointerDown}
-                data-direction-x="1"
-                data-direction-y="-1"
-                className="absolute -right-[7px] -top-[7px] z-10 h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white"
-                aria-label="Resize backdrop"
-              />
-              <button
-                type="button"
-                onPointerDown={handleBackdropResizePointerDown}
-                data-direction-x="-1"
-                data-direction-y="1"
-                className="absolute -bottom-[7px] -left-[7px] z-10 h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white"
-                aria-label="Resize backdrop"
-              />
-              <button
-                type="button"
-                onPointerDown={handleBackdropResizePointerDown}
-                data-direction-x="1"
-                data-direction-y="1"
-                className="absolute -bottom-[7px] -right-[7px] z-10 h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white"
-                aria-label="Resize backdrop"
-              />
+              <button type="button" onPointerDown={handleBackdropResizePointerDown} data-direction-x="-1" data-direction-y="-1" className="absolute -left-[7px] -top-[7px] z-10 h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" aria-label="Resize backdrop" />
+              <button type="button" onPointerDown={handleBackdropResizePointerDown} data-direction-x="1" data-direction-y="-1" className="absolute -right-[7px] -top-[7px] z-10 h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" aria-label="Resize backdrop" />
+              <button type="button" onPointerDown={handleBackdropResizePointerDown} data-direction-x="-1" data-direction-y="1" className="absolute -bottom-[7px] -left-[7px] z-10 h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" aria-label="Resize backdrop" />
+              <button type="button" onPointerDown={handleBackdropResizePointerDown} data-direction-x="1" data-direction-y="1" className="absolute -bottom-[7px] -right-[7px] z-10 h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" aria-label="Resize backdrop" />
             </>
           ) : null}
         </div>
       ) : null}
+
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.45)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.45)_1px,transparent_1px)] bg-[size:48px_48px] opacity-60" />
 
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
         <button type="button" onClick={handleUndo} disabled={mode !== 'edit' || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
         <button type="button" onClick={handleRestart} disabled={mode !== 'edit' || (!placedAssets.length && !backdropState)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saveState === 'saving'}
-          className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70"
-        >
+        <button type="button" onClick={onSave} disabled={saveState === 'saving'} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
           <Save size={24} />
           {saveLabel}
         </button>
@@ -538,7 +530,7 @@ export default function GamePreviewCanvas({
         return (
           <div
             key={asset.key}
-            className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 touch-none ${mode === 'edit' && draggingPlacedAssetKey === asset.key ? 'cursor-grabbing' : mode === 'edit' ? 'cursor-grab' : 'cursor-pointer'}`}
+            className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none ${mode === 'edit' && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-20'} ${mode === 'edit' && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : mode !== 'edit' ? 'cursor-pointer' : ''}`}
             style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize }}
             title={asset.label}
             onClick={(e) => {
@@ -549,7 +541,15 @@ export default function GamePreviewCanvas({
             onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)}
             onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}
           >
-            {isSelected && showSelectionChrome ? <><div className="absolute inset-0 border-[3px] border-[#19a2ff]" /><div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /></> : null}
+            {isSelected && showSelectionChrome ? (
+              <>
+                <div className="absolute inset-0 border-[3px] border-[#19a2ff]" />
+                <div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, -1)} />
+                <div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, -1)} />
+                <div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, 1)} />
+                <div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, 1)} />
+              </>
+            ) : null}
             <div className="grid h-full w-full place-items-center bg-transparent leading-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
             {asset.costume && asset.costume !== 'default' ? <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-slate-600 shadow">{asset.costume}</div> : null}
           </div>
@@ -576,15 +576,7 @@ export default function GamePreviewCanvas({
             <div className="max-h-[360px] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
                 {trayAssets.map((asset) => (
-                  <button
-                    key={asset.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')}
-                    onClick={() => applyBackdrop(asset)}
-                    className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`}
-                    title={asset.label}
-                  >
+                  <button key={asset.id} type="button" draggable onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')} onClick={() => applyBackdrop(asset)} className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`} title={asset.label}>
                     <div className="aspect-[16/9] w-full bg-slate-200">
                       <img src={asset.src} alt={asset.label} className="h-full w-full object-cover" />
                     </div>
@@ -596,19 +588,21 @@ export default function GamePreviewCanvas({
           ) : (
             <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
               {trayAssets.map((asset) => (
-                <div
-                  key={asset.id}
-                  draggable={(asset.unlockXp || 0) <= currentXp}
-                  onDragStart={(e) => onAssetDragStart(e, asset, 'sprite')}
-                  className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`}
-                  title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}
-                >
+                <div key={asset.id} draggable={(asset.unlockXp || 0) <= currentXp} onDragStart={(e) => onAssetDragStart(e, asset, 'sprite')} className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`} title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}>
                   <div className="text-3xl">{asset.emoji}</div>
                   <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      ) : null}
+
+      {mode === 'edit' && draggingPlacedAssetKey ? (
+        <div ref={trashZoneRef} className="pointer-events-none absolute left-4 top-24 z-30">
+          <div className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${trashHover ? 'scale-110 border-rose-700 bg-rose-600 text-white' : 'border-rose-200 bg-white/95 text-rose-500'}`} aria-label="Delete dragged asset">
+            <Trash2 size={34} strokeWidth={2.6} />
+          </div>
         </div>
       ) : null}
     </section>

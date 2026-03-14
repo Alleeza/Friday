@@ -2,13 +2,12 @@ const EVENT_LABELS = new Set([
   'game starts',
   'sprite clicked',
   'object is tapped',
-  'key pressed',
   'key is pressed',
   'timer reaches 0',
   'score reaches 10',
   'bumps',
   'is touching',
-  'is not touching (pro)',
+  'is not touching',
 ]);
 
 function readTokenValue(token) {
@@ -39,8 +38,6 @@ function compilePredicateFromParts(parts = []) {
   const first = normalizeSymbol(readTokenValue(parts[0]));
   const second = normalizeSymbol(readTokenValue(parts[1]));
   const third = normalizeSymbol(readTokenValue(parts[2]));
-  const fourth = normalizeSymbol(readTokenValue(parts[3]));
-
   if (first === 'not') {
     return { kind: 'not', value: readTokenValue(parts[1]) };
   }
@@ -54,7 +51,7 @@ function compilePredicateFromParts(parts = []) {
   if (second === 'is touching') {
     return { kind: 'collision', operator: 'touching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
   }
-  if (second === 'is not touching' || (second === 'is not touching' && fourth === '(pro)')) {
+  if (second === 'is not touching') {
     return { kind: 'collision', operator: 'notTouching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
   }
 
@@ -115,6 +112,7 @@ function compileInstruction(block, errors, path) {
   if (actionLabel === 'move forward') return { type: 'moveForward', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'turn degrees') return { type: 'turn', degrees: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'set rotation style') return { type: 'setRotationStyle', style: readTokenValue(block.parts?.[1]).toLowerCase() || 'dont rotate' };
+  if (actionLabel === 'flip') return { type: 'flip' };
   if (actionLabel === 'change x by') return { type: 'changeX', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'change y by') return { type: 'changeY', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'go to x') return { type: 'goTo', x: readNumber(block.parts?.[1], 0), y: readNumber(block.parts?.[3], 0) };

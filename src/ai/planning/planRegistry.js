@@ -9,17 +9,22 @@
  */
 
 import { sandboxAssets } from '../../data/sandboxAssets.js';
+import { PLANNER_BLOCK_CAPABILITIES, PLANNER_EVENT_CAPABILITIES } from './plannerCapabilityCatalog.js';
 
 // ---------------------------------------------------------------------------
 // Block catalogue (must match scriptCompiler.js action/loop labels)
 // ---------------------------------------------------------------------------
 
-export const AVAILABLE_BLOCKS = Object.freeze({
-  movement: Object.freeze(['Move Forward', 'Turn Degrees', 'Set Rotation Style', 'Change X By']),
-  looks:    Object.freeze(['Switch Costume To', 'Next Costume']),
-  sound:    Object.freeze(['Play Sound']),
-  control:  Object.freeze(['Wait', 'Forever', 'While']),
-});
+export const AVAILABLE_BLOCKS = Object.freeze(
+  ['movement', 'looks', 'sound', 'control', 'variables', 'collision', 'condition'].reduce((catalog, category) => ({
+    ...catalog,
+    [category]: Object.freeze(
+      PLANNER_BLOCK_CAPABILITIES
+        .filter((block) => block.plannerCategory === category)
+        .map((block) => block.name)
+    ),
+  }), {})
+);
 
 /** All block names as a flat Set for fast lookup. */
 export const ALL_BLOCK_NAMES = new Set(
@@ -30,13 +35,9 @@ export const ALL_BLOCK_NAMES = new Set(
 // Event catalogue (must match EVENT_LABELS in scriptCompiler.js)
 // ---------------------------------------------------------------------------
 
-export const AVAILABLE_EVENTS = Object.freeze([
-  'When game starts',
-  'When sprite clicked',
-  'When key pressed',
-  'When timer reaches 0',
-  'When score reaches 10',
-]);
+export const AVAILABLE_EVENTS = Object.freeze(
+  PLANNER_EVENT_CAPABILITIES.map((event) => event.displayName)
+);
 
 export const AVAILABLE_EVENTS_SET = new Set(AVAILABLE_EVENTS);
 
@@ -110,7 +111,7 @@ const DIFFICULTY_TIERS = [
       label: 'beginner',
       maxStages: 2,
       maxAssets: 2,
-      allowedCategories: Object.freeze(['movement']),
+      allowedCategories: Object.freeze(['movement', 'control']),
     }),
   },
 ];

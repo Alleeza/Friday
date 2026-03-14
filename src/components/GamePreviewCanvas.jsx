@@ -603,7 +603,9 @@ export default function GamePreviewCanvas({
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p>
-              <p className="mt-1 text-sm font-bold text-slate-500">{trayTab === 'backdrops' ? 'Pick a backdrop, adjust it once, then lock it into place.' : 'Emoji assets stay interactive and can be scripted like before.'}</p>
+              {trayTab === 'backdrops' ? (
+                <p className="mt-1 text-sm font-bold text-slate-500">Pick a backdrop, adjust it once, then lock it into place.</p>
+              ) : null}
             </div>
             <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
               <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>

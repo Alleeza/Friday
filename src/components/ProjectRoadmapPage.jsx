@@ -245,8 +245,8 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
   }, [currentStage, workspaceState, workspaceDebugText, stepDebugInfo]);
 
   return (
-    <section className="quest-card mx-2 border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] sm:mx-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <section className="quest-card w-full border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-3 pl-1">
           <h2 className="font-display text-3xl font-bold leading-none text-slate-800">Stage Progress</h2>
         </div>

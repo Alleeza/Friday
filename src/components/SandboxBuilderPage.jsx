@@ -807,8 +807,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
   const quickEditorPosition = selectedInstance
     ? (() => {
-        const sandboxMaxWidth = 1040;
-        const quickEditorWidth = collisionEventOptions.has(selectedEvent) ? 540 : 460;
         const quickEditorHeight = 72;
         const assetScale = selectedInstance.scale || 1;
         const assetSize = 180 * assetScale;
@@ -817,9 +815,8 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
         const y = selectedInstance.y || 0;
         const assetRight = x + assetHalf;
         const gap = 24;
-        const maxLeft = Math.max(24, sandboxMaxWidth - quickEditorWidth - 24);
         return {
-          left: `${Math.min(Math.max(assetRight + gap, 24), maxLeft)}px`,
+          left: `${Math.max(assetRight + gap, 24)}px`,
           top: `${Math.min(Math.max(y - quickEditorHeight / 2, 88), 540)}px`,
         };
       })()
@@ -1149,7 +1146,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                   setActiveEventBlockId(eventBlock.id);
                   handleEventChange(e.target.value, eventBlock.id);
                 }}
-                className="h-10 w-[74px] min-w-0 appearance-none bg-transparent px-0.5 pr-1 text-[16px] font-black text-white outline-none"
+                className="h-10 w-[88px] min-w-0 appearance-none bg-transparent px-3 text-center text-[16px] font-black text-white outline-none"
               >
                 {eventOptions.map((eventName) => (
                   <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
@@ -1248,7 +1245,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
             setActiveEventBlockId(eventBlock.id);
             setEditorStage('expanded');
           }}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#ad2f63] shadow-[0_2px_0_rgba(118,24,66,0.38)]"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#ad2f63] shadow-[0_2px_0_rgba(118,24,66,0.38)]"
           aria-label={`Open ${eventValue || 'new'} event`}
         >
           <Pencil size={18} strokeWidth={3} />
@@ -1331,12 +1328,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                   <div className="flex h-14 min-w-0 flex-1 items-center gap-3 rounded-[24px] border border-[#e5e7eb] bg-[#fffef9] px-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
                     <span className="text-[20px] font-black leading-none tracking-[-0.01em] text-slate-800">When</span>
                     {collisionEventOptions.has(selectedEvent) ? (
-                      <div className="inline-flex items-center rounded-full bg-[#b32062] px-1.5 py-1 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
+                      <div className="inline-flex items-center gap-0 rounded-full bg-[#b32062] px-1.5 py-1 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
                         <select
                           value={selectedEventLeft}
                           onChange={(e) => handleEventLeftChange(e.target.value, activeEventSection?.eventBlock.id)}
                           disabled={!activeEventSection || mode === 'play'}
-                          className="h-10 min-w-[145px] max-w-[220px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
+                          className="h-10 w-[160px] min-w-0 rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
                         >
                           {assetOptions.map((option) => (
                             <option key={option.value} value={option.value} className="bg-white text-slate-800">
@@ -1348,7 +1345,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                           value={selectedEvent}
                           onChange={(e) => handleEventChange(e.target.value, activeEventSection?.eventBlock.id)}
                           disabled={!activeEventSection || mode === 'play'}
-                          className="h-10 min-w-[120px] max-w-[210px] appearance-none bg-transparent pl-4 pr-7 text-[17px] font-black text-white outline-none disabled:opacity-40"
+                          className="h-10 w-[112px] min-w-0 appearance-none bg-transparent px-3 text-center text-[17px] font-black text-white outline-none disabled:opacity-40"
                         >
                           {eventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
@@ -1360,7 +1357,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                           value={selectedEventRight}
                           onChange={(e) => handleEventRightChange(e.target.value, activeEventSection?.eventBlock.id)}
                           disabled={!activeEventSection || mode === 'play'}
-                          className="h-10 min-w-[145px] max-w-[220px] rounded-full border-2 border-white/85 bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
+                          className="h-10 w-[160px] min-w-0 rounded-full border-2 border-white/85 bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
                         >
                           {collisionTargetOptions.map((option) => (
                             <option key={option.value} value={option.value} className="bg-white text-slate-800">

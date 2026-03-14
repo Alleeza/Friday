@@ -1031,7 +1031,7 @@ export default function SandboxBuilderPage({
                   <select
                     value={selectedEvent}
                     onChange={(e) => handleEventChange(e.target.value)}
-                    className="h-10 min-w-[110px] max-w-[190px] appearance-none bg-transparent px-4 pr-7 text-[16px] font-black text-white outline-none"
+                    className="h-10 min-w-[110px] max-w-[190px] appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] px-4 pr-7 text-[16px] font-black text-slate-900 outline-none"
                   >
                     {eventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
@@ -1081,7 +1081,7 @@ export default function SandboxBuilderPage({
                   <select
                     value={selectedEvent}
                     onChange={(e) => handleEventChange(e.target.value)}
-                    className="h-10 min-w-0 appearance-none bg-transparent px-3 pr-6 text-[16px] font-black text-white outline-none"
+                    className="h-10 min-w-0 appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-6 text-[16px] font-black text-slate-900 outline-none"
                   >
                     {eventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
@@ -1095,7 +1095,7 @@ export default function SandboxBuilderPage({
                   <select
                     value={selectedEvent}
                     onChange={(e) => handleEventChange(e.target.value)}
-                    className="h-10 min-w-0 max-w-[220px] rounded-full border-[3px] border-white bg-transparent px-4 pr-7 text-[16px] font-black text-white outline-none"
+                    className="h-10 min-w-0 max-w-[220px] rounded-full border-[3px] border-white bg-[#f8f9fb] px-4 pr-7 text-[16px] font-black text-slate-900 outline-none"
                   >
                     {eventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
@@ -1166,7 +1166,7 @@ export default function SandboxBuilderPage({
                           value={selectedEvent}
                           onChange={(e) => handleEventChange(e.target.value)}
                           disabled={!editorInstanceKey || mode === 'play'}
-                          className="h-10 min-w-[120px] max-w-[210px] appearance-none bg-transparent pl-4 pr-7 text-[17px] font-black text-white outline-none disabled:opacity-40"
+                          className="h-10 min-w-[120px] max-w-[210px] appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-black text-slate-900 outline-none disabled:opacity-40"
                         >
                           {eventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
@@ -1220,7 +1220,7 @@ export default function SandboxBuilderPage({
                           value={selectedEvent}
                           onChange={(e) => handleEventChange(e.target.value)}
                           disabled={!editorInstanceKey || mode === 'play'}
-                          className="h-10 min-w-0 appearance-none bg-transparent px-3 pr-6 text-[17px] font-black text-white outline-none disabled:opacity-40"
+                          className="h-10 min-w-0 appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-6 text-[17px] font-black text-slate-900 outline-none disabled:opacity-40"
                         >
                           {eventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
@@ -1235,7 +1235,7 @@ export default function SandboxBuilderPage({
                           value={selectedEvent}
                           onChange={(e) => handleEventChange(e.target.value)}
                           disabled={!editorInstanceKey || mode === 'play'}
-                          className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
+                          className="h-9 rounded-full border-2 border-[#b72d63] bg-white pl-4 pr-5 text-[17px] font-extrabold text-slate-900 shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
                         >
                           {eventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
@@ -1248,7 +1248,7 @@ export default function SandboxBuilderPage({
                             value={selectedPressedKey}
                             onChange={(e) => handlePressedKeyChange(e.target.value)}
                             disabled={!editorInstanceKey || mode === 'play'}
-                            className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
+                            className="h-9 rounded-full border-2 border-[#b72d63] bg-white pl-4 pr-5 text-[17px] font-extrabold text-slate-900 shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
                           >
                             {keyPressOptions.map((option) => (
                               <option key={option.value} value={option.value} className="bg-white text-slate-800">

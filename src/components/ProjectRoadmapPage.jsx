@@ -3,11 +3,52 @@ import { useStepDetection } from '../hooks/useStepDetection.js';
 import { buildContext } from '../ai/context/contextBuilder.js';
 import { sandboxAssets } from '../data/sandboxAssets.js';
 import { evaluateStepChecks } from '../utils/stepChecker.js';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Flame, Star } from 'lucide-react';
+import questyImage from '../imgages/profile.png';
 
 const STAGE_GRAPHICS = ['🐰', '🕹️', '🥕', '🪨', '🛠️'];
 
-function buildStepDebugInfo(currentStage, workspaceState, completedStepKeys) {
+function TopNav({ onCreateNewGame }) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3.5 lg:px-6">
+        <div className="flex items-center gap-3">
+          <img
+            src={questyImage}
+            alt="Questy avatar"
+            className="h-12 w-auto rounded-xl object-contain"
+          />
+          <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
+            <Star className="h-3.5 w-3.5" />
+            Level 1
+            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
+              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] font-bold text-slate-600 sm:flex">
+            <Flame className="h-3.5 w-3.5 text-orange-400" /> 0
+          </div>
+
+          <button
+            type="button"
+            onClick={onCreateNewGame}
+            className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2.5 text-[14px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex"
+          >
+            <span className="text-[18px] leading-none">+</span>
+            Create New Game
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, manualStepKeys) {
   if (!currentStage || !workspaceState) return [];
 
   return currentStage.steps.map((stepText, stepIndex) => {
@@ -281,7 +322,7 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
                   {isDone ? '✓' : idx + 1}
                 </div>
                 <p className={`text-[12px] font-bold leading-tight ${isActive ? 'text-[#25a8ef]' : 'text-slate-600'}`}>
-                  {stage.label}
+                  {`Stage ${idx + 1}: ${stage.label}`}
                 </p>
               </div>
             );
@@ -293,7 +334,7 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
         <article className="rounded-3xl border border-[#d4d9df] bg-white p-3.5 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              {currentStage?.label?.toUpperCase()}
+              {`STAGE ${Math.min(currentIndex + 1, stages.length)}: ${currentStage?.label?.toUpperCase() ?? ''}`}
             </p>
             <button
               type="button"
@@ -389,25 +430,28 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
 
 export default function ProjectRoadmapPage({ setupData, plan, onStartBuilder, onBack }) {
   return (
-    <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
-      <StageProgressSection setupData={setupData} plan={plan} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-2xl px-5 py-3 font-bold text-slate-500 hover:bg-slate-100"
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          onClick={onStartBuilder}
-          className="duo-btn-blue inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3 text-lg"
-        >
-          Continue to Builder
-          <ArrowRight className="h-5 w-5" />
-        </button>
-      </div>
-    </main>
+    <>
+      <TopNav onCreateNewGame={onBack} />
+      <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
+        <StageProgressSection setupData={setupData} plan={plan} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-2xl px-5 py-3 font-bold text-slate-500 hover:bg-slate-100"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={onStartBuilder}
+            className="duo-btn-blue inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3 text-lg"
+          >
+            Continue to Builder
+            <ArrowRight className="h-5 w-5" />
+          </button>
+        </div>
+      </main>
+    </>
   );
 }

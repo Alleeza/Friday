@@ -4,6 +4,15 @@ import { loadPublishedProject } from '../api/projectState';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 
+function getLiveSandboxStageSize() {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.querySelector('[data-sandbox-canvas-root="true"]');
+  if (!(canvas instanceof HTMLElement)) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  return { width: rect.width, height: rect.height };
+}
+
 function normalizeProjectState(projectState) {
   return {
     setupData: projectState?.setupData || null,
@@ -18,7 +27,7 @@ function normalizeProjectState(projectState) {
   };
 }
 
-export default function SharedGamePage({ shareId }) {
+export default function SharedGamePage({ projectId, shareId }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -42,7 +51,7 @@ export default function SharedGamePage({ shareId }) {
   useEffect(() => {
     let cancelled = false;
 
-    loadPublishedProject(shareId)
+    loadPublishedProject(projectId, shareId)
       .then((nextPublication) => {
         if (cancelled) return;
         setPublication({
@@ -63,7 +72,7 @@ export default function SharedGamePage({ shareId }) {
       cancelled = true;
       stopRuntime();
     };
-  }, [shareId, stopRuntime]);
+  }, [projectId, shareId, stopRuntime]);
 
   useEffect(() => {
     if (mode !== 'play') return undefined;
@@ -85,7 +94,11 @@ export default function SharedGamePage({ shareId }) {
       return;
     }
 
-    const runtime = createScriptRuntime({ instances, programsByKey });
+    const runtime = createScriptRuntime({
+      instances,
+      programsByKey,
+      stageSize: getLiveSandboxStageSize(),
+    });
     runtime.dispatch('game starts');
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());

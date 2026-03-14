@@ -16,7 +16,13 @@ function normalizeText(value) {
 }
 
 function normalizeEventName(value) {
-  return normalizeText(value).replace(/^when\s+/, '');
+  const normalized = normalizeText(value).replace(/^when\s+/, '');
+
+  if (normalized === 'key pressed') return 'key is pressed';
+  if (normalized === 'sprite clicked') return 'object is tapped';
+  if (normalized === 'is not touching (pro)') return 'is not touching';
+
+  return normalized;
 }
 
 // ---------------------------------------------------------------------------

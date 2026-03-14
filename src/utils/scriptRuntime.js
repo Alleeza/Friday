@@ -1,14 +1,50 @@
 const MAX_STEPS_PER_TICK = 24;
-const STAGE_BOUNDS = {
-  minX: 48,
-  maxX: 1180,
-  minY: 96,
-  maxY: 560,
+const DEFAULT_STAGE_SIZE = {
+  width: 1280,
+  height: 720,
 };
 
-function clampPosition(asset) {
-  asset.x = Math.max(STAGE_BOUNDS.minX, Math.min(STAGE_BOUNDS.maxX, asset.x));
-  asset.y = Math.max(STAGE_BOUNDS.minY, Math.min(STAGE_BOUNDS.maxY, asset.y));
+function normalizeStageSize(stageSize) {
+  const width = Number(stageSize?.width);
+  const height = Number(stageSize?.height);
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : DEFAULT_STAGE_SIZE.width,
+    height: Number.isFinite(height) && height > 0 ? height : DEFAULT_STAGE_SIZE.height,
+  };
+}
+
+function clampPosition(asset, stageSize) {
+  const { width, height } = normalizeStageSize(stageSize);
+  const frameHalf = 90 * (asset?.scale || 1);
+  asset.x = Math.max(frameHalf, Math.min(Math.max(frameHalf, width - frameHalf), asset.x));
+  asset.y = Math.max(frameHalf, Math.min(Math.max(frameHalf, height - frameHalf), asset.y));
+}
+
+function clampPositionWithHit(asset, stageSize) {
+  const { width, height } = normalizeStageSize(stageSize);
+  const frameHalf = 90 * (asset?.scale || 1);
+  const nextX = Math.max(frameHalf, Math.min(Math.max(frameHalf, width - frameHalf), asset.x));
+  const nextY = Math.max(frameHalf, Math.min(Math.max(frameHalf, height - frameHalf), asset.y));
+  const hitX = nextX !== asset.x;
+  const hitY = nextY !== asset.y;
+  asset.x = nextX;
+  asset.y = nextY;
+  return { hitX, hitY };
+}
+
+function getDirectionVector(directionDegrees) {
+  // Match Scratch-style directions: 90 = right, 0 = up, -90 = left, 180 = down.
+  const radians = ((90 - directionDegrees) * Math.PI) / 180;
+  return {
+    x: Math.cos(radians),
+    y: -Math.sin(radians),
+  };
+}
+
+function getHorizontalDirection(asset) {
+  if (asset.rotationStyle === 'left-right') return asset.facing || 1;
+  const direction = getDirectionVector(asset.rotation || 0);
+  return direction.x >= 0 ? 1 : -1;
 }
 
 function createAssetState(instance) {
@@ -174,11 +210,12 @@ function normalizeRuntimeKey(rawKey) {
   return next;
 }
 
-export function createScriptRuntime({ instances, programsByKey }) {
+export function createScriptRuntime({ instances, programsByKey, stageSize }) {
   const state = {
     assetsByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, createAssetState(instance)])),
     taskQueuesByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, []])),
     programsByKey: programsByKey || {},
+    stageSize: normalizeStageSize(stageSize),
     variables: { score: 0, time: 30, isAlive: true },
     logs: [],
     timerEventSent: false,
@@ -200,14 +237,15 @@ export function createScriptRuntime({ instances, programsByKey }) {
     if (!asset) return;
     switch (instruction.type) {
       case 'moveForward': {
-        const directionMultiplier = asset.rotationStyle === 'left-right' ? (asset.facing || 1) : 1;
-        const amount = instruction.amount * directionMultiplier;
-        const radians = (asset.rotation * Math.PI) / 180;
-        asset.x += Math.cos(radians) * amount;
-        asset.y += Math.sin(radians) * amount;
+        const amount = instruction.amount * getHorizontalDirection(asset);
+        asset.x += amount;
         asset.facing = amount >= 0 ? 1 : -1;
         asset.lastSpeed = Math.abs(amount);
-        clampPosition(asset);
+        const { hitX } = clampPositionWithHit(asset, state.stageSize);
+        if (hitX) {
+          asset.rotationStyle = 'left-right';
+          asset.facing *= -1;
+        }
         break;
       }
       case 'turn':
@@ -224,18 +262,18 @@ export function createScriptRuntime({ instances, programsByKey }) {
         asset.x += instruction.amount;
         asset.facing = instruction.amount >= 0 ? 1 : -1;
         asset.lastSpeed = Math.abs(instruction.amount);
-        clampPosition(asset);
+        clampPosition(asset, state.stageSize);
         break;
       case 'changeY':
         asset.y += instruction.amount;
         asset.lastSpeed = Math.abs(instruction.amount);
-        clampPosition(asset);
+        clampPosition(asset, state.stageSize);
         break;
       case 'goTo':
         asset.lastSpeed = Math.hypot((instruction.x || 0) - asset.x, (instruction.y || 0) - asset.y);
         asset.x = instruction.x;
         asset.y = instruction.y;
-        clampPosition(asset);
+        clampPosition(asset, state.stageSize);
         break;
       case 'pointDirection':
         asset.rotation = instruction.degrees;
@@ -253,6 +291,9 @@ export function createScriptRuntime({ instances, programsByKey }) {
         break;
       case 'say':
         log(`${asset.label} says "${instruction.text}"`);
+        break;
+      case 'setVisibility':
+        asset.invisibility = Math.max(0, Math.min(100, instruction.invisibility ?? 0));
         break;
       case 'changeScore':
         state.variables.score += instruction.amount;

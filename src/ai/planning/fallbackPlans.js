@@ -41,7 +41,7 @@ const COLLECTOR_ARCHETYPE = {
         'Place a Bunny on the canvas — where do you want it to start?',
         'Think about which event should start the Bunny moving',
         'Which block makes a character keep moving forever?',
-        'What number makes the movement feel right — fast or slow?',
+        'Change the Move Forward number from the default so the Bunny moves differently',
       ],
       stepXp: [5, 10, 10, 5],
       stepChecks: [
@@ -98,14 +98,12 @@ const SPACE_DODGER_ARCHETYPE = {
       why: 'Level design starts with placing obstacles in intentional positions',
       success: 'Your canvas has several Rocks arranged like an asteroid field with gaps to move through',
       steps: [
-        'Place several Rocks around the canvas to act like drifting asteroids',
-        'Leave gaps wide enough for the Bunny to weave through',
-        'Choose a starting spot for the Bunny away from the Rocks',
+        'Place at least 3 Rocks on the canvas to build your asteroid field',
+        'Add a Bunny to the canvas so you have a ship to pilot through the Rocks',
       ],
-      stepXp: [5, 10, 5],
+      stepXp: [10, 10],
       stepChecks: [
         [{ type: 'assetCount', asset: 'rock', min: 3 }],
-        [{ type: 'aiCheck', condition: 'The Rocks are spaced out with visible gaps so the Bunny can navigate between them like an asteroid field' }],
         [{ type: 'hasAsset', value: 'bunny' }],
       ],
       optionalSteps: [
@@ -121,7 +119,7 @@ const SPACE_DODGER_ARCHETYPE = {
       steps: [
         'Pick the event that should make the Bunny react when the player presses a key',
         'Choose a movement block that helps the Bunny travel through the field',
-        'Test the route and tune the movement so dodging the Rocks feels manageable',
+        'Press Play and move the Bunny so you can prove the controls work',
       ],
       stepXp: [10, 10, 10],
       stepChecks: [
@@ -160,14 +158,12 @@ const MAZE_ARCHETYPE = {
       why: 'Positioning objects at different coordinates is the foundation of game level design',
       success: 'There is a clear (but narrow!) path between the Rocks',
       steps: [
-        'Place several Rocks on the canvas to form a path',
-        'Make sure there is a gap the Bunny can fit through',
-        'Think about where the Bunny should start — far from the Goal',
+        'Place at least 2 Rocks on the canvas to build your maze walls',
+        'Add a Bunny to the canvas so the player has a character to guide',
       ],
-      stepXp: [5, 10, 5],
+      stepXp: [10, 10],
       stepChecks: [
         [{ type: 'assetCount', asset: 'rock', min: 2 }],
-        [{ type: 'aiCheck', condition: 'There are multiple Rocks placed on the canvas with visible gaps between them forming a navigable path' }],
         [{ type: 'hasAsset', value: 'bunny' }],
       ],
       optionalSteps: [
@@ -223,50 +219,50 @@ const MAZE_ARCHETYPE = {
   ],
 };
 
-/** Free exploration — just move around and discover things. */
+/** Free exploration — move around, discover things, and interact with them. */
 const EXPLORER_ARCHETYPE = {
-  summary: 'Move your character around and explore the world you build',
-  eta: '10–15 minutes',
+  summary: 'Explore your world and discover hidden surprises along the way',
+  eta: '15–20 minutes',
   infeasible: false,
   suggestion: null,
   entities: {
-    assets: ['bunny', 'tree'],
-    blocks: ['Move Forward', 'Turn Degrees', 'Forever'],
-    events: ['When game starts'],
+    assets: ['bunny', 'tree', 'carrot'],
+    blocks: ['Move Forward', 'Turn degrees', 'Forever', 'Play sound', 'Say'],
+    events: ['When game starts', 'When bumps'],
   },
-  checkpoints: ['Get your world moving'],
+  checkpoints: ['Build your world', 'Get exploring', 'Make discoveries count'],
   stages: [
     {
       id: 'stage-1',
-      label: 'Create your world',
-      objective: 'Place characters and objects on the canvas to build a scene',
+      label: 'Build your world',
+      objective: 'Place characters, scenery, and things to discover on the canvas',
       why: 'Placing objects at different positions is how you design a game world',
-      success: 'Your canvas has at least two different objects placed around it',
+      success: 'Your canvas has a Bunny, some Trees, and Carrots to find',
       steps: [
-        'Drag a Bunny onto the canvas — pick a good starting spot',
-        'Add some Trees to make the world feel alive',
-        'Think about the spacing — does it feel like an open world?',
+        'Drag a Bunny onto the canvas — this is your explorer',
+        'Add at least 2 Trees to create a forest feel',
+        'Place at least 2 Carrots around the world for the Bunny to find',
       ],
-      stepXp: [5, 5, 5],
+      stepXp: [5, 10, 10],
       stepChecks: [
         [{ type: 'hasAsset', value: 'bunny' }],
-        [{ type: 'hasAsset', value: 'tree' }],
-        [{ type: 'aiCheck', condition: 'The Bunny and Trees are placed with noticeable spacing so the scene feels like an open world' }],
+        [{ type: 'assetCount', asset: 'tree', min: 2 }],
+        [{ type: 'assetCount', asset: 'carrot', min: 2 }],
       ],
       optionalSteps: [
-        { description: 'Add a third type of object to your world', bonusXp: 5 },
+        { description: 'Spread the Trees and Carrots far apart so there is more to explore', bonusXp: 5 },
       ],
     },
     {
       id: 'stage-2',
-      label: 'Bring it to life',
-      objective: 'Give the Bunny a script that makes it move automatically',
-      why: 'A Forever loop keeps running your instructions without stopping — great for movement',
-      success: 'The Bunny is moving on its own when you press Play',
+      label: 'Bring your explorer to life',
+      objective: 'Give the Bunny a script that makes it wander through the forest',
+      why: 'A Forever loop keeps running your instructions without stopping — great for exploration',
+      success: 'The Bunny is wandering on its own when you press Play',
       steps: [
         'Select the Bunny and think about what should happen when the game starts',
         'What combination of blocks could make the Bunny wander around?',
-        'Try adding a turn — does the Bunny change direction?',
+        'Try adding a turn — does the Bunny change direction as it explores?',
       ],
       stepXp: [10, 10, 10],
       stepChecks: [
@@ -275,7 +271,26 @@ const EXPLORER_ARCHETYPE = {
         [{ type: 'scriptOnAssetContains', asset: 'bunny', blocks: ['Forever', 'Turn degrees'] }],
       ],
       optionalSteps: [
-        { description: 'Can you make two objects move at the same time?', bonusXp: 10 },
+        { description: 'Can you make the Bunny move faster or slower by changing the number?', bonusXp: 5 },
+      ],
+    },
+    {
+      id: 'stage-3',
+      label: 'Make discoveries count',
+      objective: 'Give the Carrots a reaction when the Bunny finds them',
+      why: 'Events like "bumps" let objects react to each other — this is what makes a game interactive',
+      success: 'When the Bunny reaches a Carrot, something happens',
+      steps: [
+        'Select a Carrot and think — what event fires when the Bunny arrives?',
+        'Add an action so the Carrot does something fun when it is found',
+      ],
+      stepXp: [10, 15],
+      stepChecks: [
+        [{ type: 'eventIs', asset: 'carrot', event: 'bumps' }],
+        [{ type: 'minBlockCount', asset: 'carrot', min: 1 }],
+      ],
+      optionalSteps: [
+        { description: 'Can you make the Carrot play a sound when found?', bonusXp: 10 },
       ],
     },
   ],
@@ -302,9 +317,9 @@ const ARCHETYPES = [
     requiredAssets: ['bunny', 'rock', 'goal'],
   },
   {
-    keywords: ['explore', 'world', 'walk', 'move', 'wander', 'roam'],
+    keywords: ['explore', 'world', 'walk', 'move', 'wander', 'roam', 'discover', 'forest', 'find'],
     plan: EXPLORER_ARCHETYPE,
-    requiredAssets: ['bunny', 'tree'],
+    requiredAssets: ['bunny', 'tree', 'carrot'],
   },
 ];
 

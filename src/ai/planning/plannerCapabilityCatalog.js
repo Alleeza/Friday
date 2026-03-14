@@ -338,7 +338,7 @@ const BLOCK_SEMANTICS = Object.freeze({
     defaultValues: [],
     kind: 'predicate',
     directlyCheckable: false,
-    preferredChecks: ['eventIs', 'aiCheck'],
+    preferredChecks: ['eventIs'],
   },
   'is touching': {
     purpose: 'Checks whether two objects are touching',
@@ -347,7 +347,7 @@ const BLOCK_SEMANTICS = Object.freeze({
     defaultValues: [],
     kind: 'predicate',
     directlyCheckable: false,
-    preferredChecks: ['eventIs', 'aiCheck'],
+    preferredChecks: ['eventIs'],
   },
   'is not touching': {
     purpose: 'Checks whether two objects are no longer touching',
@@ -356,7 +356,7 @@ const BLOCK_SEMANTICS = Object.freeze({
     defaultValues: [],
     kind: 'predicate',
     directlyCheckable: false,
-    preferredChecks: ['eventIs', 'aiCheck'],
+    preferredChecks: ['eventIs'],
   },
 });
 
@@ -370,7 +370,6 @@ export const PLANNER_CHECKABILITY_GUIDE = Object.freeze([
   { type: 'blockValueOnAsset', useFor: 'Changing a default numeric or dropdown value' },
   { type: 'assetMoved', useFor: 'Play-mode proof that movement actually happened' },
   { type: 'runtimeVar', useFor: 'Score, timer, or alive state results' },
-  { type: 'aiCheck', useFor: 'Subjective or spatial judgments that code cannot check directly' },
 ]);
 
 function firstStringPart(parts = []) {
@@ -399,7 +398,7 @@ function buildAssetCapability(asset) {
     commonUses: semantics.uses,
     commonPairings: semantics.pairings,
     constraints: semantics.constraints,
-    preferredChecks: ['hasAsset', 'assetCount', 'aiCheck'],
+    preferredChecks: ['hasAsset', 'assetCount'],
   });
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDown, ChevronUp, Pencil, Play, Redo2, Save, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pencil, Play, Redo2, Save, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -267,6 +267,7 @@ export default function SandboxBuilderPage({
   onCreateNewGame,
 }) {
   const { processEvent } = useGamification();
+  const canvasContainerRef = useRef(null);
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -310,6 +311,7 @@ export default function SandboxBuilderPage({
   const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
   const [messages, setMessages] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const priorityBuilderAssetIds = useMemo(
     () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
@@ -330,6 +332,25 @@ export default function SandboxBuilderPage({
     }),
     [sceneInstances, scriptsByInstanceKey, runtimeSnapshot]
   );
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === canvasContainerRef.current);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!canvasContainerRef.current) return;
+
+    if (document.fullscreenElement === canvasContainerRef.current) {
+      document.exitFullscreen().catch(() => {});
+      return;
+    }
+
+    canvasContainerRef.current.requestFullscreen?.().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const nextProjectState = {
@@ -1578,14 +1599,16 @@ export default function SandboxBuilderPage({
             plan={projectPlan}
             workspaceState={progressWorkspaceState}
             compact
-            className="sticky top-[78px] z-20"
           />
         ) : null}
 
         <section className="grid min-h-[720px] gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <MissionPanel />
 
-          <div className="flex min-h-[720px] min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#dde3ea] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+          <div
+            ref={canvasContainerRef}
+            className={`relative flex min-h-[720px] min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#dde3ea] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)] ${isFullscreen ? 'h-full w-full rounded-none border-0 shadow-none' : ''}`}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Sandbox Canvas</p>
@@ -1610,6 +1633,14 @@ export default function SandboxBuilderPage({
                 >
                   <Redo2 size={14} />
                   Redo
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50"
+                >
+                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                 </button>
                 <button
                   type="button"
@@ -1652,6 +1683,17 @@ export default function SandboxBuilderPage({
             </div>
 
             <div className="relative min-h-0 flex-1 p-3 sm:p-4">
+              {isFullscreen ? (
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="absolute right-6 top-6 z-40 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur-sm"
+                >
+                  <Minimize2 size={14} />
+                  Exit Fullscreen
+                </button>
+              ) : null}
+
               <GamePreviewCanvas
                 mode={mode}
                 runtimeSnapshot={runtimeSnapshot}

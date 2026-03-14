@@ -63,6 +63,7 @@ export default function GamePreviewCanvas({
   mode = 'edit',
   runtimeSnapshot,
   initialSceneState,
+  availableSpriteAssets = sandboxAssets,
   selectedInstanceKey,
   onSceneChange,
   onSelectedInstanceChange,
@@ -111,8 +112,8 @@ export default function GamePreviewCanvas({
   const isPlayMode = mode === 'play';
 
   const trayAssets = useMemo(
-    () => (trayTab === 'backdrops' ? backdropAssets : sandboxAssets),
-    [trayTab]
+    () => (trayTab === 'backdrops' ? backdropAssets : availableSpriteAssets),
+    [availableSpriteAssets, trayTab]
   );
   const selectedPlacedAsset = placedAssets.find((asset) => asset.key === selectedPlacedAssetKey) || null;
   const selectedBackdrop = backdropState

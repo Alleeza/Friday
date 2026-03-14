@@ -8,7 +8,7 @@ const EVENT_LABELS = new Set([
   'score reaches 10',
   'bumps',
   'is touching',
-  'is not touching (pro)',
+  'is not touching',
 ]);
 
 function readTokenValue(token) {
@@ -39,8 +39,6 @@ function compilePredicateFromParts(parts = []) {
   const first = normalizeSymbol(readTokenValue(parts[0]));
   const second = normalizeSymbol(readTokenValue(parts[1]));
   const third = normalizeSymbol(readTokenValue(parts[2]));
-  const fourth = normalizeSymbol(readTokenValue(parts[3]));
-
   if (first === 'not') {
     return { kind: 'not', value: readTokenValue(parts[1]) };
   }
@@ -54,7 +52,7 @@ function compilePredicateFromParts(parts = []) {
   if (second === 'is touching') {
     return { kind: 'collision', operator: 'touching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
   }
-  if (second === 'is not touching' || (second === 'is not touching' && fourth === '(pro)')) {
+  if (second === 'is not touching') {
     return { kind: 'collision', operator: 'notTouching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
   }
 

@@ -16,7 +16,7 @@ const eventOptions = [
   'score reaches 10',
   'bumps',
   'is touching',
-  'is not touching (pro)',
+  'is not touching',
 ];
 const defaultEvent = 'game starts';
 
@@ -24,7 +24,7 @@ const palette = {
   Collisions: [
     { id: 'bumps', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'bumps', { type: 'asset', value: 'Self' }] },
     { id: 'touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is touching', { type: 'asset', value: 'Self' }] },
-    { id: 'not-touching-pro', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is not touching', { type: 'asset', value: 'Self' }, '(PRO)'] },
+    { id: 'not-touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is not touching', { type: 'asset', value: 'Self' }] },
   ],
   Conditionals: [
     { id: 'cond-eq', tone: 'condition', parts: [{ label: 'A' }, '=', { label: 'B' }] },

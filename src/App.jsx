@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFallbackPlan } from './ai/planning/fallbackPlans';
-import { loadProjectState, publishSavedProject, saveProjectState } from './api/projectState';
+import {
+  createNewProjectState,
+  loadProjectState,
+  publishSavedProject,
+  saveProjectState,
+} from './api/projectState';
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
 import SharedGamePage from './components/SharedGamePage';
@@ -144,8 +149,15 @@ export default function App() {
   }, [handleSetupComplete]);
 
   const handleCreateNewGame = useCallback(() => {
+    createNewProjectState();
     writeResumeBuilderFlag(false);
     setResumeToken(false);
+    setProjectState(emptyProjectState);
+    setProjectPlan(null);
+    lastSavedSnapshotRef.current = JSON.stringify(emptyProjectState);
+    setSaveState('idle');
+    setPublishState('idle');
+    setStorageError('');
     setActiveScreen('setup');
   }, []);
 

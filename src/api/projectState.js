@@ -1,6 +1,6 @@
 const PROJECT_STATE_ENDPOINT = '/api/project-state';
 const PUBLISHED_PROJECT_ENDPOINT = '/api/published-project';
-const PROJECT_ID_STORAGE_KEY = 'friday-codequest-project-id';
+const ACTIVE_PROJECT_ID_STORAGE_KEY = 'friday-codequest-project-id';
 
 function canUseLocalStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -19,11 +19,19 @@ function getProjectId() {
     return createProjectId();
   }
 
-  const existingProjectId = window.localStorage.getItem(PROJECT_ID_STORAGE_KEY);
+  const existingProjectId = window.localStorage.getItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
   if (existingProjectId) return existingProjectId;
 
   const nextProjectId = createProjectId();
-  window.localStorage.setItem(PROJECT_ID_STORAGE_KEY, nextProjectId);
+  window.localStorage.setItem(ACTIVE_PROJECT_ID_STORAGE_KEY, nextProjectId);
+  return nextProjectId;
+}
+
+export function createNewProjectState() {
+  const nextProjectId = createProjectId();
+  if (canUseLocalStorage()) {
+    window.localStorage.setItem(ACTIVE_PROJECT_ID_STORAGE_KEY, nextProjectId);
+  }
   return nextProjectId;
 }
 

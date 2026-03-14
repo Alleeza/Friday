@@ -1,5 +1,6 @@
 import { MessageCircle, Minimize2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import questyImage from '../imgages/profile.png';
 
 const quickReplies = [
   'Give me a hint',
@@ -10,10 +11,12 @@ const quickReplies = [
 
 function TutorAvatar() {
   return (
-    <div className="relative h-14 w-14 rounded-2xl border-b-4 border-[#49a300] bg-[#58cc02] shadow-[0_4px_0_rgba(73,163,0,0.45)]">
-      <div className="absolute left-3 top-4 h-4 w-4 rounded-full bg-white"><div className="ml-1 mt-1 h-2 w-2 rounded-full bg-slate-700" /></div>
-      <div className="absolute right-3 top-4 h-4 w-4 rounded-full bg-white"><div className="ml-1 mt-1 h-2 w-2 rounded-full bg-slate-700" /></div>
-      <div className="absolute bottom-3 left-1/2 h-0 w-0 -translate-x-1/2 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-yellow-400" />
+    <div className="relative h-14 w-14 overflow-hidden rounded-2xl border-b-4 border-[#49a300] bg-[#58cc02] shadow-[0_4px_0_rgba(73,163,0,0.45)]">
+      <img
+        src={questyImage}
+        alt="Questy"
+        className="h-full w-full object-cover object-top"
+      />
     </div>
   );
 }

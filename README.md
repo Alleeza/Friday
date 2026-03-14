@@ -49,8 +49,6 @@ The deployed API entrypoints are:
 
 The share page now loads published snapshots through `GET /api/published-project?shareId=...`, which is more reliable on Vercel than depending on the nested dynamic API file alone.
 
-Temporary diagnostics are isolated in [temporaryDiagnostics.js](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/lib/temporaryDiagnostics.js) and wired into the API responses so Vercel errors include the failing `step`, route context, and Supabase request details. Delete that helper and the related imports once debugging is finished.
-
 ## Available scripts
 
 - `npm run dev` starts the backend and Vite together.

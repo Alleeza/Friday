@@ -1370,7 +1370,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                         </select>
                       </div>
                     ) : selectedEvent === 'object is tapped' || selectedEvent === 'key is pressed' ? (
-                      <div className="inline-flex items-center rounded-full bg-[#b32062] p-1.5 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
+                      <div className="inline-flex items-center rounded-full bg-[#b32062] px-1.5 py-1 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
                         {selectedEvent === 'object is tapped' ? (
                           <select
                             value={selectedTappedObject}

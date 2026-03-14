@@ -3,7 +3,7 @@ import { useStepDetection } from '../hooks/useStepDetection.js';
 import { buildContext } from '../ai/context/contextBuilder.js';
 import { sandboxAssets } from '../data/sandboxAssets.js';
 import { evaluateStepChecks } from '../utils/stepChecker.js';
-import { ArrowRight, Milestone } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const STAGE_GRAPHICS = ['🐰', '🕹️', '🥕', '🪨', '🛠️'];
 
@@ -249,9 +249,6 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 pl-1">
           <h2 className="font-display text-3xl font-bold leading-none text-slate-800">Stage Progress</h2>
-          <span className="grid h-10 w-10 place-items-center rounded-2xl border border-[#cfe6f8] bg-[#eaf6ff] text-[#1b97dd]">
-            <Milestone size={20} strokeWidth={2.4} />
-          </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-4 py-1 text-sm font-extrabold text-[#1b97dd]">

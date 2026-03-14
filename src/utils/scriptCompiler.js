@@ -1,11 +1,14 @@
 const EVENT_LABELS = new Set([
   'game starts',
+  'sprite clicked',
   'object is tapped',
   'key is pressed',
+  'timer reaches 0',
+  'score reaches 10',
   'bumps',
+  'is touching',
+  'is not touching',
 ]);
-const COLLISION_EVENT_LABELS = new Set(['bumps']);
-const KEY_EVENT_LABELS = new Set(['key is pressed']);
 
 function readTokenValue(token) {
   if (typeof token === 'string') return token;
@@ -26,23 +29,12 @@ function readBlockLabel(block) {
     .trim();
 }
 
-function normalizeSymbol(symbol) {
-  return (symbol || '').replace(/\s+/g, ' ').trim().toLowerCase();
+function isEventBlock(block) {
+  return normalizeSymbol(readTokenValue(block?.parts?.[0])) === 'when';
 }
 
-function parseOperand(parts, startIndex) {
-  const token = parts[startIndex];
-  const next = parts[startIndex + 1];
-  if (token && typeof token !== 'string' && token.type === 'asset' && next && typeof next !== 'string' && next.type === 'dropdown') {
-    return {
-      operand: { kind: 'assetProp', assetRef: readTokenValue(token), property: readTokenValue(next) },
-      consumed: 2,
-    };
-  }
-  return {
-    operand: readTokenValue(token),
-    consumed: 1,
-  };
+function normalizeSymbol(symbol) {
+  return (symbol || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function compilePredicateFromParts(parts = []) {
@@ -60,6 +52,12 @@ function compilePredicateFromParts(parts = []) {
   if (second === 'bumps') {
     return { kind: 'collision', operator: 'bumps', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
   }
+  if (second === 'is touching') {
+    return { kind: 'collision', operator: 'touching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
+  }
+  if (second === 'is not touching') {
+    return { kind: 'collision', operator: 'notTouching', left: readTokenValue(parts[0]), right: readTokenValue(parts[2]) };
+  }
 
   const comparisonMap = {
     '=': 'eq',
@@ -72,21 +70,7 @@ function compilePredicateFromParts(parts = []) {
     'and': 'and',
     'or': 'or',
   };
-  let operator = comparisonMap[second];
-  if (!operator) {
-    const leftParsed = parseOperand(parts, 0);
-    const opIdx = leftParsed.consumed;
-    const rawOp = normalizeSymbol(readTokenValue(parts[opIdx]));
-    operator = comparisonMap[rawOp];
-    if (!operator) return null;
-    const rightParsed = parseOperand(parts, opIdx + 1);
-    return {
-      kind: operator === 'and' || operator === 'or' ? 'logic' : 'comparison',
-      operator,
-      left: leftParsed.operand,
-      right: rightParsed.operand,
-    };
-  }
+  const operator = comparisonMap[second];
   if (!operator) return null;
   return {
     kind: operator === 'and' || operator === 'or' ? 'logic' : 'comparison',
@@ -155,37 +139,45 @@ function compileInstruction(block, errors, path) {
 
 function compileScript(blocks) {
   const errors = [];
-  const eventBlock = Array.isArray(blocks)
-    ? blocks.find((block) => readTokenValue(block.parts?.[0]).toLowerCase() === 'when')
-    : null;
+  const eventBlocks = Array.isArray(blocks) ? blocks.filter((block) => isEventBlock(block)) : [];
 
-  if (!eventBlock) {
+  if (!eventBlocks.length) {
     return { program: null, errors: ['Missing a "When ..." event block at the top of the script.'] };
   }
+  const sections = [];
+  let currentSection = null;
+  let blockCounter = 0;
 
-  const eventName = readTokenValue(eventBlock.parts?.[1]).toLowerCase();
-  const eventTarget = readTokenValue(eventBlock.parts?.[3] ?? eventBlock.parts?.[2]);
-  const keyFilter = readTokenValue(eventBlock.parts?.[2]).toLowerCase();
-  if (!EVENT_LABELS.has(eventName)) errors.push(`Unsupported event "${eventName || 'unknown'}".`);
-  const hasTargetFilter = COLLISION_EVENT_LABELS.has(eventName)
-    && eventTarget
-    && eventTarget.toLowerCase() !== 'self';
-  const hasKeyFilter = KEY_EVENT_LABELS.has(eventName) && keyFilter;
-  const eventKey = hasTargetFilter
-    ? `${eventName}|${eventTarget}`
-    : hasKeyFilter
-      ? `${eventName}|${keyFilter}`
-      : eventName;
+  (blocks || []).forEach((block) => {
+    if (isEventBlock(block)) {
+      currentSection = {
+        eventName: normalizeSymbol(readTokenValue(block.parts?.[1])),
+        instructions: [],
+      };
+      sections.push(currentSection);
+      return;
+    }
 
-  const instructions = (blocks || [])
-    .filter((block) => block.id !== eventBlock.id)
-    .map((block, idx) => compileInstruction(block, errors, `Block ${idx + 1}`))
-    .filter(Boolean);
+    blockCounter += 1;
+    if (!currentSection) {
+      errors.push(`Block ${blockCounter}: Add a "When ..." event before "${readBlockLabel(block)}".`);
+      return;
+    }
 
-  if (!instructions.length) errors.push('Add at least one action or loop after the event block.');
+    const instruction = compileInstruction(block, errors, `Block ${blockCounter}`);
+    if (instruction) currentSection.instructions.push(instruction);
+  });
+
+  const events = {};
+  sections.forEach((section) => {
+    if (!EVENT_LABELS.has(section.eventName)) errors.push(`Unsupported event "${section.eventName || 'unknown'}".`);
+    if (!section.instructions.length) errors.push(`Add at least one action or loop after "When ${section.eventName}".`);
+    if (!events[section.eventName]) events[section.eventName] = [];
+    events[section.eventName].push(...section.instructions);
+  });
 
   return {
-    program: errors.length ? null : { events: { [eventKey]: instructions } },
+    program: errors.length ? null : { events },
     errors,
   };
 }

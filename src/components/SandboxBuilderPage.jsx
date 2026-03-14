@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Flame, Pencil, Star, X } from 'lucide-react';
+import { Flame, Pencil, Star, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -740,6 +740,29 @@ export default function SandboxBuilderPage({
     setPendingEventValue('');
   };
 
+  const removeEventSection = (eventBlockId) => {
+    if (!eventBlockId || mode === 'play') return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => {
+      const startIndex = blocks.findIndex((block) => block.id === eventBlockId);
+      if (startIndex === -1) return blocks;
+      let endIndex = blocks.length;
+      for (let index = startIndex + 1; index < blocks.length; index += 1) {
+        if (isEventBlock(blocks[index])) {
+          endIndex = index;
+          break;
+        }
+      }
+      return [...blocks.slice(0, startIndex), ...blocks.slice(endIndex)];
+    });
+    if (activeEventBlockId === eventBlockId) {
+      const fallbackSection = eventSections.find((section) => section.eventBlock.id !== eventBlockId) || null;
+      setActiveEventBlockId(fallbackSection?.eventBlock.id || null);
+      setSelectedBlock(`When ${fallbackSection ? getEventValue(fallbackSection.eventBlock) || 'add event' : 'add event'}`);
+    }
+    setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+  };
+
   const removeTopLevelBlock = (blockId) => {
     pushHistorySnapshot();
     updateSelectedScript((blocks) => blocks.filter((block) => block.id !== blockId));
@@ -767,8 +790,9 @@ export default function SandboxBuilderPage({
       setDraggingScriptBlock(payload);
       setTrashActive(false);
     });
-    draggingScriptPayloadRef.current = payload;
-    const dragPayload = JSON.stringify({ kind: 'script-block', ...payload });
+    const dragData = { kind: payload.kind || 'script-block', ...payload };
+    draggingScriptPayloadRef.current = dragData;
+    const dragPayload = JSON.stringify(dragData);
     e.dataTransfer.setData('application/json', dragPayload);
     e.dataTransfer.setData('text/plain', dragPayload);
     e.dataTransfer.effectAllowed = 'move';
@@ -1291,7 +1315,7 @@ export default function SandboxBuilderPage({
         className={`inline-flex max-w-[500px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-4 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
           active ? 'ring-4 ring-[#f6bfd1]/70' : ''
         }`}
-        draggable={mode !== 'play' && eventSections.length > 1}
+        draggable={mode !== 'play'}
         onDragStart={(e) => handleScriptBlockDragStart(e, { kind: 'event-thread', id: eventBlock.id })}
         onDragEnd={handleScriptBlockDragEnd}
       >
@@ -1496,6 +1520,35 @@ export default function SandboxBuilderPage({
             <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
               {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
               {renderAddEventPill()}
+            </div>
+          ) : null}
+
+          {draggingScriptBlock && mode !== 'play' ? (
+            <div
+              className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+              onDragOver={(e) => {
+                const payload = readDragPayload(e);
+                if (!payload || payload.kind === 'palette-template') return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (!trashActive) setTrashActive(true);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                if (trashActive) setTrashActive(false);
+              }}
+              onDrop={handleTrashDrop}
+            >
+              <div
+                className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                  trashActive
+                    ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                    : 'border-rose-200 bg-white/95 text-rose-500'
+                }`}
+                aria-label="Delete dragged item"
+              >
+                <Trash2 size={28} strokeWidth={2.6} />
+              </div>
             </div>
           ) : null}
 

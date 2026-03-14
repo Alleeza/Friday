@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Play, RotateCcw, Shapes, Square, Undo2, X } from 'lucide-react';
+import { Image, Play, RotateCcw, Save, Shapes, Square, Undo2, X } from 'lucide-react';
 import { backdropAssets, sandboxAssets } from '../data/sandboxAssets';
 
 function getVisualAsset(asset, runtimeSnapshot) {
@@ -15,47 +15,97 @@ function getTransform(asset) {
   return parts.join(' ') || 'none';
 }
 
-function buildSnapshot(placedAssets, selectedPlacedAssetKey, selectedBackdropId) {
+function buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState) {
   return {
     placedAssets: placedAssets.map((item) => ({ ...item })),
     selectedPlacedAssetKey,
-    selectedBackdropId,
+    backdropState: backdropState ? { ...backdropState } : null,
+  };
+}
+
+function normalizeSceneState(sceneState) {
+  return {
+    placedAssets: Array.isArray(sceneState?.placedAssets) ? sceneState.placedAssets.map((asset) => ({ ...asset })) : [],
+    selectedPlacedAssetKey: sceneState?.selectedPlacedAssetKey || null,
+    backdropState: sceneState?.backdropState ? { ...sceneState.backdropState } : null,
+  };
+}
+
+function getBackdropScaleBounds(canvasRect) {
+  const width = Math.max(canvasRect?.width || 0, 1);
+  const height = Math.max(canvasRect?.height || 0, 1);
+  const minScale = Math.max(0.45, 320 / width, 180 / height);
+  const maxScale = Math.min(2.25, Math.max(1.4, 1800 / width, 1000 / height));
+  return { minScale, maxScale };
+}
+
+function clampBackdropState(backdropState, canvasRect) {
+  if (!backdropState) return backdropState;
+  const bounds = getBackdropScaleBounds(canvasRect);
+  const width = canvasRect?.width || 0;
+  const height = canvasRect?.height || 0;
+  const scale = Math.max(bounds.minScale, Math.min(bounds.maxScale, backdropState.scale || 1));
+  const visibleOverflowX = Math.max(0, (width * scale - width) / 2);
+  const visibleOverflowY = Math.max(0, (height * scale - height) / 2);
+  const dragAllowanceX = width * 0.35;
+  const dragAllowanceY = height * 0.35;
+  const maxOffsetX = visibleOverflowX + dragAllowanceX;
+  const maxOffsetY = visibleOverflowY + dragAllowanceY;
+  return {
+    ...backdropState,
+    scale,
+    x: Math.max(-maxOffsetX, Math.min(maxOffsetX, backdropState.x || 0)),
+    y: Math.max(-maxOffsetY, Math.min(maxOffsetY, backdropState.y || 0)),
   };
 }
 
 export default function GamePreviewCanvas({
   mode = 'edit',
   runtimeSnapshot,
+  initialSceneState,
   selectedInstanceKey,
   onSceneChange,
   onSelectedInstanceChange,
   onPlay,
   onStop,
+  onSave,
+  saveState = 'idle',
   onSpriteClick,
   currentXp = 100,
   suppressSelectionChrome = false,
 }) {
   const canvasRef = useRef(null);
+  const backdropRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
   const movedDuringDragRef = useRef(false);
   const resizeStartRef = useRef(null);
   const resizedDuringDragRef = useRef(false);
+  const backdropMoveStartRef = useRef(null);
+  const backdropMovedDuringDragRef = useRef(false);
+  const backdropResizeStartRef = useRef(null);
+  const backdropResizedDuringDragRef = useRef(false);
+  const initialSceneRef = useRef(normalizeSceneState(initialSceneState));
   const [trayOpen, setTrayOpen] = useState(false);
   const [trayTab, setTrayTab] = useState('sprites');
-  const [placedAssets, setPlacedAssets] = useState([]);
-  const [selectedPlacedAssetKey, setSelectedPlacedAssetKey] = useState(null);
-  const [selectedBackdropId, setSelectedBackdropId] = useState(null);
+  const [placedAssets, setPlacedAssets] = useState(initialSceneRef.current.placedAssets);
+  const [selectedPlacedAssetKey, setSelectedPlacedAssetKey] = useState(initialSceneRef.current.selectedPlacedAssetKey);
+  const [backdropState, setBackdropState] = useState(initialSceneRef.current.backdropState);
   const [pastStates, setPastStates] = useState([]);
   const [draggingPlacedAssetKey, setDraggingPlacedAssetKey] = useState(null);
   const [resizingPlacedAssetKey, setResizingPlacedAssetKey] = useState(null);
+  const [draggingBackdrop, setDraggingBackdrop] = useState(false);
+  const [resizingBackdrop, setResizingBackdrop] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [backdropDragOffset, setBackdropDragOffset] = useState({ x: 0, y: 0 });
 
   const trayAssets = useMemo(
     () => (trayTab === 'backdrops' ? backdropAssets : sandboxAssets),
     [trayTab]
   );
   const selectedPlacedAsset = placedAssets.find((asset) => asset.key === selectedPlacedAssetKey) || null;
-  const selectedBackdrop = backdropAssets.find((asset) => asset.id === selectedBackdropId) || null;
+  const selectedBackdrop = backdropState
+    ? backdropAssets.find((asset) => asset.id === backdropState.id) || null
+    : null;
 
   const updateSelection = (nextKey) => {
     setSelectedPlacedAssetKey(nextKey);
@@ -64,16 +114,22 @@ export default function GamePreviewCanvas({
 
   useEffect(() => {
     if (selectedInstanceKey === undefined) return;
-    setSelectedPlacedAssetKey((current) => (current === (selectedInstanceKey || null) ? current : selectedInstanceKey || null));
+    setSelectedPlacedAssetKey((current) => (
+      current === (selectedInstanceKey || null) ? current : selectedInstanceKey || null
+    ));
   }, [selectedInstanceKey]);
 
   useEffect(() => {
+    const sceneState = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
     onSceneChange?.({
       instances: placedAssets,
       selectedInstanceKey: selectedPlacedAssetKey,
-      selectedBackdrop,
+      selectedBackdrop: selectedBackdrop
+        ? { ...selectedBackdrop, ...backdropState }
+        : null,
+      sceneState,
     });
-  }, [placedAssets, selectedBackdrop, selectedPlacedAssetKey, onSceneChange]);
+  }, [backdropState, placedAssets, selectedBackdrop, selectedPlacedAssetKey, onSceneChange]);
 
   const onAssetDragStart = (e, asset, kind) => {
     if (mode !== 'edit') return;
@@ -111,9 +167,15 @@ export default function GamePreviewCanvas({
   };
 
   const applyBackdrop = (backdrop) => {
-    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, selectedBackdropId);
+    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
     setPastStates((prev) => [...prev, snapshot]);
-    setSelectedBackdropId(backdrop.id);
+    setBackdropState(clampBackdropState({
+      id: backdrop.id,
+      x: 0,
+      y: 0,
+      scale: 1,
+      locked: false,
+    }, canvasRef.current?.getBoundingClientRect()));
     updateSelection(null);
   };
 
@@ -126,7 +188,7 @@ export default function GamePreviewCanvas({
     try {
       const payload = JSON.parse(raw);
       if (payload?.kind === 'backdrop' && payload.asset) {
-        if (payload.asset.id !== selectedBackdropId) applyBackdrop(payload.asset);
+        if (payload.asset.id !== backdropState?.id) applyBackdrop(payload.asset);
         return;
       }
 
@@ -146,7 +208,7 @@ export default function GamePreviewCanvas({
         rotation: 0,
         key: `${asset.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       };
-      const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, selectedBackdropId);
+      const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
       setPastStates((prev) => [...prev, snapshot]);
       setPlacedAssets((prev) => [...prev, placed]);
       updateSelection(placed.key);
@@ -161,21 +223,27 @@ export default function GamePreviewCanvas({
     setPastStates((prev) => prev.slice(0, -1));
     setPlacedAssets(previous.placedAssets);
     updateSelection(previous.selectedPlacedAssetKey);
-    setSelectedBackdropId(previous.selectedBackdropId);
+    setBackdropState(previous.backdropState);
   };
 
   const handleRestart = () => {
-    if (mode !== 'edit' || (!placedAssets.length && !selectedBackdropId)) return;
+    if (mode !== 'edit' || (!placedAssets.length && !backdropState)) return;
     setPlacedAssets([]);
     updateSelection(null);
-    setSelectedBackdropId(null);
+    setBackdropState(null);
     setPastStates([]);
     setDraggingPlacedAssetKey(null);
     setResizingPlacedAssetKey(null);
+    setDraggingBackdrop(false);
+    setResizingBackdrop(false);
     moveStartSnapshotRef.current = null;
     resizeStartRef.current = null;
+    backdropMoveStartRef.current = null;
+    backdropResizeStartRef.current = null;
     movedDuringDragRef.current = false;
     resizedDuringDragRef.current = false;
+    backdropMovedDuringDragRef.current = false;
+    backdropResizedDuringDragRef.current = false;
   };
 
   const handlePlacedAssetPointerDown = (e, asset) => {
@@ -185,21 +253,67 @@ export default function GamePreviewCanvas({
     updateSelection(asset.key);
     setDraggingPlacedAssetKey(asset.key);
     setDragOffset({ x: e.clientX - rect.left - asset.x, y: e.clientY - rect.top - asset.y });
-    moveStartSnapshotRef.current = buildSnapshot(placedAssets, selectedPlacedAssetKey, selectedBackdropId);
+    moveStartSnapshotRef.current = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
     movedDuringDragRef.current = false;
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
 
+  const handleBackdropPointerDown = (e) => {
+    if (mode !== 'edit' || !canvasRef.current || !backdropState || backdropState.locked) return;
+    e.stopPropagation();
+    const rect = canvasRef.current.getBoundingClientRect();
+    setDraggingBackdrop(true);
+    setBackdropDragOffset({
+      x: e.clientX - rect.left - backdropState.x,
+      y: e.clientY - rect.top - backdropState.y,
+    });
+    backdropMoveStartRef.current = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    backdropMovedDuringDragRef.current = false;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const lockBackdropEditing = () => {
+    if (!backdropState || backdropState.locked) return;
+    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    setPastStates((prev) => [...prev, snapshot]);
+    setBackdropState((prev) => (prev ? { ...clampBackdropState(prev, canvasRef.current?.getBoundingClientRect()), locked: true } : prev));
+  };
+
   const handleCanvasPointerMove = (e) => {
     if (!canvasRef.current || mode !== 'edit') return;
+
+    if (resizingBackdrop && backdropResizeStartRef.current && backdropState) {
+      const start = backdropResizeStartRef.current;
+      const bounds = getBackdropScaleBounds(canvasRef.current.getBoundingClientRect());
+      const deltaX = e.clientX - start.pointerX;
+      const deltaY = e.clientY - start.pointerY;
+      const resizeDelta = ((start.directionX * deltaX) + (start.directionY * deltaY)) / 320;
+      const nextScale = Math.max(bounds.minScale, Math.min(bounds.maxScale, Math.round((start.scale + resizeDelta) * 100) / 100));
+      setBackdropState((prev) => (prev ? clampBackdropState({ ...prev, scale: nextScale }, canvasRef.current?.getBoundingClientRect()) : prev));
+      backdropResizedDuringDragRef.current = true;
+      return;
+    }
+
+    if (draggingBackdrop && backdropState) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left - backdropDragOffset.x;
+      const y = e.clientY - rect.top - backdropDragOffset.y;
+      setBackdropState((prev) => (prev ? clampBackdropState({ ...prev, x, y }, canvasRef.current?.getBoundingClientRect()) : prev));
+      backdropMovedDuringDragRef.current = true;
+      return;
+    }
+
     if (resizingPlacedAssetKey && resizeStartRef.current) {
       const start = resizeStartRef.current;
       const deltaY = e.clientY - start.pointerY;
       const nextScale = Math.max(0.6, Math.min(1.8, Math.round((start.scale - deltaY / 220) * 10) / 10));
-      setPlacedAssets((prev) => prev.map((asset) => asset.key !== resizingPlacedAssetKey ? asset : { ...asset, scale: nextScale }));
+      setPlacedAssets((prev) => prev.map((asset) => (
+        asset.key !== resizingPlacedAssetKey ? asset : { ...asset, scale: nextScale }
+      )));
       resizedDuringDragRef.current = true;
       return;
     }
+
     if (!draggingPlacedAssetKey) return;
     const draggingAsset = placedAssets.find((asset) => asset.key === draggingPlacedAssetKey);
     if (!draggingAsset) return;
@@ -209,20 +323,46 @@ export default function GamePreviewCanvas({
     const pointerY = e.clientY - rect.top;
     const x = Math.max(frameHalf, Math.min(pointerX - dragOffset.x, rect.width - frameHalf));
     const y = Math.max(frameHalf, Math.min(pointerY - dragOffset.y, rect.height - frameHalf));
-    setPlacedAssets((prev) => prev.map((asset) => asset.key !== draggingPlacedAssetKey ? asset : { ...asset, x, y }));
+    setPlacedAssets((prev) => prev.map((asset) => (
+      asset.key !== draggingPlacedAssetKey ? asset : { ...asset, x, y }
+    )));
     movedDuringDragRef.current = true;
   };
 
   const handleCanvasPointerUp = () => {
     if (mode !== 'edit') return;
+
+    if (draggingBackdrop) {
+      if (backdropMovedDuringDragRef.current && backdropMoveStartRef.current) {
+        setPastStates((prev) => [...prev, backdropMoveStartRef.current]);
+      }
+      setDraggingBackdrop(false);
+      backdropMoveStartRef.current = null;
+      backdropMovedDuringDragRef.current = false;
+    }
+
+    if (resizingBackdrop) {
+      if (backdropResizedDuringDragRef.current && backdropResizeStartRef.current?.snapshot) {
+        setPastStates((prev) => [...prev, backdropResizeStartRef.current.snapshot]);
+      }
+      setResizingBackdrop(false);
+      backdropResizeStartRef.current = null;
+      backdropResizedDuringDragRef.current = false;
+    }
+
     if (draggingPlacedAssetKey) {
-      if (movedDuringDragRef.current && moveStartSnapshotRef.current) setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
+      if (movedDuringDragRef.current && moveStartSnapshotRef.current) {
+        setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
+      }
       setDraggingPlacedAssetKey(null);
       moveStartSnapshotRef.current = null;
       movedDuringDragRef.current = false;
     }
+
     if (resizingPlacedAssetKey) {
-      if (resizedDuringDragRef.current && resizeStartRef.current?.snapshot) setPastStates((prev) => [...prev, resizeStartRef.current.snapshot]);
+      if (resizedDuringDragRef.current && resizeStartRef.current?.snapshot) {
+        setPastStates((prev) => [...prev, resizeStartRef.current.snapshot]);
+      }
       setResizingPlacedAssetKey(null);
       resizeStartRef.current = null;
       resizedDuringDragRef.current = false;
@@ -237,11 +377,53 @@ export default function GamePreviewCanvas({
     resizeStartRef.current = {
       pointerY: e.clientY,
       scale: asset.scale || 1,
-      snapshot: buildSnapshot(placedAssets, asset.key, selectedBackdropId),
+      snapshot: buildSnapshot(placedAssets, asset.key, backdropState),
     };
     resizedDuringDragRef.current = false;
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
+
+  const handleBackdropResizePointerDown = (e) => {
+    if (mode !== 'edit' || !backdropState || backdropState.locked) return;
+    e.stopPropagation();
+    setResizingBackdrop(true);
+    backdropResizeStartRef.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      scale: backdropState.scale || 1,
+      directionX: Number(e.currentTarget.dataset.directionX || 1),
+      directionY: Number(e.currentTarget.dataset.directionY || 1),
+      snapshot: buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState),
+    };
+    backdropResizedDuringDragRef.current = false;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  useEffect(() => {
+    if (mode !== 'edit' || (!draggingBackdrop && !resizingBackdrop)) return undefined;
+    const onWindowPointerMove = (event) => handleCanvasPointerMove(event);
+    const onWindowPointerUp = () => handleCanvasPointerUp();
+    window.addEventListener('pointermove', onWindowPointerMove);
+    window.addEventListener('pointerup', onWindowPointerUp);
+    window.addEventListener('pointercancel', onWindowPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onWindowPointerMove);
+      window.removeEventListener('pointerup', onWindowPointerUp);
+      window.removeEventListener('pointercancel', onWindowPointerUp);
+    };
+  }, [draggingBackdrop, resizingBackdrop, mode]);
+
+  useEffect(() => {
+    if (mode !== 'edit' || !backdropState || backdropState.locked || draggingBackdrop || resizingBackdrop) return undefined;
+    const onWindowPointerDown = (event) => {
+      if (backdropRef.current?.contains(event.target)) return;
+      lockBackdropEditing();
+    };
+    window.addEventListener('pointerdown', onWindowPointerDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', onWindowPointerDown, true);
+    };
+  }, [backdropState, draggingBackdrop, resizingBackdrop, mode]);
 
   const handleSelectedAssetWheel = (e, asset) => {
     if (mode !== 'edit') return;
@@ -249,13 +431,23 @@ export default function GamePreviewCanvas({
     const currentScale = asset.scale || 1;
     const nextScale = Math.max(0.6, Math.min(1.8, Math.round((currentScale + (e.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
     if (nextScale === currentScale) return;
-    const snapshot = buildSnapshot(placedAssets, asset.key, selectedBackdropId);
+    const snapshot = buildSnapshot(placedAssets, asset.key, backdropState);
     setPastStates((prev) => [...prev, snapshot]);
-    setPlacedAssets((prev) => prev.map((item) => item.key === asset.key ? { ...item, scale: nextScale } : item));
+    setPlacedAssets((prev) => prev.map((item) => (
+      item.key === asset.key ? { ...item, scale: nextScale } : item
+    )));
   };
 
   const visibleAssets = placedAssets.map((asset) => getVisualAsset(asset, runtimeSnapshot));
   const showSelectionChrome = mode === 'edit' && !suppressSelectionChrome;
+  const backdropTransform = backdropState
+    ? `translate(${backdropState.x}px, ${backdropState.y}px) scale(${backdropState.scale})`
+    : 'none';
+  const saveLabel = saveState === 'saving'
+    ? 'Saving...'
+    : saveState === 'saved'
+      ? 'Saved'
+      : 'Save';
 
   return (
     <section
@@ -272,8 +464,50 @@ export default function GamePreviewCanvas({
       onDrop={onCanvasDrop}
     >
       {selectedBackdrop ? (
-        <div className="pointer-events-none absolute inset-0">
-          <img src={selectedBackdrop.src} alt={selectedBackdrop.label} className="h-full w-full object-cover" />
+        <div
+          ref={backdropRef}
+          className={`absolute left-1/2 top-1/2 z-0 aspect-[16/9] w-full max-w-none -translate-x-1/2 -translate-y-1/2 ${mode === 'edit' && !backdropState?.locked ? 'cursor-grab' : ''} ${draggingBackdrop ? 'cursor-grabbing' : ''}`}
+          style={{ transform: `translate(-50%, -50%) ${backdropTransform}` }}
+          onPointerDown={handleBackdropPointerDown}
+        >
+          <img src={selectedBackdrop.src} alt={selectedBackdrop.label} className="h-full w-full select-none object-cover" draggable={false} onDragStart={(e) => e.preventDefault()} />
+          {mode === 'edit' && backdropState && !backdropState.locked ? (
+            <>
+              <div className="pointer-events-none absolute inset-0 border-[3px] border-[#19a2ff]" />
+              <button
+                type="button"
+                onPointerDown={handleBackdropResizePointerDown}
+                data-direction-x="-1"
+                data-direction-y="-1"
+                className="absolute -left-[7px] -top-[7px] z-10 h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white"
+                aria-label="Resize backdrop"
+              />
+              <button
+                type="button"
+                onPointerDown={handleBackdropResizePointerDown}
+                data-direction-x="1"
+                data-direction-y="-1"
+                className="absolute -right-[7px] -top-[7px] z-10 h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white"
+                aria-label="Resize backdrop"
+              />
+              <button
+                type="button"
+                onPointerDown={handleBackdropResizePointerDown}
+                data-direction-x="-1"
+                data-direction-y="1"
+                className="absolute -bottom-[7px] -left-[7px] z-10 h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white"
+                aria-label="Resize backdrop"
+              />
+              <button
+                type="button"
+                onPointerDown={handleBackdropResizePointerDown}
+                data-direction-x="1"
+                data-direction-y="1"
+                className="absolute -bottom-[7px] -right-[7px] z-10 h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white"
+                aria-label="Resize backdrop"
+              />
+            </>
+          ) : null}
         </div>
       ) : null}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
@@ -281,7 +515,16 @@ export default function GamePreviewCanvas({
 
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
         <button type="button" onClick={handleUndo} disabled={mode !== 'edit' || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
-        <button type="button" onClick={handleRestart} disabled={mode !== 'edit' || (!placedAssets.length && !selectedBackdropId)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
+        <button type="button" onClick={handleRestart} disabled={mode !== 'edit' || (!placedAssets.length && !backdropState)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saveState === 'saving'}
+          className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          <Save size={24} />
+          {saveLabel}
+        </button>
         {mode === 'play' ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={onPlay} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
       </div>
 
@@ -321,7 +564,7 @@ export default function GamePreviewCanvas({
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p>
-              <p className="mt-1 text-sm font-bold text-slate-500">{trayTab === 'backdrops' ? 'Drop a backdrop anywhere on the sandbox to update the scene background.' : 'Emoji assets stay interactive and can be scripted like before.'}</p>
+              <p className="mt-1 text-sm font-bold text-slate-500">{trayTab === 'backdrops' ? 'Pick a backdrop, adjust it once, then lock it into place.' : 'Emoji assets stay interactive and can be scripted like before.'}</p>
             </div>
             <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
               <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>
@@ -339,19 +582,13 @@ export default function GamePreviewCanvas({
                     draggable
                     onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')}
                     onClick={() => applyBackdrop(asset)}
-                    className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${selectedBackdropId === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`}
+                    className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`}
                     title={asset.label}
                   >
                     <div className="aspect-[16/9] w-full bg-slate-200">
                       <img src={asset.src} alt={asset.label} className="h-full w-full object-cover" />
                     </div>
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <div>
-                        <div className="text-sm font-extrabold text-[#475569]">{asset.label}</div>
-                        <div className="text-xs font-bold uppercase tracking-[0.08em] text-slate-400">Click or drag to apply</div>
-                      </div>
-                      <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-extrabold text-slate-500 shadow">{asset.previewLabel}</span>
-                    </div>
+                    <div className="px-3 py-2 text-sm font-extrabold text-[#475569]">{asset.label}</div>
                   </button>
                 ))}
               </div>

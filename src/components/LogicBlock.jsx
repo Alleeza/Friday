@@ -72,6 +72,7 @@ export default function LogicBlock({
   draggable = false,
   onDragStart,
   onDragEnd,
+  className = '',
 }) {
   const tones = {
     game: 'border-[#9f2556] bg-[#c12f69]',
@@ -110,7 +111,7 @@ export default function LogicBlock({
       onDragEnd={onDragEnd}
       className={`flex w-full cursor-pointer items-center gap-2 rounded-[20px] border-b-4 px-4 py-2.5 text-left font-extrabold text-white shadow-[0_4px_0_rgba(0,0,0,0.16)] transition hover:brightness-105 ${
         tones[tone]
-      } ${selected ? 'ring-4 ring-sky-200' : ''} ${compact ? 'text-base' : 'text-xl'}`}
+      } ${selected ? 'ring-4 ring-sky-200' : ''} ${compact ? 'text-base' : 'text-xl'} ${className}`}
     >
       <span className={`h-6 w-1.5 shrink-0 rounded-full ${leftPill} opacity-90`} />
       <span className="flex flex-wrap items-center gap-2 leading-none">

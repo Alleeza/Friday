@@ -33,12 +33,7 @@ const MAX_HISTORY = 20;
  * - Sending a new message while one is streaming will abort the in-flight request first.
  */
 export function useAIChat({ aiService, contextData }) {
-  const [messages, setMessages] = useState([
-    {
-      role: 'ai',
-      text: "Hey! I'm Questy 👋 I'm here to help you build your game. Place some objects on the canvas and start adding blocks to their scripts. Ask me anything!",
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
 
@@ -85,7 +80,9 @@ export function useAIChat({ aiService, contextData }) {
         // and apply sliding window to avoid exceeding token limits)
         const historySnapshot = await new Promise((resolve) => {
           setMessages((prev) => {
-            const aiMessages = prev.filter((m) => m.role === 'you' || m.role === 'ai');
+            const aiMessages = prev.filter(
+              (m) => (m.role === 'you' || m.role === 'ai') && m.text !== ''
+            );
             // Sliding window: keep last MAX_HISTORY messages (includes the new user msg we just added)
             const windowed = aiMessages.slice(-MAX_HISTORY);
             resolve(windowed);

@@ -1,64 +1,72 @@
 const PROJECT_STATE_ENDPOINT = '/api/project-state';
 const PUBLISHED_PROJECT_ENDPOINT = '/api/published-project';
-const LOCAL_STORAGE_KEY = 'friday-codequest-project-state';
+const PROJECT_ID_STORAGE_KEY = 'friday-codequest-project-id';
 
 function canUseLocalStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }
 
-function readLocalProjectState() {
-  if (!canUseLocalStorage()) return null;
-  const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-  return raw ? JSON.parse(raw) : null;
+function createProjectId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `project-${Date.now()}`;
 }
 
-function writeLocalProjectState(project) {
-  if (!canUseLocalStorage()) return project;
-  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(project));
-  return project;
+function getProjectId() {
+  if (!canUseLocalStorage()) {
+    return createProjectId();
+  }
+
+  const existingProjectId = window.localStorage.getItem(PROJECT_ID_STORAGE_KEY);
+  if (existingProjectId) return existingProjectId;
+
+  const nextProjectId = createProjectId();
+  window.localStorage.setItem(PROJECT_ID_STORAGE_KEY, nextProjectId);
+  return nextProjectId;
 }
 
 export async function loadProjectState() {
-  try {
-    const response = await fetch(PROJECT_STATE_ENDPOINT);
-    if (!response.ok) {
-      throw new Error(`Load failed with status ${response.status}`);
-    }
-    const payload = await response.json();
-    const project = payload.project || null;
-    if (project) writeLocalProjectState(project);
-    return project;
-  } catch {
-    return readLocalProjectState();
+  const response = await fetch(`${PROJECT_STATE_ENDPOINT}?projectId=${encodeURIComponent(getProjectId())}`);
+
+  if (!response.ok) {
+    throw new Error(`Load failed with status ${response.status}`);
   }
+
+  const payload = await response.json();
+  return payload.project || null;
 }
 
 export async function saveProjectState(project) {
-  try {
-    const response = await fetch(PROJECT_STATE_ENDPOINT, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ project }),
-    });
+  const response = await fetch(PROJECT_STATE_ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      projectId: getProjectId(),
+      project,
+    }),
+  });
 
-    if (!response.ok) {
-      throw new Error(`Save failed with status ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const savedProject = payload.project || null;
-    if (savedProject) writeLocalProjectState(savedProject);
-    return savedProject;
-  } catch {
-    return writeLocalProjectState(project);
+  if (!response.ok) {
+    throw new Error(`Save failed with status ${response.status}`);
   }
+
+  const payload = await response.json();
+  return payload.project || null;
 }
 
 export async function publishSavedProject() {
   const response = await fetch(PUBLISHED_PROJECT_ENDPOINT, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      projectId: getProjectId(),
+    }),
   });
 
   if (!response.ok) {

@@ -42,8 +42,7 @@ async function runAiCheck(provider, condition, workspaceState) {
  * Programmatic checks (hasAsset, hasBlockOnAsset, etc.) run on every workspace change instantly.
  * AI checks run debounced (4.5s) only when programmatic checks first pass.
  *
- * Tracks which keys were auto-completed so they can be reverted if checks stop passing.
- * Manually toggled keys are never reverted by this hook.
+ * Tracks completed keys so they can be reverted if checks stop passing.
  *
  * @param {{
  *   provider: import('../ai/providers/AIProvider.js').AIProvider | null,
@@ -54,7 +53,6 @@ async function runAiCheck(provider, condition, workspaceState) {
  *     runtimeSnapshot: object | null,
  *   } | null,
  *   completedStepKeys: Record<string, boolean>,
- *   manualStepKeys: Record<string, boolean>,
  *   onStepAutoCompleted: (stepKey: string) => void,
  *   onStepAutoReverted: (stepKey: string) => void,
  * }} options
@@ -64,7 +62,6 @@ export function useStepDetection({
   currentStage,
   workspaceState,
   completedStepKeys,
-  manualStepKeys,
   onStepAutoCompleted,
   onStepAutoReverted,
 }) {
@@ -83,7 +80,6 @@ export function useStepDetection({
     currentStage.steps.forEach((_, stepIndex) => {
       const checks = currentStage.stepChecks?.[stepIndex] ?? [];
       const stepKey = `${currentStage.id}:${stepIndex}`;
-      const isManual = Boolean(manualStepKeys[stepKey]);
       const isCompleted = Boolean(completedStepKeys[stepKey]);
 
       if (checks.length === 0) {
@@ -113,21 +109,21 @@ export function useStepDetection({
           // Queue for AI evaluation
           pendingAiRef.current[stepKey] = pendingAiChecks;
         } else {
-          // Programmatic checks failed — revert if auto-completed and not manually set
+          // Programmatic checks failed — revert any completed state
           delete pendingAiRef.current[stepKey];
-          if (isCompleted && !isManual) {
+          if (isCompleted) {
             onStepAutoReverted(stepKey);
           }
         }
       } else {
         // Programmatic checks failed, no AI pending — revert if auto-completed
         delete pendingAiRef.current[stepKey];
-        if (isCompleted && !isManual) {
+        if (isCompleted) {
           onStepAutoReverted(stepKey);
         }
       }
     });
-  }, [workspaceState, currentStage, completedStepKeys, manualStepKeys, onStepAutoCompleted, onStepAutoReverted]);
+  }, [workspaceState, currentStage, completedStepKeys, onStepAutoCompleted, onStepAutoReverted]);
 
   // ---------------------------------------------------------------------------
   // Effect 2: AI checks — debounced, only for steps queued in pendingAiRef

@@ -1,7 +1,17 @@
 import { useState, useRef, useCallback } from 'react';
+// ── Profanity filter ────────────────────────────────────────────────────────
+// Applied here in the chat hook as the first line of defence. If a message
+// contains offensive language the user sees an immediate warning, and the
+// cleaned (censored) version of the message is forwarded to the AI.
+// A second filter layer also runs inside AIService._prepareMessages() for
+// defence-in-depth.
+import { cleanMessage, containsProfanity } from '../utils/profanityFilter.js';
 
 /** Maximum number of messages kept in the AI's conversation history. */
 const MAX_HISTORY = 20;
+
+/** Warning shown to the user when profanity is detected. */
+const PROFANITY_WARNING = 'Please avoid offensive language. Your message has been filtered.';
 
 /**
  * useAIChat — React hook that manages AI chat state and streaming.
@@ -31,6 +41,9 @@ const MAX_HISTORY = 20;
  * - `addNotification` appends a system message (e.g. "Added block to Bunny") without calling the AI.
  * - System messages are shown in the UI but excluded from conversation history sent to the AI.
  * - Sending a new message while one is streaming will abort the in-flight request first.
+ * - PROFANITY FILTER: If the user's message contains offensive words, a system
+ *   warning is shown and the offensive words are replaced with "****" before the
+ *   message is forwarded to the AI.
  */
 export function useAIChat({ aiService, contextData }) {
   const [messages, setMessages] = useState([]);
@@ -62,16 +75,33 @@ export function useAIChat({ aiService, contextData }) {
     async (text) => {
       if (!text.trim()) return;
 
+      // ── Profanity filter (first line of defence) ──────────────────────
+      // Check the raw input for offensive language. If detected:
+      //   1. Show a system warning so the user knows their message was filtered
+      //   2. Replace offensive words with "****" in the message that is displayed
+      //      and forwarded to the AI
+      const rawText = text.trim();
+      const hasProfanity = containsProfanity(rawText);
+      const safeText = hasProfanity ? cleanMessage(rawText) : rawText;
+
       // Abort any in-flight stream before starting a new one
       abortControllerRef.current?.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // Append user message and a placeholder for the AI response
-      const userMessage = { role: 'you', text: text.trim() };
+      // Append user message (cleaned if necessary) and a placeholder for the AI response
+      const userMessage = { role: 'you', text: safeText };
       const aiPlaceholder = { role: 'ai', text: '' };
 
-      setMessages((prev) => [...prev, userMessage, aiPlaceholder]);
+      setMessages((prev) => {
+        const next = [...prev];
+        // If profanity was detected, insert a system warning before the user message
+        if (hasProfanity) {
+          next.push({ role: 'system', text: PROFANITY_WARNING });
+        }
+        next.push(userMessage, aiPlaceholder);
+        return next;
+      });
       setIsStreaming(true);
       setError(null);
 

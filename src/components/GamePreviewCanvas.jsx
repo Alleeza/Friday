@@ -86,6 +86,8 @@ export default function GamePreviewCanvas({
   const canvasRef = useRef(null);
   const backdropRef = useRef(null);
   const controlsRef = useRef(null);
+  const trayRef = useRef(null);
+  const trayToggleRef = useRef(null);
   const trashZoneRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
   const movedDuringDragRef = useRef(false);
@@ -95,6 +97,7 @@ export default function GamePreviewCanvas({
   const backdropMovedDuringDragRef = useRef(false);
   const backdropResizeStartRef = useRef(null);
   const backdropResizedDuringDragRef = useRef(false);
+  const onSceneChangeRef = useRef(onSceneChange);
   const initialSceneRef = useRef(normalizeSceneState(initialSceneState));
   const [trayOpen, setTrayOpen] = useState(false);
   const [trayTab, setTrayTab] = useState('sprites');
@@ -164,6 +167,10 @@ export default function GamePreviewCanvas({
   };
 
   useEffect(() => {
+    onSceneChangeRef.current = onSceneChange;
+  }, [onSceneChange]);
+
+  useEffect(() => {
     if (selectedInstanceKey === undefined) return;
     setSelectedPlacedAssetKey((current) => (
       current === (selectedInstanceKey || null) ? current : selectedInstanceKey || null
@@ -171,14 +178,35 @@ export default function GamePreviewCanvas({
   }, [selectedInstanceKey]);
 
   useEffect(() => {
+    if (!isEditMode || !trayOpen) return undefined;
+
+    const handleWindowPointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (trayRef.current?.contains(target)) return;
+      if (trayToggleRef.current?.contains(target)) return;
+      setTrayOpen(false);
+    };
+
+    window.addEventListener('pointerdown', handleWindowPointerDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', handleWindowPointerDown, true);
+    };
+  }, [isEditMode, trayOpen]);
+
+  useEffect(() => {
     const sceneState = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-    onSceneChange?.({
+    const currentSelectedBackdrop = backdropState
+      ? backdropAssets.find((asset) => asset.id === backdropState.id) || null
+      : null;
+
+    onSceneChangeRef.current?.({
       instances: placedAssets,
       selectedInstanceKey: selectedPlacedAssetKey,
-      selectedBackdrop: selectedBackdrop ? { ...selectedBackdrop, ...backdropState } : null,
+      selectedBackdrop: currentSelectedBackdrop ? { ...currentSelectedBackdrop, ...backdropState } : null,
       sceneState,
     });
-  }, [backdropState, placedAssets, selectedBackdrop, selectedPlacedAssetKey, onSceneChange]);
+  }, [backdropState, placedAssets, selectedPlacedAssetKey]);
 
   const onAssetDragStart = (e, asset, kind = 'sprite') => {
     if (!isEditMode) return;
@@ -670,10 +698,10 @@ export default function GamePreviewCanvas({
       })}
 
       {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
-      {showTrayToggle && isEditMode ? <button onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
+      {showTrayToggle && isEditMode ? <button ref={trayToggleRef} onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
 
       {trayOpen && isEditMode ? (
-        <div className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]">
+        <div ref={trayRef} className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p>

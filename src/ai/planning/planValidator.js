@@ -257,6 +257,10 @@ export function validateSemanticAlignment(plan, {
       checks.forEach((check) => {
         if (!check || typeof check.type !== 'string') return;
 
+        if (check.type === 'aiCheck') {
+          issues.push(`${prefix}: aiCheck is disabled for the MVP; rewrite this step to use only measurable programmatic checks or []`);
+        }
+
         if (!knownCheckTypes.has(check.type)) {
           issues.push(`${prefix}: unsupported check type "${check.type}"`);
         }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -243,10 +243,14 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const eventStartParts = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts || [];
   const rawSelectedEventLeft = readTokenValue(eventStartParts[2]);
   const rawSelectedEventRight = readTokenValue(eventStartParts[3] ?? eventStartParts[2]);
+  const rawSelectedTappedObject = readTokenValue(eventStartParts[2]);
   const rawSelectedPressedKey = normalizeKeyPressValue(readTokenValue(eventStartParts[2]));
   const selectedPressedKey = keyPressOptions.some((option) => option.value === rawSelectedPressedKey)
     ? rawSelectedPressedKey
     : keyPressOptions[0].value;
+  const selectedTappedObject = assetOptions.some((option) => option.value === rawSelectedTappedObject)
+    ? rawSelectedTappedObject
+    : (assetOptions[0]?.value || 'Self');
   const selectedEventLeft = assetOptions.some((option) => option.value === rawSelectedEventLeft)
     ? rawSelectedEventLeft
     : (assetOptions[0]?.value || 'Self');
@@ -398,6 +402,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     pushHistorySnapshot();
     updateSelectedScript((blocks) => blocks.map((block) => {
       if (block.id !== 'event-start') return block;
+      if (nextEvent === 'object is tapped') {
+        return { ...block, parts: ['When', nextEvent, { type: 'asset', value: selectedTappedObject }] };
+      }
       if (nextEvent === 'key is pressed') {
         return { ...block, parts: ['When', nextEvent, { type: 'dropdown', value: selectedPressedKey, options: keyPressOptions.map((option) => option.value) }] };
       }
@@ -412,6 +419,10 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     }
     if (nextEvent === 'key is pressed') {
       setSelectedBlock(`When ${nextEvent} ${selectedPressedKey}`);
+      return;
+    }
+    if (nextEvent === 'object is tapped') {
+      setSelectedBlock(`When ${selectedTappedObject} ${nextEvent}`);
       return;
     }
     setSelectedBlock(`When ${nextEvent}`);
@@ -448,6 +459,17 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
       return { ...block, parts: ['When', selectedEvent, { type: 'dropdown', value: nextKey, options: keyPressOptions.map((option) => option.value) }] };
     }));
     setSelectedBlock(`When ${selectedEvent} ${nextKey}`);
+  };
+
+  const handleTappedObjectChange = (nextObject) => {
+    if (!editorInstanceKey || mode === 'play') return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => blocks.map((block) => {
+      if (block.id !== 'event-start') return block;
+      if (selectedEvent !== 'object is tapped') return block;
+      return { ...block, parts: ['When', selectedEvent, { type: 'asset', value: nextObject }] };
+    }));
+    setSelectedBlock(`When ${nextObject} ${selectedEvent}`);
   };
 
   const removeTopLevelBlock = (blockId) => {
@@ -899,7 +921,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
             <div
               ref={quickEditorRef}
-              className="absolute z-30 inline-flex max-w-[560px] items-center gap-3 rounded-[22px] border border-[#e5e7eb] bg-white pl-4 pr-4 py-2.5 text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
+              className="absolute z-30 inline-flex max-w-[620px] items-center gap-3 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-4 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
               style={quickEditorPosition}
             >
               <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
@@ -939,12 +961,51 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     ))}
                   </select>
                 </div>
+              ) : selectedEvent === 'object is tapped' || selectedEvent === 'key is pressed' ? (
+                <div className="inline-flex items-center rounded-full bg-[#b32062] p-1.5 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
+                  {selectedEvent === 'object is tapped' ? (
+                    <select
+                      value={selectedTappedObject}
+                      onChange={(e) => handleTappedObjectChange(e.target.value)}
+                      className="h-10 min-w-[130px] max-w-[170px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
+                    >
+                      {assetOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={selectedPressedKey}
+                      onChange={(e) => handlePressedKeyChange(e.target.value)}
+                      className="h-10 min-w-[130px] max-w-[170px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
+                    >
+                      {keyPressOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <select
+                    value={selectedEvent}
+                    onChange={(e) => handleEventChange(e.target.value)}
+                    className="h-10 min-w-0 appearance-none bg-transparent px-3 pr-6 text-[16px] font-black text-white outline-none"
+                  >
+                    {eventOptions.map((eventName) => (
+                      <option key={eventName} value={eventName}>
+                        {eventName === 'object is tapped' ? 'is tapped' : eventName === 'key is pressed' ? 'is pressed' : eventName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               ) : (
                 <>
                   <select
                     value={selectedEvent}
                     onChange={(e) => handleEventChange(e.target.value)}
-                    className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
+                    className="h-10 min-w-0 max-w-[220px] rounded-full border-[3px] border-white bg-transparent px-4 pr-7 text-[16px] font-black text-white outline-none"
                   >
                     {eventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
@@ -956,7 +1017,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     <select
                       value={selectedPressedKey}
                       onChange={(e) => handlePressedKeyChange(e.target.value)}
-                      className="min-w-0 max-w-[180px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
+                      className="h-10 min-w-0 max-w-[180px] rounded-full border-2 border-white/85 bg-[#f8f9fb] px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
                     >
                       {keyPressOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -970,13 +1031,18 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
               <button
                 type="button"
                 onClick={() => setEditorStage('expanded')}
-                className="grid h-10 w-10 place-items-center rounded-[18px] bg-white/22 shadow-[inset_0_-2px_0_rgba(255,255,255,0.08)]"
+                className="ml-auto grid h-10 w-10 place-items-center rounded-full bg-white text-[#ad2f63] shadow-[0_2px_0_rgba(118,24,66,0.38)]"
                 aria-label="Open block editor"
               >
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-[#d22d72]">
-                  <Pencil size={18} strokeWidth={3} />
-                </span>
+                <Plus size={22} strokeWidth={3.2} />
               </button>
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-white/12">
+                <span className="grid grid-cols-2 gap-0.5">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <span key={i} className="h-1.5 w-1.5 rounded-full bg-white/95" />
+                  ))}
+                </span>
+              </span>
             </div>
           ) : null}
 
@@ -1027,6 +1093,48 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                           {collisionTargetOptions.map((option) => (
                             <option key={option.value} value={option.value} className="bg-white text-slate-800">
                               {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : selectedEvent === 'object is tapped' || selectedEvent === 'key is pressed' ? (
+                      <div className="inline-flex items-center rounded-full bg-[#b32062] p-1.5 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
+                        {selectedEvent === 'object is tapped' ? (
+                          <select
+                            value={selectedTappedObject}
+                            onChange={(e) => handleTappedObjectChange(e.target.value)}
+                            disabled={!editorInstanceKey || mode === 'play'}
+                            className="h-10 min-w-[145px] max-w-[220px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
+                          >
+                            {assetOptions.map((option) => (
+                              <option key={option.value} value={option.value} className="bg-white text-slate-800">
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <select
+                            value={selectedPressedKey}
+                            onChange={(e) => handlePressedKeyChange(e.target.value)}
+                            disabled={!editorInstanceKey || mode === 'play'}
+                            className="h-10 min-w-[145px] max-w-[220px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
+                          >
+                            {keyPressOptions.map((option) => (
+                              <option key={option.value} value={option.value} className="bg-white text-slate-800">
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <select
+                          value={selectedEvent}
+                          onChange={(e) => handleEventChange(e.target.value)}
+                          disabled={!editorInstanceKey || mode === 'play'}
+                          className="h-10 min-w-0 appearance-none bg-transparent px-3 pr-6 text-[17px] font-black text-white outline-none disabled:opacity-40"
+                        >
+                          {eventOptions.map((eventName) => (
+                            <option key={eventName} value={eventName} className="bg-white text-slate-800">
+                              {eventName === 'object is tapped' ? 'is tapped' : eventName === 'key is pressed' ? 'is pressed' : eventName}
                             </option>
                           ))}
                         </select>

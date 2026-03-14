@@ -47,14 +47,15 @@ function Token({ token, compact, editable, onChange, assetOptions = [] }) {
       <input
         type="text"
         value={token.label}
-        inputMode={isNumeric ? 'numeric' : undefined}
+        inputMode={isNumeric ? 'decimal' : undefined}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => {
           const raw = e.target.value;
           const next = isNumeric
             ? raw
-                .replace(/[^\d-]/g, '')
+                .replace(/[^\d.-]/g, '')
                 .replace(/(?!^)-/g, '')
+                .replace(/(\..*)\./g, '$1')
             : raw;
           onChange?.(next);
         }}

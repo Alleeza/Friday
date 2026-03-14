@@ -11,6 +11,31 @@ function clampPosition(asset) {
   asset.y = Math.max(STAGE_BOUNDS.minY, Math.min(STAGE_BOUNDS.maxY, asset.y));
 }
 
+function clampPositionWithHit(asset) {
+  const nextX = Math.max(STAGE_BOUNDS.minX, Math.min(STAGE_BOUNDS.maxX, asset.x));
+  const nextY = Math.max(STAGE_BOUNDS.minY, Math.min(STAGE_BOUNDS.maxY, asset.y));
+  const hitX = nextX !== asset.x;
+  const hitY = nextY !== asset.y;
+  asset.x = nextX;
+  asset.y = nextY;
+  return { hitX, hitY };
+}
+
+function getDirectionVector(directionDegrees) {
+  // Match Scratch-style directions: 90 = right, 0 = up, -90 = left, 180 = down.
+  const radians = ((90 - directionDegrees) * Math.PI) / 180;
+  return {
+    x: Math.cos(radians),
+    y: -Math.sin(radians),
+  };
+}
+
+function getHorizontalDirection(asset) {
+  if (asset.rotationStyle === 'left-right') return asset.facing || 1;
+  const direction = getDirectionVector(asset.rotation || 0);
+  return direction.x >= 0 ? 1 : -1;
+}
+
 function createAssetState(instance) {
   return {
     key: instance.key,
@@ -200,14 +225,15 @@ export function createScriptRuntime({ instances, programsByKey }) {
     if (!asset) return;
     switch (instruction.type) {
       case 'moveForward': {
-        const directionMultiplier = asset.rotationStyle === 'left-right' ? (asset.facing || 1) : 1;
-        const amount = instruction.amount * directionMultiplier;
-        const radians = (asset.rotation * Math.PI) / 180;
-        asset.x += Math.cos(radians) * amount;
-        asset.y += Math.sin(radians) * amount;
+        const amount = instruction.amount * getHorizontalDirection(asset);
+        asset.x += amount;
         asset.facing = amount >= 0 ? 1 : -1;
         asset.lastSpeed = Math.abs(amount);
-        clampPosition(asset);
+        const { hitX } = clampPositionWithHit(asset);
+        if (hitX) {
+          asset.rotationStyle = 'left-right';
+          asset.facing *= -1;
+        }
         break;
       }
       case 'turn':
@@ -253,6 +279,9 @@ export function createScriptRuntime({ instances, programsByKey }) {
         break;
       case 'say':
         log(`${asset.label} says "${instruction.text}"`);
+        break;
+      case 'setVisibility':
+        asset.invisibility = Math.max(0, Math.min(100, instruction.invisibility ?? 0));
         break;
       case 'changeScore':
         state.variables.score += instruction.amount;

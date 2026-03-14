@@ -15,6 +15,11 @@ function getTransform(asset) {
   return parts.join(' ') || 'none';
 }
 
+function getOpacity(asset) {
+  const invisibility = Math.max(0, Math.min(100, asset.invisibility || 0));
+  return 1 - (invisibility / 100);
+}
+
 function buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState) {
   return {
     placedAssets: placedAssets.map((item) => ({ ...item })),
@@ -570,7 +575,7 @@ export default function GamePreviewCanvas({
           <div
             key={asset.key}
             className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none ${mode === 'edit' && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-20'} ${mode === 'edit' && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : mode !== 'edit' ? 'cursor-pointer' : ''}`}
-            style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize }}
+            style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize, opacity: getOpacity(asset) }}
             title={asset.label}
             onClick={(e) => {
               e.stopPropagation();

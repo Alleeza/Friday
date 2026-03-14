@@ -125,6 +125,12 @@ export default function App() {
     handleSetupComplete(createBunnyCarrotExampleProject());
   }, [handleSetupComplete]);
 
+  const handleCreateNewGame = useCallback(() => {
+    writeResumeBuilderFlag(false);
+    setResumeToken(false);
+    setActiveScreen('setup');
+  }, []);
+
   const handleProjectStateChange = useCallback((nextProjectState) => {
     const normalized = normalizeProjectState(nextProjectState);
     writeResumeBuilderFlag(true);
@@ -188,6 +194,7 @@ export default function App() {
         onSaveProject={handleSaveProject}
         saveState={saveState}
         projectPlan={projectPlan}
+        onCreateNewGame={handleCreateNewGame}
       />
     </>
   );

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Flame, Pencil, Star, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 import { StageProgressSection } from './ProjectRoadmapPage';
+import questyImage from '../imgages/profile.png';
 
 const eventOptions = [
   'game starts',
@@ -22,12 +23,11 @@ const defaultEvent = 'game starts';
 const collisionEventOptions = new Set(['bumps']);
 const hiddenPaletteCategories = new Set(['collisions', 'conditionals', 'conditions']);
 const keyPressOptions = [
-  { value: 'arrowup', label: 'Top Arrow' },
-  { value: 'arrowdown', label: 'Down Arrow' },
-  { value: 'arrowleft', label: 'Left Arrow' },
-  { value: 'arrowright', label: 'Right Arrow' },
+  { value: 'w', label: 'W' },
+  { value: 'a', label: 'A' },
+  { value: 's', label: 'S' },
+  { value: 'd', label: 'D' },
   { value: 'space', label: 'Space' },
-  { value: 'c', label: 'C' },
 ];
 
 const palette = {
@@ -64,6 +64,8 @@ const palette = {
     { id: 'next-costume', tone: 'sound', parts: ['Next costume'] },
     { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
     { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
+    { id: 'hide', tone: 'looks', parts: ['Hide object'] },
+    { id: 'show', tone: 'looks', parts: ['Show object'] },
   ],
   Control: [
     { id: 'forever', tone: 'control', type: 'loop', parts: ['Forever'] },
@@ -167,7 +169,47 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
   return `For "${selectedBlock}", think event -> loop -> action.`;
 }
 
-export default function SandboxBuilderPage({ initialSetupData = null, projectPlan = null }) {
+function BuilderTopNav({ onCreateNewGame }) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3.5 lg:px-6">
+        <div className="flex items-center gap-3">
+          <img
+            src={questyImage}
+            alt="Questy avatar"
+            className="h-12 w-auto rounded-xl object-contain"
+          />
+          <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
+            <Star className="h-3.5 w-3.5" />
+            Level 1
+            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
+              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] font-bold text-slate-600 sm:flex">
+            <Flame className="h-3.5 w-3.5 text-orange-400" /> 0
+          </div>
+
+          <button
+            type="button"
+            onClick={onCreateNewGame}
+            className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2.5 text-[14px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex"
+          >
+            <span className="text-[18px] leading-none">+</span>
+            Create New Game
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export default function SandboxBuilderPage({ initialSetupData = null, projectPlan = null, onCreateNewGame }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -781,6 +823,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
     runtime.dispatch('game starts');
     runtimeRef.current = runtime;
+    setEditorInstanceKey(null);
+    setEditorStage('event');
+    setActiveEventBlockId(null);
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
     lastSnapshotPublishRef.current = 0;
@@ -1018,7 +1063,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
     return (
       <div
-        className={`flex flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${
+        className={`mt-3 flex flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${
           stretch ? 'h-full min-h-full' : 'min-h-[220px]'
         } ${dragOverTopBlockId === `section-end:${eventBlockId}` ? 'bg-sky-100/70' : 'bg-slate-50/65'}`}
         onDragOver={(e) => {
@@ -1282,10 +1327,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   );
 
   return (
-    <main className="w-full space-y-4 px-4 py-4 lg:px-6">
+    <>
+      <BuilderTopNav onCreateNewGame={onCreateNewGame} />
+      <main className="w-full space-y-4 px-4 py-4 lg:px-6">
       {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
       <section>
-        <div className="relative h-[640px] w-full">
+        <div className="relative h-[720px] w-full">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
@@ -1553,6 +1600,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           </div> : null}
         </div>
       ) : null}
-    </main>
+      </main>
+    </>
   );
 }

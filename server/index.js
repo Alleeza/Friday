@@ -1,5 +1,6 @@
 import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -40,7 +41,7 @@ function sendJson(res, statusCode, payload) {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,PUT,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,PUT,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(JSON.stringify(payload));
@@ -78,6 +79,16 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS published_projects (
+    project_id TEXT PRIMARY KEY,
+    share_id TEXT NOT NULL UNIQUE,
+    project_json TEXT NOT NULL,
+    source_updated_at TEXT NOT NULL,
+    published_at TEXT NOT NULL
+  )
+`);
+
 const selectProjectStatement = db.prepare(`
   SELECT project_json, updated_at
   FROM projects
@@ -90,6 +101,28 @@ const upsertProjectStatement = db.prepare(`
   ON CONFLICT(id) DO UPDATE SET
     project_json = excluded.project_json,
     updated_at = excluded.updated_at
+`);
+
+const selectPublishedProjectByProjectIdStatement = db.prepare(`
+  SELECT share_id, project_json, source_updated_at, published_at
+  FROM published_projects
+  WHERE project_id = ?
+`);
+
+const selectPublishedProjectByShareIdStatement = db.prepare(`
+  SELECT project_json, source_updated_at, published_at
+  FROM published_projects
+  WHERE share_id = ?
+`);
+
+const upsertPublishedProjectStatement = db.prepare(`
+  INSERT INTO published_projects (project_id, share_id, project_json, source_updated_at, published_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(project_id) DO UPDATE SET
+    share_id = excluded.share_id,
+    project_json = excluded.project_json,
+    source_updated_at = excluded.source_updated_at,
+    published_at = excluded.published_at
 `);
 
 async function importLegacyProjectIfNeeded() {
@@ -128,6 +161,45 @@ function writeProjectState(projectState) {
   return {
     ...normalized,
     updatedAt,
+  };
+}
+
+function publishProjectState() {
+  const savedProjectRow = selectProjectStatement.get(projectId);
+  if (!savedProjectRow) {
+    throw new Error('Save the project before generating a share link.');
+  }
+
+  const existingPublished = selectPublishedProjectByProjectIdStatement.get(projectId);
+  const shareId = existingPublished?.share_id || crypto.randomBytes(9).toString('base64url');
+  const publishedAt = new Date().toISOString();
+  const normalized = normalizeProjectState(JSON.parse(savedProjectRow.project_json));
+
+  upsertPublishedProjectStatement.run(
+    projectId,
+    shareId,
+    JSON.stringify(normalized),
+    savedProjectRow.updated_at,
+    publishedAt,
+  );
+
+  return {
+    shareId,
+    publishedAt,
+    sourceUpdatedAt: savedProjectRow.updated_at,
+    project: normalized,
+  };
+}
+
+function readPublishedProject(shareId) {
+  const row = selectPublishedProjectByShareIdStatement.get(shareId);
+  if (!row) return null;
+
+  return {
+    shareId,
+    project: normalizeProjectState(JSON.parse(row.project_json)),
+    sourceUpdatedAt: row.source_updated_at,
+    publishedAt: row.published_at,
   };
 }
 
@@ -172,6 +244,36 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { project });
     } catch (error) {
       sendJson(res, 400, { error: error.message || 'Unable to save project state.' });
+    }
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/published-project' && req.method === 'POST') {
+    try {
+      const publication = publishProjectState();
+      sendJson(res, 200, {
+        publication: {
+          ...publication,
+          sharePath: `/play/${publication.shareId}`,
+        },
+      });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || 'Unable to publish project.' });
+    }
+    return;
+  }
+
+  if (requestUrl.pathname.startsWith('/api/published-project/') && req.method === 'GET') {
+    try {
+      const shareId = requestUrl.pathname.split('/').pop();
+      const publication = shareId ? readPublishedProject(shareId) : null;
+      if (!publication) {
+        sendJson(res, 404, { error: 'Shared game not found.' });
+        return;
+      }
+      sendJson(res, 200, { publication });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Unable to load shared game.' });
     }
     return;
   }

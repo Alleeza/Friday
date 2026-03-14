@@ -167,17 +167,52 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
   return `For "${selectedBlock}", think event -> loop -> action.`;
 }
 
-export default function SandboxBuilderPage({ initialSetupData = null, projectPlan = null }) {
+function normalizeSceneState(scene) {
+  return {
+    placedAssets: Array.isArray(scene?.placedAssets) ? scene.placedAssets.map((asset) => ({ ...asset })) : [],
+    selectedPlacedAssetKey: scene?.selectedPlacedAssetKey || null,
+    backdropState: scene?.backdropState ? { ...scene.backdropState } : null,
+  };
+}
+
+function normalizeScriptsByInstance(scriptsByInstanceKey) {
+  if (!scriptsByInstanceKey || typeof scriptsByInstanceKey !== 'object') return {};
+  return cloneScripts(scriptsByInstanceKey);
+}
+
+export default function SandboxBuilderPage({
+  initialSetupData = null,
+  initialProjectState = null,
+  onProjectStateChange,
+  onSaveProject,
+  onPublishProject,
+  saveState = 'idle',
+  publishState = 'idle',
+  projectPlan = null,
+}) {
+  const lastPublishedProjectRef = useRef('');
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
   const quickEditorRef = useRef(null);
-  const [sceneInstances, setSceneInstances] = useState([]);
-  const [focusedInstanceKey, setFocusedInstanceKey] = useState(null);
+  const initialSceneInstances = useMemo(() => {
+    const persistedScene = normalizeSceneState(initialProjectState?.scene).placedAssets;
+    return persistedScene.length
+      ? persistedScene
+      : JSON.parse(JSON.stringify(initialSetupData?.initialScene || []));
+  }, [initialProjectState, initialSetupData]);
+  const [persistedSceneState, setPersistedSceneState] = useState(() => normalizeSceneState(initialProjectState?.scene));
+  const [sceneInstances, setSceneInstances] = useState(() => initialSceneInstances);
+  const [focusedInstanceKey, setFocusedInstanceKey] = useState(() => initialProjectState?.scene?.selectedPlacedAssetKey || null);
   const [editorInstanceKey, setEditorInstanceKey] = useState(null);
   const [editorStage, setEditorStage] = useState('event');
-  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState({});
+  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => {
+    const persistedScripts = normalizeScriptsByInstance(initialProjectState?.scriptsByInstanceKey);
+    return Object.keys(persistedScripts).length
+      ? persistedScripts
+      : JSON.parse(JSON.stringify(initialSetupData?.initialScripts || {}));
+  });
   const [selectedBlock, setSelectedBlock] = useState(`When ${defaultEvent}`);
   const [selectedCategory, setSelectedCategory] = useState('Movement');
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
@@ -230,6 +265,18 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
   }, []);
+
+  useEffect(() => {
+    const nextProjectState = {
+      setupData: initialSetupData,
+      scene: normalizeSceneState(persistedSceneState),
+      scriptsByInstanceKey: normalizeScriptsByInstance(scriptsByInstanceKey),
+    };
+    const snapshot = JSON.stringify(nextProjectState);
+    if (snapshot === lastPublishedProjectRef.current) return;
+    lastPublishedProjectRef.current = snapshot;
+    onProjectStateChange?.(nextProjectState);
+  }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
 
   useEffect(() => {
     if (mode === 'play') return undefined;
@@ -1289,10 +1336,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
+            initialSceneState={persistedSceneState}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
+            onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
               setSceneInstances(instances);
-              if (nextKey) setFocusedInstanceKey(nextKey);
+              if (sceneState) setPersistedSceneState(sceneState);
+              setFocusedInstanceKey(nextKey || null);
               if (editorInstanceKey && !instances.some((instance) => instance.key === editorInstanceKey)) {
                 setEditorInstanceKey(null);
               }
@@ -1300,6 +1349,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
             onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
             onPlay={startRuntime}
             onStop={stopRuntime}
+            onSave={onSaveProject}
+            onPublish={onPublishProject}
+            saveState={saveState}
+            publishState={publishState}
+            showPublishButton
+            publishLabel="Share"
             suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {
               runtimeRef.current?.dispatch('sprite clicked', { instanceKey });

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFallbackPlan } from './ai/planning/fallbackPlans';
-import { loadProjectState, saveProjectState } from './api/projectState';
+import { loadProjectState, publishSavedProject, saveProjectState } from './api/projectState';
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
+import SharedGamePage from './components/SharedGamePage';
 import { createBunnyCarrotExampleProject } from './data/exampleProjects';
 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
@@ -46,8 +47,16 @@ function deriveProjectPlan(setupData) {
   return setupData.plan || getFallbackPlan(setupData.idea || '', 0);
 }
 
+function getSharedGameIdFromPath() {
+  if (typeof window === 'undefined') return null;
+  const match = window.location.pathname.match(/^\/play\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export default function App() {
+  const sharedGameId = getSharedGameIdFromPath();
   const lastSavedSnapshotRef = useRef('');
+  const publishTimeoutRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [projectState, setProjectState] = useState(emptyProjectState);
   const [projectPlan, setProjectPlan] = useState(null);
@@ -55,6 +64,15 @@ export default function App() {
   const [resumeToken, setResumeToken] = useState(false);
   const [activeScreen, setActiveScreen] = useState('setup');
   const [saveState, setSaveState] = useState('idle');
+  const [publishState, setPublishState] = useState('idle');
+
+  useEffect(() => () => {
+    if (publishTimeoutRef.current) window.clearTimeout(publishTimeoutRef.current);
+  }, []);
+
+  if (sharedGameId) {
+    return <SharedGamePage shareId={sharedGameId} />;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +168,26 @@ export default function App() {
     }
   }, [projectState]);
 
+  const handlePublishProject = useCallback(async () => {
+    setPublishState('publishing');
+    try {
+      const publication = await publishSavedProject();
+      const shareUrl = new URL(publication.sharePath, window.location.origin).toString();
+
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+
+      if (publishTimeoutRef.current) window.clearTimeout(publishTimeoutRef.current);
+      publishTimeoutRef.current = window.setTimeout(() => setPublishState('idle'), 2500);
+      setStorageError('');
+      setPublishState('published');
+    } catch (error) {
+      setStorageError(error.message || 'Unable to create a share link.');
+      setPublishState('error');
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#fafafa] px-6">
@@ -186,7 +224,9 @@ export default function App() {
         initialProjectState={projectState}
         onProjectStateChange={handleProjectStateChange}
         onSaveProject={handleSaveProject}
+        onPublishProject={handlePublishProject}
         saveState={saveState}
+        publishState={publishState}
         projectPlan={projectPlan}
       />
     </>

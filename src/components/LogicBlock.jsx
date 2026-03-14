@@ -117,7 +117,7 @@ export default function LogicBlock({
       <span className="flex flex-wrap items-center gap-2 leading-none">
         {parts.map((part, idx) => (
           <Token
-            key={`${typeof part === 'string' ? part : part.label || part.value}-${idx}`}
+            key={idx}
             token={part}
             compact={compact}
             editable={editable}

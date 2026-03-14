@@ -510,10 +510,15 @@ export default function SandboxBuilderPage() {
   };
 
   const quickEditorPosition = selectedInstance
-    ? {
-        left: `${Math.min(Math.max((selectedInstance.x || 0) + 96, 36), 620)}px`,
-        top: `${Math.min(Math.max((selectedInstance.y || 0) - 28, 88), 500)}px`,
-      }
+    ? (() => {
+        const x = selectedInstance.x || 0;
+        const y = selectedInstance.y || 0;
+        const preferredLeft = x > 860 ? x - 375 : x + 130;
+        return {
+          left: `${Math.min(Math.max(preferredLeft, 24), 980)}px`,
+          top: `${Math.min(Math.max(y + 8, 88), 540)}px`,
+        };
+      })()
     : null;
 
   const renderScriptBlock = (block) => {
@@ -702,7 +707,7 @@ export default function SandboxBuilderPage() {
   };
 
   return (
-    <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 lg:px-6">
+    <main className="w-full space-y-4 px-4 py-4 lg:px-6">
       <section className="quest-card flex items-center justify-between gap-4 rounded-[34px] border-[#d6eec2] bg-[#f7fff1] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.09)]">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-quest-muted">Friday Sandbox</p>
@@ -714,8 +719,8 @@ export default function SandboxBuilderPage() {
           <p className={`text-2xl font-display ${mode === 'play' ? 'text-[#1cb0f6]' : 'text-[#58cc02]'}`}>{mode === 'play' ? 'Play' : 'Edit'}</p>
         </div>
       </section>
-      <section className="grid gap-4 lg:grid-cols-12">
-        <div className="relative h-[760px] lg:col-span-9">
+      <section>
+        <div className="relative h-[640px] w-full">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
@@ -880,16 +885,15 @@ export default function SandboxBuilderPage() {
                         setDragOverTopBlockId(null);
                       }}
                     >
-                      <div className="mb-4 flex items-center justify-between px-1">
+                      <div className="mb-4 px-1">
                         <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Script</p>
-                        <p className="text-[14px] font-bold text-slate-400">Drag blocks or tap to add</p>
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-hidden">
                         {selectedScriptBlocks.filter((block) => block.id === 'event-start').map((block) => (
                           <div key={block.id}>{renderScriptBlock(block)}</div>
                         ))}
                         <div
-                          className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${dragOverTopBlockId === 'script-end' ? 'bg-sky-100/70' : ''}`}
+                          className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${dragOverTopBlockId === 'script-end' ? 'bg-sky-100/70' : 'bg-slate-50/65'}`}
                           onDragOver={(e) => {
                             if (mode === 'play') return;
                             const parsed = parseScriptDragPayload(e);
@@ -962,7 +966,16 @@ export default function SandboxBuilderPage() {
                               />
                               <div className="h-0.5" />
                             </div>
-                          ) : <div className="flex-1" />}
+                          ) : (
+                            <div className="flex flex-1 items-center justify-center">
+                              <div className="flex flex-col items-center gap-3 text-slate-400">
+                                <div className="grid h-16 w-16 place-items-center rounded-full border border-[#d8e9f8] bg-white/80 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                                  <span className="text-4xl font-semibold leading-none text-slate-300">+</span>
+                                </div>
+                                <p className="text-sm font-bold tracking-[0.02em] text-slate-400">Drop a block into this script area</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -972,7 +985,9 @@ export default function SandboxBuilderPage() {
             </div>
           ) : null}
         </div>
-        <div className="h-[640px] lg:col-span-3"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+      </section>
+      <section>
+        <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
       </section>
       {draggingScriptBlock && mode !== 'play' ? <div className={`fixed bottom-6 right-6 z-50 rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-lg transition ${trashActive ? 'border-rose-700 bg-rose-600 text-white scale-105' : 'border-rose-400 bg-rose-500 text-white'}`} onDragOver={(e) => { e.preventDefault(); if (!trashActive) setTrashActive(true); }} onDragLeave={() => setTrashActive(false)} onDrop={handleTrashDrop}>Drop to delete</div> : null}
     </main>

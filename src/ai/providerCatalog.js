@@ -26,9 +26,18 @@ export function getClaudeModels() {
   return configured.length ? configured : DEFAULT_CLAUDE_MODELS;
 }
 
-export function getDefaultModelForProvider(providerName) {
+export function getDefaultModelForProvider(providerName, availableModels = []) {
   if (providerName === 'claude') {
-    return import.meta.env.VITE_CLAUDE_MODEL || getClaudeModels()[0];
+    const configuredDefault = String(import.meta.env.VITE_CLAUDE_MODEL ?? '').trim();
+    if (configuredDefault && (!availableModels.length || availableModels.includes(configuredDefault))) {
+      return configuredDefault;
+    }
+    return availableModels[0] || getClaudeModels()[0];
   }
-  return import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2';
+
+  const configuredDefault = String(import.meta.env.VITE_OLLAMA_MODEL ?? '').trim();
+  if (configuredDefault && (!availableModels.length || availableModels.includes(configuredDefault))) {
+    return configuredDefault;
+  }
+  return availableModels[0] || 'llama3.2';
 }

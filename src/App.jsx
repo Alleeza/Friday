@@ -9,5 +9,6 @@ export default function App() {
     return <GuidedSetupFlow onComplete={setSetupData} />;
   }
 
+  // setupData now includes { idea, plan } from GuidedSetupFlow
   return <SandboxBuilderPage initialSetupData={setupData} />;
 }

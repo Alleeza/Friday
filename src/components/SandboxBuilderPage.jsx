@@ -7,12 +7,12 @@ import { createScriptRuntime } from '../utils/scriptRuntime';
 import { sandboxAssets } from '../data/sandboxAssets';
 import { createDefaultAIService } from '../ai/createDefaultAIService.js';
 import {
-  getClaudeModels,
   getDefaultModelForProvider,
   getDefaultProviderName,
   getProviderOptions,
 } from '../ai/providerCatalog.js';
 import { useAIChat } from '../hooks/useAIChat';
+import { useProviderModels } from '../hooks/useProviderModels.js';
 
 const eventGroups = [
   {
@@ -123,7 +123,7 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-export default function SandboxBuilderPage() {
+export default function SandboxBuilderPage({ initialSetupData = null }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -141,16 +141,14 @@ export default function SandboxBuilderPage() {
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [selectedProvider, setSelectedProvider] = useState(() => getDefaultProviderName());
-  const [selectedModel, setSelectedModel] = useState(() => getDefaultModelForProvider(getDefaultProviderName()));
-  const [ollamaModels, setOllamaModels] = useState([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState(
+    () => initialSetupData?.selectedProvider || getDefaultProviderName()
+  );
+  const [selectedModel, setSelectedModel] = useState(
+    () => initialSetupData?.selectedModel || getDefaultModelForProvider(initialSetupData?.selectedProvider || getDefaultProviderName())
+  );
 
   const providerOptions = useMemo(() => getProviderOptions(), []);
-  const modelOptions = useMemo(
-    () => (selectedProvider === 'claude' ? getClaudeModels() : ollamaModels),
-    [ollamaModels, selectedProvider]
-  );
 
   const aiService = useMemo(
     () => createDefaultAIService({ providerName: selectedProvider, model: selectedModel }),
@@ -168,6 +166,7 @@ export default function SandboxBuilderPage() {
       mode,
     },
   });
+  const { modelOptions, isLoadingModels } = useProviderModels({ selectedProvider, addNotification });
 
   const dispatchRuntimeEvent = (eventType, payload = {}) => {
     runtimeRef.current?.dispatch(eventType, payload);
@@ -175,60 +174,12 @@ export default function SandboxBuilderPage() {
   };
 
   useEffect(() => {
-    let ignore = false;
-
-    if (selectedProvider !== 'ollama') {
-      setIsLoadingModels(false);
-      return undefined;
-    }
-
-    const loadOllamaModels = async () => {
-      setIsLoadingModels(true);
-
-      try {
-        const response = await fetch('/api/ollama/api/tags');
-        if (!response.ok) {
-          throw new Error(`Could not load Ollama models (${response.status})`);
-        }
-
-        const data = await response.json();
-        const names = Array.isArray(data.models)
-          ? data.models
-              .map((model) => model?.name)
-              .filter((name) => typeof name === 'string' && name.trim())
-          : [];
-
-        if (ignore) return;
-
-        setOllamaModels(names);
-        setSelectedModel((current) => {
-          if (names.includes(current)) return current;
-          if (names.length) return names[0];
-          return getDefaultModelForProvider('ollama');
-        });
-      } catch (err) {
-        if (ignore) return;
-        setOllamaModels([]);
-        addNotification(`Couldn't load local Ollama models. ${err.message}`);
-        setSelectedModel((current) => current || getDefaultModelForProvider('ollama'));
-      } finally {
-        if (!ignore) setIsLoadingModels(false);
-      }
-    };
-
-    loadOllamaModels();
-    return () => {
-      ignore = true;
-    };
-  }, [addNotification, selectedProvider]);
-
-  useEffect(() => {
-    if (selectedProvider !== 'claude') return;
-    const claudeModels = getClaudeModels();
     setSelectedModel((current) => (
-      claudeModels.includes(current) ? current : getDefaultModelForProvider('claude')
+      modelOptions.includes(current)
+        ? current
+        : getDefaultModelForProvider(selectedProvider, modelOptions)
     ));
-  }, [selectedProvider]);
+  }, [modelOptions, selectedProvider]);
 
   const handleProviderChange = (nextProvider) => {
     if (!nextProvider || nextProvider === selectedProvider) return;

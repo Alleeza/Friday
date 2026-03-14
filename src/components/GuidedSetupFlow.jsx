@@ -1,5 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
+import { usePlanSession } from '../hooks/usePlanSession.js';
+import PlanReview from './PlanReview.jsx';
+import {
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+  getProviderOptions,
+} from '../ai/providerCatalog.js';
+import { useProviderModels } from '../hooks/useProviderModels.js';
 
 /* ─── Option data ─── */
 const STYLES = [
@@ -64,6 +72,57 @@ function TopNav({ step }) {
   );
 }
 
+function ModelPicker({
+  providerOptions,
+  selectedProvider,
+  selectedModel,
+  modelOptions,
+  isLoadingModels,
+  onProviderChange,
+  onModelChange,
+}) {
+  return (
+    <div className="rounded-2xl border border-[#dfe8d4] bg-[#f7fbf1] p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="min-w-[180px] flex-1">
+          <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            AI Provider
+          </span>
+          <select
+            value={selectedProvider}
+            onChange={(event) => onProviderChange(event.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-slate-700 focus:border-[#58cc02] focus:outline-none"
+          >
+            {providerOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="min-w-[220px] flex-[1.2]">
+          <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            Model
+          </span>
+          <select
+            value={selectedModel}
+            onChange={(event) => onModelChange(event.target.value)}
+            disabled={!modelOptions.length}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-slate-700 focus:border-[#58cc02] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+          >
+            {modelOptions.map((model) => (
+              <option key={model} value={model}>{model}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <p className="mt-3 text-[12px] text-slate-500">
+        {isLoadingModels ? 'Loading available models…' : `Your plan will be generated with ${selectedProvider} / ${selectedModel}.`}
+      </p>
+    </div>
+  );
+}
+
 /* ─── Main Component ─── */
 export default function GuidedSetupFlow({ onComplete }) {
   const [step, setStep] = useState('idea');
@@ -71,8 +130,25 @@ export default function GuidedSetupFlow({ onComplete }) {
   const [style, setStyle] = useState('platformer');
   const [goals, setGoals] = useState(['collect']);
   const [difficulty, setDifficulty] = useState('normal');
-  const [loadingText, setLoadingText] = useState('Analyzing idea...');
+  const [selectedProvider, setSelectedProvider] = useState(() => getDefaultProviderName());
+  const [selectedModel, setSelectedModel] = useState(() => getDefaultModelForProvider(getDefaultProviderName()));
   const formRef = useRef(null);
+  const providerOptions = useMemo(() => getProviderOptions(), []);
+  const { modelOptions, isLoadingModels } = useProviderModels({ selectedProvider });
+
+  const {
+    plan, status, error, infeasible, suggestion, usedFallback,
+    turnStats, refinementHistory,
+    generatePlan, refinePlan, abort, reset,
+  } = usePlanSession({ xp: 0, providerName: selectedProvider, model: selectedModel });
+
+  useEffect(() => {
+    setSelectedModel((current) => (
+      modelOptions.includes(current)
+        ? current
+        : getDefaultModelForProvider(selectedProvider, modelOptions)
+    ));
+  }, [modelOptions, selectedProvider]);
 
   // ⌘+Enter / Ctrl+Enter keyboard shortcut
   useEffect(() => {
@@ -86,6 +162,13 @@ export default function GuidedSetupFlow({ onComplete }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Transition from generating → review (or stay on error)
+  useEffect(() => {
+    if (step === 'generating' && status === 'ready') {
+      setStep('review');
+    }
+  }, [step, status]);
+
   const toggleGoal = (id) => {
     setGoals((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -97,29 +180,43 @@ export default function GuidedSetupFlow({ onComplete }) {
   const handleInitialSubmit = (e) => {
     e.preventDefault();
     if (!idea.trim()) return;
-    setStep('analyzing');
-    setLoadingText('Analyzing your game idea...');
-    setTimeout(() => {
-      if (idea.length < 25) {
-        setStep('refine');
-      } else {
-        setLoadingText('Generating sandbox environment...');
-        setTimeout(() => onComplete({ idea }), 1200);
-      }
-    }, 1500);
+    if (idea.length < 25) {
+      setStep('refine');
+    } else {
+      setStep('generating');
+      generatePlan(idea);
+    }
   };
 
   const handleRefineSubmit = (e) => {
     e.preventDefault();
-    setStep('analyzing');
-    setLoadingText('Synthesizing requirements...');
-    setTimeout(() => {
-      setLoadingText('Generating sandbox environment...');
-      const selectedStyle = STYLES.find((s) => s.id === style)?.label || style;
-      const selectedGoals = goals.map((g) => GOALS.find((x) => x.id === g)?.label || g);
-      const selectedDifficulty = DIFFICULTIES.find((d) => d.id === difficulty)?.label || difficulty;
-      setTimeout(() => onComplete({ idea, style: selectedStyle, difficulty: selectedDifficulty, goals: selectedGoals }), 1500);
-    }, 1500);
+    const selectedStyle = STYLES.find((s) => s.id === style)?.label || style;
+    const selectedGoals = goals.map((g) => GOALS.find((x) => x.id === g)?.label || g);
+    const selectedDifficulty = DIFFICULTIES.find((d) => d.id === difficulty)?.label || difficulty;
+    const enrichedIdea = `${idea}. Style: ${selectedStyle}. Goals: ${selectedGoals.join(', ')}. Difficulty: ${selectedDifficulty}.`;
+    setStep('generating');
+    generatePlan(enrichedIdea);
+  };
+
+  const handleCancel = () => {
+    abort();
+    setStep('idea');
+  };
+
+  const handleRetry = () => {
+    if (step === 'generating') {
+      // Re-run the last generation
+      reset();
+      setStep('generating');
+      generatePlan(idea);
+    }
+  };
+
+  const handleUseFallback = () => {
+    // Return to review with whatever plan state exists (fallback plans are set on ok:true)
+    if (plan) {
+      setStep('review');
+    }
   };
 
   const selectedStyleLabel = STYLES.find((s) => s.id === style)?.label || '';
@@ -128,7 +225,7 @@ export default function GuidedSetupFlow({ onComplete }) {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <TopNav step={step} />
+      {step !== 'review' && <TopNav step={step} />}
 
       {/* ═══════════════════════════════════════════
           STEP 1 — HERO IDEA INPUT
@@ -181,6 +278,18 @@ export default function GuidedSetupFlow({ onComplete }) {
                     />
                   </div>
 
+                  <div className="mt-4">
+                    <ModelPicker
+                      providerOptions={providerOptions}
+                      selectedProvider={selectedProvider}
+                      selectedModel={selectedModel}
+                      modelOptions={modelOptions}
+                      isLoadingModels={isLoadingModels}
+                      onProviderChange={setSelectedProvider}
+                      onModelChange={setSelectedModel}
+                    />
+                  </div>
+
                   {/* Tip + CTA */}
                   <div className="mt-5 flex items-center justify-between gap-4">
                     <p className="text-[13px] font-medium text-slate-400">
@@ -214,24 +323,63 @@ export default function GuidedSetupFlow({ onComplete }) {
       )}
 
       {/* ═══════════════════════════════════════════
-          STEP 2 — ANALYZING
+          STEP 2 — GENERATING (real AI call)
       ═══════════════════════════════════════════ */}
-      {step === 'analyzing' && (
+      {step === 'generating' && (
         <main className="flex h-[calc(100vh-57px)] items-center justify-center overflow-hidden">
           <div className="animate-in fade-in zoom-in-95 duration-500 text-center">
-            <div className="relative mx-auto mb-8 flex h-16 w-16 items-center justify-center">
-              <div className="absolute inset-0 animate-ping rounded-full bg-[#58cc02] opacity-[0.1]" />
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#58cc02] shadow-[0_3px_0_#46a302]">
-                <BrainCircuit className="h-6 w-6 animate-pulse text-white" />
-              </div>
-            </div>
-            <h2 className="font-display text-2xl text-slate-800">{loadingText}</h2>
-            <p className="mt-2 text-[14px] text-slate-400">This usually takes a few seconds</p>
-            <div className="mt-8 flex items-center justify-center gap-2">
-              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '0ms' }} />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '150ms' }} />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '300ms' }} />
-            </div>
+            {status !== 'error' ? (
+              <>
+                <div className="relative mx-auto mb-8 flex h-16 w-16 items-center justify-center">
+                  <div className="absolute inset-0 animate-ping rounded-full bg-[#58cc02] opacity-[0.1]" />
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#58cc02] shadow-[0_3px_0_#46a302]">
+                    <BrainCircuit className="h-6 w-6 animate-pulse text-white" />
+                  </div>
+                </div>
+                <h2 className="font-display text-2xl text-slate-800">Generating your game plan…</h2>
+                <p className="mt-2 text-[14px] text-slate-400">AI is thinking through your idea</p>
+                <div className="mt-8 flex items-center justify-center gap-2">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '0ms' }} />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '150ms' }} />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '300ms' }} />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="mt-8 flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 mx-auto"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100">
+                  <BrainCircuit className="h-6 w-6 text-red-400" />
+                </div>
+                <h2 className="font-display text-2xl text-slate-800">Something went wrong</h2>
+                <p className="mt-2 max-w-[360px] text-[14px] leading-relaxed text-slate-400">
+                  {error || 'Could not generate a plan. Check your AI provider settings.'}
+                </p>
+                <div className="mt-8 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-slate-500 transition-colors hover:bg-slate-100"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_0_rgba(0,0,0,0.3)] transition-all hover:bg-slate-700"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </main>
       )}
@@ -253,6 +401,8 @@ export default function GuidedSetupFlow({ onComplete }) {
               <span className="font-semibold text-slate-700">Configure</span>
               <span className="h-px w-5 bg-slate-200" />
               <span>Generate</span>
+              <span className="h-px w-5 bg-slate-200" />
+              <span>Review</span>
             </div>
 
             {/* Page title */}
@@ -386,6 +536,18 @@ export default function GuidedSetupFlow({ onComplete }) {
                     <p className="mt-1 text-[16px] font-bold text-slate-800">{selectedDiffLabel}</p>
                   </div>
                 </div>
+
+                <div className="mt-6">
+                  <ModelPicker
+                    providerOptions={providerOptions}
+                    selectedProvider={selectedProvider}
+                    selectedModel={selectedModel}
+                    modelOptions={modelOptions}
+                    isLoadingModels={isLoadingModels}
+                    onProviderChange={setSelectedProvider}
+                    onModelChange={setSelectedModel}
+                  />
+                </div>
               </section>
 
               {/* ── Actions ── */}
@@ -409,6 +571,24 @@ export default function GuidedSetupFlow({ onComplete }) {
             </form>
           </div>
         </main>
+      )}
+
+      {/* ═══════════════════════════════════════════
+          STEP 4 — REVIEW & REFINE
+      ═══════════════════════════════════════════ */}
+      {step === 'review' && plan && (
+        <PlanReview
+          plan={plan}
+          infeasible={infeasible}
+          suggestion={suggestion}
+          usedFallback={usedFallback}
+          turnStats={turnStats}
+          refinementHistory={refinementHistory}
+          isRefining={status === 'refining'}
+          onRefine={refinePlan}
+          onAccept={() => onComplete({ idea, plan, selectedProvider, selectedModel })}
+          onBack={() => { reset(); setStep('idea'); }}
+        />
       )}
     </div>
   );

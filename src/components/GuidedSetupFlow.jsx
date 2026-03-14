@@ -248,7 +248,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample }) {
                       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58cc02]">Offline Example</p>
                       <h2 className="mt-1 font-display text-2xl leading-none text-slate-900">Bunny Chases Carrot</h2>
                       <p className="mt-2 max-w-[560px] text-sm font-medium leading-6 text-slate-500">
-                        Open a ready-to-debug sample project with a Bunny, a Carrot, and starter scripts. It works even if the AI API is unavailable.
+                        Open an offline starter plan for building a Bunny-and-Carrot game from scratch. It works even if the AI API is unavailable.
                       </p>
                     </div>
                     <div className="flex items-center">

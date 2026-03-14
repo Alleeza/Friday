@@ -26,6 +26,7 @@ export default function GamePreviewCanvas({
   onSpriteClick,
   currentXp = 100,
   suppressSelectionChrome = false,
+  initialPlacedAssets = [],
 }) {
   const canvasRef = useRef(null);
   const trashZoneRef = useRef(null);
@@ -34,7 +35,7 @@ export default function GamePreviewCanvas({
   const resizeStartRef = useRef(null);
   const resizedDuringDragRef = useRef(false);
   const [trayOpen, setTrayOpen] = useState(false);
-  const [placedAssets, setPlacedAssets] = useState([]);
+  const [placedAssets, setPlacedAssets] = useState(() => initialPlacedAssets.map((asset) => ({ ...asset })));
   const [selectedPlacedAssetKey, setSelectedPlacedAssetKey] = useState(null);
   const [pastStates, setPastStates] = useState([]);
   const [draggingPlacedAssetKey, setDraggingPlacedAssetKey] = useState(null);

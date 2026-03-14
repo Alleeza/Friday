@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star } from 'lucide-react';
+import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
+import { usePlanSession } from '../hooks/usePlanSession.js';
+import PlanReview from './PlanReview.jsx';
+import {
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+} from '../ai/providerCatalog.js';
 
 /* ─── Option data ─── */
 const STYLES = [
@@ -65,14 +71,21 @@ function TopNav({ step }) {
 }
 
 /* ─── Main Component ─── */
-export default function GuidedSetupFlow({ onComplete }) {
+export default function GuidedSetupFlow({ onComplete, onLaunchExample }) {
   const [step, setStep] = useState('idea');
   const [idea, setIdea] = useState('');
   const [style, setStyle] = useState('platformer');
   const [goals, setGoals] = useState(['collect']);
   const [difficulty, setDifficulty] = useState('normal');
-  const [loadingText, setLoadingText] = useState('Analyzing idea...');
   const formRef = useRef(null);
+  const selectedProvider = getDefaultProviderName();
+  const selectedModel = getDefaultModelForProvider(selectedProvider);
+
+  const {
+    plan, status, error, infeasible, suggestion, usedFallback,
+    turnStats, refinementHistory,
+    generatePlan, refinePlan, abort, reset,
+  } = usePlanSession({ xp: 0, providerName: selectedProvider, model: selectedModel });
 
   // ⌘+Enter / Ctrl+Enter keyboard shortcut
   useEffect(() => {
@@ -86,6 +99,13 @@ export default function GuidedSetupFlow({ onComplete }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Transition from generating → review (or stay on error)
+  useEffect(() => {
+    if (step === 'generating' && status === 'ready') {
+      setStep('review');
+    }
+  }, [step, status]);
+
   const toggleGoal = (id) => {
     setGoals((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -97,29 +117,43 @@ export default function GuidedSetupFlow({ onComplete }) {
   const handleInitialSubmit = (e) => {
     e.preventDefault();
     if (!idea.trim()) return;
-    setStep('analyzing');
-    setLoadingText('Analyzing your game idea...');
-    setTimeout(() => {
-      if (idea.length < 25) {
-        setStep('refine');
-      } else {
-        setLoadingText('Generating sandbox environment...');
-        setTimeout(() => onComplete({ idea }), 1200);
-      }
-    }, 1500);
+    if (idea.length < 25) {
+      setStep('refine');
+    } else {
+      setStep('generating');
+      generatePlan(idea);
+    }
   };
 
   const handleRefineSubmit = (e) => {
     e.preventDefault();
-    setStep('analyzing');
-    setLoadingText('Synthesizing requirements...');
-    setTimeout(() => {
-      setLoadingText('Generating sandbox environment...');
-      const selectedStyle = STYLES.find((s) => s.id === style)?.label || style;
-      const selectedGoals = goals.map((g) => GOALS.find((x) => x.id === g)?.label || g);
-      const selectedDifficulty = DIFFICULTIES.find((d) => d.id === difficulty)?.label || difficulty;
-      setTimeout(() => onComplete({ idea, style: selectedStyle, difficulty: selectedDifficulty, goals: selectedGoals }), 1500);
-    }, 1500);
+    const selectedStyle = STYLES.find((s) => s.id === style)?.label || style;
+    const selectedGoals = goals.map((g) => GOALS.find((x) => x.id === g)?.label || g);
+    const selectedDifficulty = DIFFICULTIES.find((d) => d.id === difficulty)?.label || difficulty;
+    const enrichedIdea = `${idea}. Style: ${selectedStyle}. Goals: ${selectedGoals.join(', ')}. Difficulty: ${selectedDifficulty}.`;
+    setStep('generating');
+    generatePlan(enrichedIdea);
+  };
+
+  const handleCancel = () => {
+    abort();
+    setStep('idea');
+  };
+
+  const handleRetry = () => {
+    if (step === 'generating') {
+      // Re-run the last generation
+      reset();
+      setStep('generating');
+      generatePlan(idea);
+    }
+  };
+
+  const handleUseFallback = () => {
+    // Return to review with whatever plan state exists (fallback plans are set on ok:true)
+    if (plan) {
+      setStep('review');
+    }
   };
 
   const selectedStyleLabel = STYLES.find((s) => s.id === style)?.label || '';
@@ -128,7 +162,7 @@ export default function GuidedSetupFlow({ onComplete }) {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <TopNav step={step} />
+      {step !== 'review' && <TopNav step={step} />}
 
       {/* ═══════════════════════════════════════════
           STEP 1 — HERO IDEA INPUT
@@ -207,6 +241,28 @@ export default function GuidedSetupFlow({ onComplete }) {
                     </div>
                   </div>
                 </form>
+
+                <div className="relative mt-6 rounded-3xl border border-[#d8e7c6] bg-white/90 p-5 shadow-[0_10px_28px_-16px_rgba(88,204,2,0.45)]">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58cc02]">Offline Example</p>
+                      <h2 className="mt-1 font-display text-2xl leading-none text-slate-900">Bunny Chases Carrot</h2>
+                      <p className="mt-2 max-w-[560px] text-sm font-medium leading-6 text-slate-500">
+                        Open a ready-to-debug sample project with a Bunny, a Carrot, and starter scripts. It works even if the AI API is unavailable.
+                      </p>
+                    </div>
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => onLaunchExample?.()}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-[#b7d89c] bg-[#f4fce8] px-5 py-3 text-[14px] font-bold text-[#3f7f10] shadow-[0_3px_0_rgba(88,204,2,0.15)] transition-all hover:brightness-95 active:translate-y-[1px]"
+                      >
+                        Open Example Game
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -214,24 +270,70 @@ export default function GuidedSetupFlow({ onComplete }) {
       )}
 
       {/* ═══════════════════════════════════════════
-          STEP 2 — ANALYZING
+          STEP 2 — GENERATING (real AI call)
       ═══════════════════════════════════════════ */}
-      {step === 'analyzing' && (
+      {step === 'generating' && (
         <main className="flex h-[calc(100vh-57px)] items-center justify-center overflow-hidden">
           <div className="animate-in fade-in zoom-in-95 duration-500 text-center">
-            <div className="relative mx-auto mb-8 flex h-16 w-16 items-center justify-center">
-              <div className="absolute inset-0 animate-ping rounded-full bg-[#58cc02] opacity-[0.1]" />
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#58cc02] shadow-[0_3px_0_#46a302]">
-                <BrainCircuit className="h-6 w-6 animate-pulse text-white" />
-              </div>
-            </div>
-            <h2 className="font-display text-2xl text-slate-800">{loadingText}</h2>
-            <p className="mt-2 text-[14px] text-slate-400">This usually takes a few seconds</p>
-            <div className="mt-8 flex items-center justify-center gap-2">
-              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '0ms' }} />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '150ms' }} />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '300ms' }} />
-            </div>
+            {status !== 'error' ? (
+              <>
+                <div className="relative mx-auto mb-8 flex h-16 w-16 items-center justify-center">
+                  <div className="absolute inset-0 animate-ping rounded-full bg-[#58cc02] opacity-[0.1]" />
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#58cc02] shadow-[0_3px_0_#46a302]">
+                    <BrainCircuit className="h-6 w-6 animate-pulse text-white" />
+                  </div>
+                </div>
+                <h2 className="font-display text-2xl text-slate-800">Generating your game plan…</h2>
+                <p className="mt-2 text-[14px] text-slate-400">AI is thinking through your idea</p>
+                <div className="mt-8 flex items-center justify-center gap-2">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '0ms' }} />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '150ms' }} />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#58cc02]" style={{ animationDelay: '300ms' }} />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="mt-8 flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 mx-auto"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100">
+                  <BrainCircuit className="h-6 w-6 text-red-400" />
+                </div>
+                <h2 className="font-display text-2xl text-slate-800">Something went wrong</h2>
+                <p className="mt-2 max-w-[360px] text-[14px] leading-relaxed text-slate-400">
+                  {error || 'Could not generate a plan. Check your AI configuration.'}
+                </p>
+                <div className="mt-8 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-slate-500 transition-colors hover:bg-slate-100"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_0_rgba(0,0,0,0.3)] transition-all hover:bg-slate-700"
+                  >
+                    Try Again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onLaunchExample?.()}
+                    className="flex items-center gap-2 rounded-xl bg-[#f4fce8] px-5 py-2.5 text-[13px] font-bold text-[#3f7f10] shadow-[0_2px_0_rgba(88,204,2,0.18)] transition-all hover:bg-[#ebf8d8]"
+                  >
+                    Open Example Game
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </main>
       )}
@@ -253,6 +355,8 @@ export default function GuidedSetupFlow({ onComplete }) {
               <span className="font-semibold text-slate-700">Configure</span>
               <span className="h-px w-5 bg-slate-200" />
               <span>Generate</span>
+              <span className="h-px w-5 bg-slate-200" />
+              <span>Review</span>
             </div>
 
             {/* Page title */}
@@ -409,6 +513,24 @@ export default function GuidedSetupFlow({ onComplete }) {
             </form>
           </div>
         </main>
+      )}
+
+      {/* ═══════════════════════════════════════════
+          STEP 4 — REVIEW & REFINE
+      ═══════════════════════════════════════════ */}
+      {step === 'review' && plan && (
+        <PlanReview
+          plan={plan}
+          infeasible={infeasible}
+          suggestion={suggestion}
+          usedFallback={usedFallback}
+          turnStats={turnStats}
+          refinementHistory={refinementHistory}
+          isRefining={status === 'refining'}
+          onRefine={refinePlan}
+          onAccept={() => onComplete({ idea, plan, selectedProvider, selectedModel })}
+          onBack={() => { reset(); setStep('idea'); }}
+        />
       )}
     </div>
   );

@@ -4,19 +4,19 @@ import { parseSSEStream } from '../streamParser.js';
 /**
  * ClaudeProvider — Anthropic Claude API implementation.
  *
- * Routes requests through a local proxy (default: /api/claude) so that
+ * Routes requests through a local proxy (default: /api/claude/messages) so that
  * the API key never reaches the browser. See vite.config.js for proxy setup.
  *
  * Usage:
  *   const provider = new ClaudeProvider();
  *   // or with custom options:
- *   const provider = new ClaudeProvider({ model: 'claude-opus-4-6', apiUrl: '/api/claude' });
+ *   const provider = new ClaudeProvider({ model: 'claude-haiku-4-5-20251001', apiUrl: '/api/claude/messages' });
  */
 export class ClaudeProvider extends AIProvider {
   /**
    * @param {{ apiUrl?: string, model?: string, maxTokens?: number }} options
    */
-  constructor({ apiUrl = '/api/claude', model = 'claude-sonnet-4-6', maxTokens = 1024 } = {}) {
+  constructor({ apiUrl = '/api/claude/messages', model = 'claude-haiku-4-5-20251001', maxTokens = 1024 } = {}) {
     super();
     this.apiUrl = apiUrl;
     this.model = model;

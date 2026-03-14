@@ -160,6 +160,23 @@ function collectPlanAssetIds(plan, sceneInstances = []) {
   return [...ids];
 }
 
+function prioritizeAssets(assets, priorityIds) {
+  if (!priorityIds?.size) return assets;
+
+  const prioritized = [];
+  const remaining = [];
+
+  assets.forEach((asset) => {
+    if (priorityIds.has(asset.id)) {
+      prioritized.push(asset);
+      return;
+    }
+    remaining.push(asset);
+  });
+
+  return [...prioritized, ...remaining];
+}
+
 function collectPlanBlockNames(plan) {
   const names = new Set();
   if (!plan) return names;
@@ -295,14 +312,16 @@ export default function SandboxBuilderPage({
     [selectedModel, selectedProvider]
   );
 
+  const priorityBuilderAssetIds = useMemo(
+    () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
+    [projectPlan, sceneInstances]
+  );
+
   const availableBuilderAssets = useMemo(() => {
     if (!projectPlan) return sandboxAssets;
-    const allowedIds = collectPlanAssetIds(projectPlan, sceneInstances);
-    if (!allowedIds.length) return sandboxAssets;
-    const allowed = new Set(allowedIds);
-    const filtered = sandboxAssets.filter((asset) => allowed.has(asset.id));
-    return filtered.length ? filtered : sandboxAssets;
-  }, [projectPlan, sceneInstances]);
+    if (!priorityBuilderAssetIds.length) return sandboxAssets;
+    return prioritizeAssets(sandboxAssets, new Set(priorityBuilderAssetIds));
+  }, [priorityBuilderAssetIds, projectPlan]);
 
   const availablePaletteByCategory = useMemo(() => {
     const visibleEntries = Object.entries(BLOCK_PALETTE)
@@ -1093,6 +1112,7 @@ export default function SandboxBuilderPage({
             runtimeSnapshot={runtimeSnapshot}
             initialSceneState={persistedSceneState}
             availableSpriteAssets={availableBuilderAssets}
+            prioritySpriteAssetIds={priorityBuilderAssetIds}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
             onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
               setSceneInstances(instances);

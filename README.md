@@ -47,6 +47,8 @@ The deployed API entrypoints are:
 - [index.js](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/api/published-project/index.js)
 - [[shareId].js](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/api/published-project/[shareId].js)
 
+The share page now loads published snapshots through `GET /api/published-project?shareId=...`, which is more reliable on Vercel than depending on the nested dynamic API file alone.
+
 ## Available scripts
 
 - `npm run dev` starts the backend and Vite together.

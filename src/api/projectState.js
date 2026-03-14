@@ -79,7 +79,7 @@ export async function publishSavedProject() {
 }
 
 export async function loadPublishedProject(shareId) {
-  const response = await fetch(`${PUBLISHED_PROJECT_ENDPOINT}/${encodeURIComponent(shareId)}`);
+  const response = await fetch(`${PUBLISHED_PROJECT_ENDPOINT}?shareId=${encodeURIComponent(shareId)}`);
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);

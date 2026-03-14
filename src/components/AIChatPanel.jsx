@@ -1,3 +1,4 @@
+import { MessageCircle, Minimize2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 const quickReplies = [
@@ -31,6 +32,84 @@ function TypingDots() {
   );
 }
 
+function renderInlineMarkdown(text, keyPrefix) {
+  const parts = [];
+  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let matchIndex = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const [token] = match;
+    const start = match.index ?? 0;
+
+    if (start > lastIndex) {
+      parts.push(text.slice(lastIndex, start));
+    }
+
+    if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(
+        <strong key={`${keyPrefix}-strong-${matchIndex}`} className="font-extrabold text-slate-900">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      parts.push(
+        <em key={`${keyPrefix}-em-${matchIndex}`} className="italic text-slate-700">
+          {token.slice(1, -1)}
+        </em>
+      );
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      parts.push(
+        <code
+          key={`${keyPrefix}-code-${matchIndex}`}
+          className="rounded-md bg-slate-900/8 px-1.5 py-0.5 font-mono text-[0.92em] font-bold text-slate-700"
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    } else {
+      parts.push(token);
+    }
+
+    lastIndex = start + token.length;
+    matchIndex += 1;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
+
+function renderFormattedMessage(text) {
+  const lines = text.split('\n');
+
+  return lines.map((line, index) => {
+    const trimmed = line.trim();
+    const bulletMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+
+    if (!trimmed) {
+      return <div key={`spacer-${index}`} className="h-2" />;
+    }
+
+    if (bulletMatch) {
+      return (
+        <div key={`bullet-${index}`} className="flex items-start gap-2">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+          <span>{renderInlineMarkdown(bulletMatch[1], `bullet-${index}`)}</span>
+        </div>
+      );
+    }
+
+    return (
+      <p key={`line-${index}`}>
+        {renderInlineMarkdown(line, `line-${index}`)}
+      </p>
+    );
+  });
+}
+
 /**
  * AIChatPanel — Chat sidebar for Questy AI tutor.
  *
@@ -54,12 +133,41 @@ export default function AIChatPanel({
   isLoadingModels = false,
 }) {
   const [input, setInput] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
+  const [lastViewedMessageKey, setLastViewedMessageKey] = useState('');
   const messagesEndRef = useRef(null);
+
+  const latestMessage = messages[messages.length - 1];
+  const latestMessageKey = latestMessage ? `${messages.length}:${latestMessage.role}:${latestMessage.text}` : '';
+  const hasConversation = messages.some((msg) => msg.role === 'you' || msg.role === 'ai');
+  const hasUnreadMessages = Boolean(latestMessageKey) && latestMessageKey !== lastViewedMessageKey;
+
+  const openChat = () => {
+    setIsOpen(true);
+    setHasOpenedOnce(true);
+    setLastViewedMessageKey(latestMessageKey);
+  };
+
+  const closeChat = () => {
+    setIsOpen(false);
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLastViewedMessageKey(latestMessageKey);
+  }, [isOpen, latestMessageKey]);
+
+  useEffect(() => {
+    if (!isStreaming) return undefined;
+    openChat();
+    return undefined;
+  }, [isStreaming]);
 
   const submit = () => {
     const text = input.trim();
@@ -75,134 +183,207 @@ export default function AIChatPanel({
     }
   };
 
+  const showWelcomeHint = !hasConversation && !hasOpenedOnce;
+
   return (
-    <aside className="quest-card flex h-full flex-col rounded-[30px] border border-[#d9dde3] bg-[#f8fafc] p-4 shadow-[0_6px_0_rgba(148,163,184,0.12)]">
-      {/* Header */}
-      <div className="mb-3 flex items-center gap-3 border-b border-[#d9dde3] pb-3">
-        <TutorAvatar />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">AI Tutor</p>
-          <h3 className="font-display text-3xl leading-none text-[#58cc02]">Questy Chat</h3>
-          <p className="text-sm text-slate-500">Ask questions as you build.</p>
-        </div>
-      </div>
-
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Provider</span>
-          <select
-            value={selectedProvider}
-            onChange={(e) => onProviderChange?.(e.target.value)}
-            disabled={isStreaming}
-            className="w-full rounded-2xl border border-[#d4d9df] bg-white px-3 py-2 text-sm font-bold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
-          >
-            {providerOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Model</span>
-          <select
-            value={selectedModel}
-            onChange={(e) => onModelChange?.(e.target.value)}
-            disabled={isStreaming || !modelOptions.length}
-            className="w-full rounded-2xl border border-[#d4d9df] bg-white px-3 py-2 text-sm font-bold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
-          >
-            {modelOptions.map((model) => (
-              <option key={model} value={model}>{model}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <p className="mb-3 text-[11px] font-semibold text-slate-400">
-        {isLoadingModels ? 'Loading models from Ollama…' : `Using ${selectedProvider || 'provider'} / ${selectedModel || 'model'}`}
-      </p>
-
-      {/* Message list */}
-      <div className="flex-1 space-y-2 overflow-y-auto rounded-3xl border border-[#d8dde5] bg-white p-3">
-        {messages.map((msg, i) => {
-          const isLast = i === messages.length - 1;
-          const showStreamingIndicator = isStreaming && isLast && msg.role === 'ai';
-
-          // System notifications — muted centered label
-          if (msg.role === 'system') {
-            return (
-              <div
-                key={`system-${i}`}
-                className="mx-auto max-w-[92%] rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1.5 text-center text-[11px] font-semibold text-slate-400"
-              >
-                {msg.text}
+    <>
+      <aside
+        className={`fixed bottom-24 right-4 z-50 flex h-[min(680px,calc(100vh-7rem))] w-[min(24rem,calc(100vw-2rem))] origin-bottom-right flex-col overflow-hidden rounded-[30px] border border-[#d9dde3] bg-[#f8fafc] shadow-[0_22px_60px_rgba(15,23,42,0.22)] transition-[opacity,transform] duration-300 ease-out sm:bottom-28 sm:right-6 sm:w-[25.5rem] ${
+          isOpen
+            ? 'pointer-events-auto translate-y-0 scale-100 opacity-100'
+            : 'pointer-events-none translate-y-4 scale-[0.97] opacity-0'
+        }`}
+        aria-hidden={!isOpen}
+      >
+          <div className="bg-[linear-gradient(135deg,#58cc02_0%,#7adf2d_100%)] px-4 pb-4 pt-4 text-white">
+            <div className="flex items-start gap-3">
+              <TutorAvatar />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/75">AI Tutor</p>
+                <h3 className="font-display text-3xl leading-none text-white">Questy Chat</h3>
+                <p className="mt-1 text-sm font-semibold text-white/85">Ask questions as you build.</p>
               </div>
-            );
-          }
-
-          return (
-            <div
-              key={`${msg.role}-${i}`}
-              className={`max-w-[92%] rounded-3xl px-4 py-3 text-sm shadow-[inset_0_-2px_0_rgba(15,23,42,0.04)] ${
-                msg.role === 'you'
-                  ? 'ml-auto border border-[#8fd0f8] bg-[#dff3ff] text-[#166b9a]'
-                  : 'border border-[#bce3a0] bg-[#eefadb] text-slate-800'
-              }`}
-            >
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide opacity-70">
-                {msg.role === 'you' ? 'You' : 'Questy'}
-              </p>
-              <p className="font-semibold leading-snug">
-                {msg.text || (showStreamingIndicator ? <TypingDots /> : null)}
-                {showStreamingIndicator && msg.text && (
-                  <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-[#58cc02] align-middle" />
-                )}
-              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeChat}
+                  className="grid h-10 w-10 place-items-center rounded-full bg-white/18 text-white transition hover:bg-white/28"
+                  aria-label="Minimize chat"
+                >
+                  <Minimize2 size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={closeChat}
+                  className="grid h-10 w-10 place-items-center rounded-full bg-white/18 text-white transition hover:bg-white/28 sm:hidden"
+                  aria-label="Close chat"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-          );
-        })}
-        <div ref={messagesEndRef} />
-      </div>
+          </div>
 
-      {/* Quick reply buttons */}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {quickReplies.map((label) => (
-          <button
-            key={label}
-            onClick={() => !isStreaming && onSend(label)}
-            disabled={isStreaming}
-            className="rounded-2xl border border-[#d4d9df] bg-white px-3 py-2.5 text-left text-xs font-extrabold text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.2)] hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+          <div className="border-b border-[#d9dde3] bg-white px-4 py-3">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Provider</span>
+                <select
+                  value={selectedProvider}
+                  onChange={(e) => onProviderChange?.(e.target.value)}
+                  disabled={isStreaming}
+                  className="w-full rounded-2xl border border-[#d4d9df] bg-white px-3 py-2 text-sm font-bold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
+                >
+                  {providerOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Model</span>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => onModelChange?.(e.target.value)}
+                  disabled={isStreaming || !modelOptions.length}
+                  className="w-full rounded-2xl border border-[#d4d9df] bg-white px-3 py-2 text-sm font-bold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
+                >
+                  {modelOptions.map((model) => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="mt-2 text-[11px] font-semibold text-slate-400">
+              {isLoadingModels ? 'Loading models from Ollama…' : `Using ${selectedProvider || 'provider'} / ${selectedModel || 'model'}`}
+            </p>
+          </div>
 
-      {/* Input row */}
-      <div className="mt-3 flex gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isStreaming}
-          placeholder={isStreaming ? 'Questy is thinking…' : 'Ask Questy anything'}
-          className="w-full rounded-full border border-[#d4d9df] bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
-        />
-        {isStreaming ? (
-          <button
-            onClick={onAbort}
-            className="rounded-full bg-rose-500 px-4 py-2 text-sm font-extrabold text-white shadow-[0_4px_0_rgba(185,28,28,0.45)] hover:bg-rose-600 active:translate-y-px active:shadow-none"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            onClick={submit}
-            disabled={!input.trim()}
-            className="duo-btn-blue rounded-full px-6 py-2 text-sm font-extrabold shadow-[0_4px_0_rgba(12,129,191,0.45)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Send
-          </button>
-        )}
-      </div>
-    </aside>
+          <div className="flex-1 space-y-2 overflow-y-auto bg-[#f3f7fb] px-4 py-4">
+            {showWelcomeHint ? (
+              <div className="flex h-full min-h-40 items-center justify-center px-6 text-center">
+                <div>
+                  <p className="text-sm font-bold text-slate-600">Ask for a hint, debugging help, or what to build next.</p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Questy is ready when you are</p>
+                </div>
+              </div>
+            ) : null}
+            {messages.map((msg, i) => {
+              const isLast = i === messages.length - 1;
+              const showStreamingIndicator = isStreaming && isLast && msg.role === 'ai';
+
+              if (msg.role === 'system') {
+                return (
+                  <div
+                    key={`system-${i}`}
+                    className="mx-auto max-w-[92%] rounded-2xl border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1.5 text-center text-[11px] font-semibold text-slate-400"
+                  >
+                    {msg.text}
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={`${msg.role}-${i}`}
+                  className={`max-w-[92%] rounded-3xl px-4 py-3 text-sm shadow-[inset_0_-2px_0_rgba(15,23,42,0.04)] ${
+                    msg.role === 'you'
+                      ? 'ml-auto border border-[#8fd0f8] bg-[#dff3ff] text-[#166b9a]'
+                      : 'border border-[#bce3a0] bg-[#eefadb] text-slate-800'
+                  }`}
+                >
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide opacity-70">
+                    {msg.role === 'you' ? 'You' : 'Questy'}
+                  </p>
+                  <div className="space-y-2 font-semibold leading-snug">
+                    {msg.text ? renderFormattedMessage(msg.text) : (showStreamingIndicator ? <TypingDots /> : null)}
+                    {showStreamingIndicator && msg.text && (
+                      <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-[#58cc02] align-middle" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="border-t border-[#d9dde3] bg-white p-4">
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              {quickReplies.map((label) => (
+                <button
+                  key={label}
+                  onClick={() => !isStreaming && onSend(label)}
+                  disabled={isStreaming}
+                  className="rounded-2xl border border-[#d4d9df] bg-white px-3 py-2.5 text-left text-xs font-extrabold text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.2)] hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isStreaming}
+                placeholder={isStreaming ? 'Questy is thinking…' : 'Ask Questy anything'}
+                className="w-full rounded-full border border-[#d4d9df] bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 focus:border-[#25a8ef] focus:outline-none focus:ring-2 focus:ring-[#25a8ef]/20 disabled:bg-[#f1f5f9] disabled:text-slate-400"
+              />
+              {isStreaming ? (
+                <button
+                  onClick={onAbort}
+                  className="rounded-full bg-rose-500 px-4 py-2 text-sm font-extrabold text-white shadow-[0_4px_0_rgba(185,28,28,0.45)] hover:bg-rose-600 active:translate-y-px active:shadow-none"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={submit}
+                  disabled={!input.trim()}
+                  className="duo-btn-blue rounded-full px-6 py-2 text-sm font-extrabold shadow-[0_4px_0_rgba(12,129,191,0.45)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Send
+                </button>
+              )}
+            </div>
+          </div>
+      </aside>
+
+      <button
+        type="button"
+        onClick={() => {
+          if (isOpen) {
+            closeChat();
+            return;
+          }
+          openChat();
+        }}
+        className={`fixed bottom-5 right-5 z-[60] flex h-16 w-16 items-center justify-center rounded-full bg-[linear-gradient(135deg,#1cb0f6_0%,#0f9fe2_100%)] text-white shadow-[0_16px_35px_rgba(28,176,246,0.4)] transition-[transform,box-shadow] duration-300 ease-out hover:-translate-y-0.5 sm:bottom-6 sm:right-6 ${
+          isOpen ? 'scale-95 shadow-[0_12px_28px_rgba(28,176,246,0.32)]' : 'scale-100'
+        }`}
+        aria-label={isOpen ? 'Close chat' : 'Open chat'}
+      >
+        <span className="absolute inset-0 rounded-full border-4 border-white/30" />
+        <MessageCircle size={28} className="relative" />
+        {!isOpen && (isStreaming || hasUnreadMessages) ? (
+          <span className="absolute -right-1 -top-1 h-5 w-5 rounded-full border-2 border-white bg-[#ff4b4b]">
+            {isStreaming ? <span className="absolute inset-0 animate-ping rounded-full bg-[#ff4b4b]" /> : null}
+          </span>
+        ) : null}
+      </button>
+
+      {!isOpen && hasUnreadMessages && latestMessage?.text ? (
+        <button
+          type="button"
+          onClick={openChat}
+          className="fixed bottom-24 right-6 z-50 hidden w-72 rounded-[22px] border border-[#d8dde5] bg-white px-4 py-3 text-left shadow-[0_14px_40px_rgba(15,23,42,0.16)] transition-[opacity,transform] duration-300 ease-out hover:-translate-y-0.5 sm:block"
+        >
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+            {latestMessage.role === 'you' ? 'You' : 'Questy'}
+          </p>
+          <p className="mt-1 max-h-10 overflow-hidden text-sm font-semibold leading-5 text-slate-600">{latestMessage.text}</p>
+        </button>
+      ) : null}
+    </>
   );
 }

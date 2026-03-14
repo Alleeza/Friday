@@ -5,6 +5,7 @@ import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
+import { StageProgressSection } from './ProjectRoadmapPage';
 
 const eventOptions = [
   'game starts',
@@ -102,7 +103,7 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
   return `For "${selectedBlock}", think event -> loop -> action.`;
 }
 
-export default function SandboxBuilderPage() {
+export default function SandboxBuilderPage({ initialSetupData = null, projectPlan = null }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -707,17 +708,7 @@ export default function SandboxBuilderPage() {
 
   return (
     <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      <section className="quest-card flex items-center justify-between gap-4 rounded-[34px] border-[#d6eec2] bg-[#f7fff1] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.09)]">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-quest-muted">Friday Sandbox</p>
-          <h1 className="font-display text-4xl text-slate-800">Instance-Based Sandbox Builder</h1>
-          <p className="mt-2 max-w-3xl text-base font-semibold text-slate-600">Each placed object has its own script. Press Play to compile all scripts and drive the sandbox from runtime state.</p>
-        </div>
-        <div className="rounded-3xl border border-[#d3dae3] bg-white px-5 py-3 text-right shadow-soft">
-          <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Mode</p>
-          <p className={`text-2xl font-display ${mode === 'play' ? 'text-[#1cb0f6]' : 'text-[#58cc02]'}`}>{mode === 'play' ? 'Play' : 'Edit'}</p>
-        </div>
-      </section>
+      {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
       <section>
         <div className="relative h-[640px] w-full">
           <GamePreviewCanvas

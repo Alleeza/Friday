@@ -83,6 +83,7 @@ export default function GamePreviewCanvas({
 }) {
   const canvasRef = useRef(null);
   const backdropRef = useRef(null);
+  const controlsRef = useRef(null);
   const trashZoneRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
   const movedDuringDragRef = useRef(false);
@@ -305,6 +306,43 @@ export default function GamePreviewCanvas({
     } : prev));
   };
 
+  const getSafeDraggedPosition = (nextX, nextY, frameHalf, canvasRect) => {
+    const controlsRect = controlsRef.current?.getBoundingClientRect();
+    if (!controlsRect) return { x: nextX, y: nextY };
+
+    const margin = 14;
+    const protectedZone = {
+      left: Math.max(0, controlsRect.left - canvasRect.left - margin),
+      right: Math.min(canvasRect.width, controlsRect.right - canvasRect.left + margin),
+      top: Math.max(0, controlsRect.top - canvasRect.top - margin),
+      bottom: Math.min(canvasRect.height, controlsRect.bottom - canvasRect.top + margin),
+    };
+
+    const overlapsControls = !(
+      nextX + frameHalf < protectedZone.left ||
+      nextX - frameHalf > protectedZone.right ||
+      nextY + frameHalf < protectedZone.top ||
+      nextY - frameHalf > protectedZone.bottom
+    );
+
+    if (!overlapsControls) return { x: nextX, y: nextY };
+
+    const leftCandidateX = protectedZone.left - frameHalf - margin;
+    if (leftCandidateX >= frameHalf) {
+      return { x: leftCandidateX, y: nextY };
+    }
+
+    const belowCandidateY = protectedZone.bottom + frameHalf + margin;
+    if (belowCandidateY <= canvasRect.height - frameHalf) {
+      return { x: nextX, y: belowCandidateY };
+    }
+
+    return {
+      x: nextX,
+      y: Math.max(frameHalf, protectedZone.top - frameHalf - margin),
+    };
+  };
+
   const handleCanvasPointerMove = (e) => {
     if (!canvasRef.current || !isEditMode) return;
 
@@ -349,8 +387,9 @@ export default function GamePreviewCanvas({
     const frameHalf = 90 * (draggingAsset.scale || 1);
     const pointerX = e.clientX - rect.left;
     const pointerY = e.clientY - rect.top;
-    const x = Math.max(frameHalf, Math.min(pointerX - dragOffset.x, rect.width - frameHalf));
-    const y = Math.max(frameHalf, Math.min(pointerY - dragOffset.y, rect.height - frameHalf));
+    const clampedX = Math.max(frameHalf, Math.min(pointerX - dragOffset.x, rect.width - frameHalf));
+    const clampedY = Math.max(frameHalf, Math.min(pointerY - dragOffset.y, rect.height - frameHalf));
+    const { x, y } = getSafeDraggedPosition(clampedX, clampedY, frameHalf, rect);
     setPlacedAssets((prev) => prev.map((asset) => (
       asset.key !== draggingPlacedAssetKey ? asset : { ...asset, x, y }
     )));
@@ -520,7 +559,7 @@ export default function GamePreviewCanvas({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.45)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.45)_1px,transparent_1px)] bg-[size:48px_48px] opacity-60" />
 
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+      <div ref={controlsRef} className={`absolute right-4 top-4 z-10 flex items-center gap-2 ${draggingPlacedAssetKey ? 'pointer-events-none' : ''}`}>
         {showEditToolbar ? (
           <>
             <button type="button" onClick={handleUndo} disabled={!isEditMode || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
@@ -586,7 +625,9 @@ export default function GamePreviewCanvas({
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p>
-              <p className="mt-1 text-sm font-bold text-slate-500">{trayTab === 'backdrops' ? 'Pick a backdrop, adjust it once, then lock it into place.' : 'Emoji assets stay interactive and can be scripted like before.'}</p>
+              {trayTab === 'backdrops' ? (
+                <p className="mt-1 text-sm font-bold text-slate-500">Pick a backdrop, adjust it once, then lock it into place.</p>
+              ) : null}
             </div>
             <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
               <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>

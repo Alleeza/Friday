@@ -78,6 +78,68 @@ const COLLECTOR_ARCHETYPE = {
   ],
 };
 
+/** Space-flavoured dodging challenge using beginner-friendly assets. */
+const SPACE_DODGER_ARCHETYPE = {
+  summary: 'Pilot your Bunny through an asteroid field of Rocks and survive the route',
+  eta: '15–20 minutes',
+  infeasible: true,
+  suggestion: 'Shooting and enemy combat are not supported yet, so this starter plan turns your idea into a movement-and-dodging challenge.',
+  entities: {
+    assets: ['bunny', 'rock'],
+    blocks: ['Move Forward', 'Turn degrees'],
+    events: ['When key pressed', 'When game starts'],
+  },
+  checkpoints: ['Build the asteroid field', 'Pilot through the danger zone'],
+  stages: [
+    {
+      id: 'stage-1',
+      label: 'Build the asteroid field',
+      objective: 'Place Rocks to create a space path for the Bunny to dodge through',
+      why: 'Level design starts with placing obstacles in intentional positions',
+      success: 'Your canvas has several Rocks arranged like an asteroid field with gaps to move through',
+      steps: [
+        'Place several Rocks around the canvas to act like drifting asteroids',
+        'Leave gaps wide enough for the Bunny to weave through',
+        'Choose a starting spot for the Bunny away from the Rocks',
+      ],
+      stepXp: [5, 10, 5],
+      stepChecks: [
+        [{ type: 'assetCount', asset: 'rock', min: 3 }],
+        [{ type: 'aiCheck', condition: 'The Rocks are spaced out with visible gaps so the Bunny can navigate between them like an asteroid field' }],
+        [{ type: 'hasAsset', value: 'bunny' }],
+      ],
+      optionalSteps: [
+        { description: 'Add one more Rock to make the route tighter', bonusXp: 5 },
+      ],
+    },
+    {
+      id: 'stage-2',
+      label: 'Pilot the Bunny',
+      objective: 'Use key presses to steer the Bunny through the asteroid field',
+      why: 'Input events let the player control movement in real time',
+      success: 'You can press keys to move the Bunny around the Rocks without getting stuck',
+      steps: [
+        'Pick the event that should make the Bunny react when the player presses a key',
+        'Choose a movement block that helps the Bunny travel through the field',
+        'Test the route and tune the movement so dodging the Rocks feels manageable',
+      ],
+      stepXp: [10, 10, 10],
+      stepChecks: [
+        [{ type: 'eventIs', asset: 'bunny', event: 'key pressed' }],
+        [{ type: 'hasBlockOnAsset', asset: 'bunny', block: 'Move Forward' }],
+        [
+          { type: 'eventIs', asset: 'bunny', event: 'key pressed' },
+          { type: 'hasBlockOnAsset', asset: 'bunny', block: 'Move Forward' },
+          { type: 'assetMoved', asset: 'bunny', minDistance: 1 },
+        ],
+      ],
+      optionalSteps: [
+        { description: 'Add a turn block so the Bunny can feel more like a spaceship', bonusXp: 10 },
+      ],
+    },
+  ],
+};
+
 /** Navigate through Rocks to reach the Goal flag. */
 const MAZE_ARCHETYPE = {
   summary: 'Guide your character through Rocks to reach the Goal',
@@ -230,6 +292,11 @@ const ARCHETYPES = [
     requiredAssets: ['bunny', 'carrot'],
   },
   {
+    keywords: ['space', 'ship', 'spaceship', 'shooter', 'asteroid', 'asteroids', 'dodge', 'survive', 'survival'],
+    plan: SPACE_DODGER_ARCHETYPE,
+    requiredAssets: ['bunny', 'rock'],
+  },
+  {
     keywords: ['maze', 'navigate', 'obstacle', 'avoid', 'rock', 'wall', 'path', 'goal'],
     plan: MAZE_ARCHETYPE,
     requiredAssets: ['bunny', 'rock', 'goal'],
@@ -240,6 +307,56 @@ const ARCHETYPES = [
     requiredAssets: ['bunny', 'tree'],
   },
 ];
+
+function selectFallbackArchetype(normalised, unlockedIds) {
+  let bestArchetype = null;
+  let bestScore = 0;
+
+  for (const archetype of ARCHETYPES) {
+    const canUse = archetype.requiredAssets.every((id) => unlockedIds.has(id));
+    if (!canUse) continue;
+
+    const score = archetype.keywords.filter((kw) => normalised.includes(kw)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestArchetype = archetype;
+    }
+  }
+
+  return bestArchetype ?? ARCHETYPES[0];
+}
+
+function inferFallbackMetadata(ideaText, selectedPlan) {
+  const normalised = ideaText.toLowerCase();
+
+  if (['shoot', 'shooter', 'laser', 'bullet', 'enemy', 'enemies'].some((kw) => normalised.includes(kw))) {
+    return {
+      infeasible: true,
+      suggestion: selectedPlan === SPACE_DODGER_ARCHETYPE
+        ? 'Shooting and enemy combat are not supported yet, so we adapted this into a space-themed dodging challenge using movement and obstacles.'
+        : 'Combat and projectile mechanics are not supported yet, so we adapted your idea into a simpler movement-based challenge.',
+    };
+  }
+
+  if (['jump', 'jumping', 'gravity', 'platformer'].some((kw) => normalised.includes(kw))) {
+    return {
+      infeasible: true,
+      suggestion: 'Jumping and gravity are not supported yet, so we adapted your idea into a movement-and-navigation challenge instead.',
+    };
+  }
+
+  if (['multiplayer', 'two player', '2 player', 'pvp'].some((kw) => normalised.includes(kw))) {
+    return {
+      infeasible: true,
+      suggestion: 'Multiplayer is not supported yet, so we adapted your idea into a single-player starter plan.',
+    };
+  }
+
+  return {
+    infeasible: Boolean(selectedPlan?.infeasible),
+    suggestion: selectedPlan?.suggestion ?? null,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -259,22 +376,7 @@ const ARCHETYPES = [
 export function getFallbackPlan(ideaText = '', xp = 0) {
   const normalised = ideaText.toLowerCase();
   const unlockedIds = new Set(getUnlockedAssets(xp).map((a) => a.id));
-
-  // Score each archetype by keyword matches
-  let bestArchetype = ARCHETYPES[0]; // default: collector
-  let bestScore = -1;
-
-  for (const archetype of ARCHETYPES) {
-    // Skip if required assets aren't unlocked
-    const canUse = archetype.requiredAssets.every((id) => unlockedIds.has(id));
-    if (!canUse) continue;
-
-    const score = archetype.keywords.filter((kw) => normalised.includes(kw)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestArchetype = archetype;
-    }
-  }
+  const bestArchetype = selectFallbackArchetype(normalised, unlockedIds);
 
   // Filter the plan's entities to only include unlocked assets
   const rawPlan = bestArchetype.plan;
@@ -289,4 +391,11 @@ export function getFallbackPlan(ideaText = '', xp = 0) {
   };
 
   return createPlan(adapted);
+}
+
+export function getFallbackPlanResultMeta(ideaText = '', xp = 0) {
+  const normalised = ideaText.toLowerCase();
+  const unlockedIds = new Set(getUnlockedAssets(xp).map((a) => a.id));
+  const bestArchetype = selectFallbackArchetype(normalised, unlockedIds);
+  return inferFallbackMetadata(ideaText, bestArchetype.plan);
 }

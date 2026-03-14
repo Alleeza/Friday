@@ -3,7 +3,6 @@ import { getFallbackPlan } from './ai/planning/fallbackPlans';
 import { loadProjectState, publishSavedProject, saveProjectState } from './api/projectState';
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
-import ProjectRoadmapPage from './components/ProjectRoadmapPage';
 import SharedGamePage from './components/SharedGamePage';
 import { createBunnyCarrotExampleProject } from './data/exampleProjects';
 
@@ -46,10 +45,6 @@ function writeResumeBuilderFlag(value) {
 function deriveProjectPlan(setupData) {
   if (!setupData) return null;
   return setupData.plan || getFallbackPlan(setupData.idea || '', 0);
-}
-
-function getScreenForSetupData(setupData) {
-  return deriveProjectPlan(setupData) ? 'roadmap' : 'builder';
 }
 
 function getSharedGameIdFromPath() {
@@ -138,7 +133,7 @@ export default function App() {
   const handleSetupComplete = useCallback((nextSetupData) => {
     writeResumeBuilderFlag(true);
     setResumeToken(true);
-    setActiveScreen(getScreenForSetupData(nextSetupData));
+    setActiveScreen('builder');
     setProjectState((current) => ({ ...current, setupData: nextSetupData }));
     setProjectPlan(deriveProjectPlan(nextSetupData));
     setSaveState('idle');
@@ -205,24 +200,6 @@ export default function App() {
   }
 
   if (activeScreen !== 'builder') {
-    if (activeScreen === 'roadmap' && projectPlan) {
-      return (
-        <>
-          {storageError ? (
-            <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-[#ffd7dc] bg-[#fff4f5] px-4 py-2 text-sm font-bold text-rose-600 shadow">
-              Storage offline: {storageError}
-            </div>
-          ) : null}
-          <ProjectRoadmapPage
-            setupData={projectState.setupData}
-            plan={projectPlan}
-            onStartBuilder={() => setActiveScreen('builder')}
-            onBack={() => setActiveScreen('setup')}
-          />
-        </>
-      );
-    }
-
     return (
       <>
         {storageError ? (

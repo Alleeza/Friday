@@ -42,12 +42,22 @@ function Token({ token, compact, editable, onChange, assetOptions = [] }) {
   }
 
   if (editable) {
+    const isNumeric = Boolean(token.numeric);
     return (
       <input
         type="text"
         value={token.label}
+        inputMode={isNumeric ? 'numeric' : undefined}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => onChange?.(e.target.value)}
+        onChange={(e) => {
+          const raw = e.target.value;
+          const next = isNumeric
+            ? raw
+                .replace(/[^\d-]/g, '')
+                .replace(/(?!^)-/g, '')
+            : raw;
+          onChange?.(next);
+        }}
         className="inline-flex min-w-12 max-w-20 rounded-full border-2 border-white/70 bg-white px-2 py-1 text-center text-sm font-extrabold text-slate-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)] outline-none"
       />
     );

@@ -6,6 +6,18 @@ const apiPort = Number(process.env.PORT || 3001);
 const children = [];
 let shuttingDown = false;
 
+function assertSupportedNodeVersion() {
+  const [majorRaw] = String(process.versions.node || '').split('.');
+  const major = Number.parseInt(majorRaw, 10);
+  if (Number.isNaN(major) || major >= 22) return;
+
+  process.stderr.write(
+    `[dev] Node ${process.versions.node} detected. This project requires Node 22+ because the backend uses "node:sqlite".\n`,
+  );
+  process.stderr.write('[dev] Run: nvm install 22 && nvm use 22\n');
+  process.exit(1);
+}
+
 function isPortInUse(port) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ port, host: '127.0.0.1' });
@@ -60,6 +72,8 @@ function stopAll() {
 }
 
 async function main() {
+  assertSupportedNodeVersion();
+
   const portInUse = await isPortInUse(apiPort);
 
   if (portInUse) {

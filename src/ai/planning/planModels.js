@@ -14,6 +14,24 @@
  */
 
 /**
+ * @typedef {Object} StepCheck
+ * @property {string} type - "hasAsset" | "assetCount" | "eventIs" | "hasBlockOnAsset" | "scriptOnAssetContains" | "minBlockCount" | "blockValueOnAsset" | "assetMoved" | "runtimeVar" | "aiCheck"
+ * @property {string} [value]     - Asset id for hasAsset/runtimeVar, or comparison value for block checks
+ * @property {string} [asset]     - Asset id to scope the check to
+ * @property {string} [event]     - Event name for eventIs
+ * @property {string} [block]     - Block name for hasBlockOnAsset
+ * @property {string[]} [blocks]  - Block names for scriptOnAssetContains
+ * @property {number}  [min]      - Minimum count for assetCount/minBlockCount
+ * @property {number}  [max]      - Maximum count for assetCount
+ * @property {number}  [exact]    - Exact count for assetCount
+ * @property {number}  [partIndex] - Token index to inspect for blockValueOnAsset
+ * @property {string}  [op]       - Comparison operator for runtimeVar/blockValueOnAsset
+ * @property {number}  [threshold] - Comparison threshold for runtimeVar
+ * @property {number}  [minDistance] - Minimum movement distance for assetMoved
+ * @property {string}  [condition] - Natural-language condition string for aiCheck
+ */
+
+/**
  * @typedef {Object} Stage
  * @property {string}         id            - e.g. "stage-1"
  * @property {string}         label         - Short title, e.g. "Place your characters"
@@ -22,6 +40,7 @@
  * @property {string}         success       - How to know the stage is complete
  * @property {string[]}       steps         - Ordered hints (not exact instructions)
  * @property {number[]}       stepXp        - XP per step; length must match steps
+ * @property {Array<StepCheck[]>} stepChecks - Machine-checkable rules per step; parallel to steps. [] = manual only.
  * @property {OptionalStep[]} optionalSteps - Stretch goals
  */
 
@@ -89,6 +108,20 @@ export function createStage(raw = {}, index = 0) {
     ? raw.optionalSteps.map(createOptionalStep)
     : [];
 
+  // stepChecks must be an array of arrays, parallel to steps.
+  // Each inner array is a list of StepCheck objects; [] means manual-only for that step.
+  let stepChecks = [];
+  if (Array.isArray(raw.stepChecks)) {
+    stepChecks = raw.stepChecks.map((entry) => {
+      if (!Array.isArray(entry)) return [];
+      // Filter out any check that is missing a type field
+      return entry.filter((check) => check && typeof check === 'object' && typeof check.type === 'string');
+    });
+  }
+  // Pad or truncate to match steps length
+  while (stepChecks.length < steps.length) stepChecks.push([]);
+  stepChecks = stepChecks.slice(0, steps.length);
+
   return Object.freeze({
     id: String(raw.id ?? `stage-${index + 1}`),
     label: String(raw.label ?? `Stage ${index + 1}`),
@@ -97,6 +130,7 @@ export function createStage(raw = {}, index = 0) {
     success: String(raw.success ?? 'Your game does something new!'),
     steps,
     stepXp,
+    stepChecks,
     optionalSteps,
   });
 }

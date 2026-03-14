@@ -6,73 +6,22 @@ import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
+import { BLOCK_PALETTE, DEFAULT_EVENT, EVENT_OPTIONS } from '../data/builderCapabilities.js';
+import { sandboxAssets } from '../data/sandboxAssets';
+import { createDefaultAIService } from '../ai/createDefaultAIService.js';
+import {
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+} from '../ai/providerCatalog.js';
+import { useAIChat } from '../hooks/useAIChat';
 import { StageProgressSection } from './ProjectRoadmapPage';
-
-const eventOptions = [
-  'game starts',
-  'sprite clicked',
-  'object is tapped',
-  'key is pressed',
-  'timer reaches 0',
-  'score reaches 10',
-  'bumps',
-  'is touching',
-  'is not touching',
-];
-const defaultEvent = 'game starts';
-
-const palette = {
-  Collisions: [
-    { id: 'bumps', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'bumps', { type: 'asset', value: 'Self' }] },
-    { id: 'touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is touching', { type: 'asset', value: 'Self' }] },
-    { id: 'not-touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is not touching', { type: 'asset', value: 'Self' }] },
-  ],
-  Conditionals: [
-    { id: 'cond-eq', tone: 'condition', parts: [{ label: 'A' }, '=', { label: 'B' }] },
-    { id: 'cond-neq', tone: 'condition', parts: [{ label: 'A' }, '≠', { label: 'B' }] },
-    { id: 'cond-lt', tone: 'condition', parts: [{ label: 'A' }, '<', { label: 'B' }] },
-    { id: 'cond-gt', tone: 'condition', parts: [{ label: 'A' }, '>', { label: 'B' }] },
-    { id: 'cond-lte', tone: 'condition', parts: [{ label: 'A' }, '≤', { label: 'B' }] },
-    { id: 'cond-gte', tone: 'condition', parts: [{ label: 'A' }, '≥', { label: 'B' }] },
-    { id: 'cond-and', tone: 'condition', parts: [{ label: 'A' }, 'and', { label: 'B' }] },
-    { id: 'cond-or', tone: 'condition', parts: [{ label: 'A' }, 'or', { label: 'B' }] },
-    { id: 'cond-not', tone: 'condition', parts: ['not', { label: 'A' }] },
-    { id: 'cond-flipped', tone: 'condition', parts: ['flipped'] },
-    { id: 'cond-matches', tone: 'condition', parts: [{ label: 'A' }, 'matches', { label: 'B' }] },
-  ],
-  Movement: [
-    { id: 'move-forward', tone: 'movement', parts: ['Move Forward', { label: '12' }] },
-    { id: 'turn', tone: 'movement', parts: ['Turn degrees', { label: '15' }] },
-    { id: 'set-rotation', tone: 'movement', parts: ['Set rotation style', { type: 'dropdown', value: 'dont rotate', options: ['dont rotate', 'left-right', 'all around'] }] },
-    { id: 'flip', tone: 'movement', parts: ['Flip'] },
-    { id: 'change-x', tone: 'movement', parts: ['Change X by', { label: '6' }] },
-    { id: 'change-y', tone: 'movement', parts: ['Change Y by', { label: '6' }] },
-    { id: 'go-to', tone: 'movement', parts: ['Go to X', { label: '320' }, 'Y', { label: '220' }] },
-    { id: 'point-direction', tone: 'movement', parts: ['Point in direction', { label: '90' }] },
-  ],
-  'Looks & Sounds': [
-    { id: 'switch-costume', tone: 'looks', parts: ['Switch costume to', { type: 'dropdown', value: 'bunny jump', options: ['bunny jump', 'tree glow', 'crab legs'] }] },
-    { id: 'next-costume', tone: 'sound', parts: ['Next costume'] },
-    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
-    { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
-  ],
-  Control: [
-    { id: 'forever', tone: 'control', type: 'loop', parts: ['Forever'] },
-    { id: 'repeat', tone: 'control', type: 'loop', parts: ['Repeat', { label: '5' }, 'times'] },
-    { id: 'while', tone: 'control', type: 'loop', parts: ['While', { type: 'dropdown', value: 'time > 0', options: ['score < 10', 'score >= 10', 'is alive', 'time > 0', 'time <= 0'] }] },
-    { id: 'wait', tone: 'control', parts: ['Wait', { label: '1' }, 'seconds'] },
-  ],
-  Variables: [
-    { id: 'change-score', tone: 'variables', parts: ['Change score by', { label: '1' }] },
-    { id: 'set-score', tone: 'variables', parts: ['Set score to', { label: '0' }] },
-    { id: 'change-time', tone: 'variables', parts: ['Change timer by', { label: '2' }] },
-    { id: 'set-time', tone: 'variables', parts: ['Set timer to', { label: '30' }] },
-    { id: 'set-alive', tone: 'variables', parts: ['Set alive to', { type: 'dropdown', value: 'true', options: ['true', 'false'] }] },
-  ],
-};
-
-function createSeedScript(eventName = defaultEvent) {
+function createSeedScript(eventName = DEFAULT_EVENT) {
   return [{ id: 'event-start', type: 'block', parts: ['When', eventName], tone: 'events' }];
+}
+
+function cloneValue(value, fallback) {
+  if (value == null) return fallback;
+  return JSON.parse(JSON.stringify(value));
 }
 
 function blockText(parts = []) {
@@ -110,12 +59,16 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
   const quickEditorRef = useRef(null);
-  const [sceneInstances, setSceneInstances] = useState([]);
+  const initialSceneInstances = useMemo(
+    () => cloneValue(initialSetupData?.initialScene, []),
+    [initialSetupData]
+  );
+  const [sceneInstances, setSceneInstances] = useState(() => initialSceneInstances);
   const [focusedInstanceKey, setFocusedInstanceKey] = useState(null);
   const [editorInstanceKey, setEditorInstanceKey] = useState(null);
   const [editorStage, setEditorStage] = useState('event');
-  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState({});
-  const [selectedBlock, setSelectedBlock] = useState(`When ${defaultEvent}`);
+  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => cloneValue(initialSetupData?.initialScripts, {}));
+  const [selectedBlock, setSelectedBlock] = useState(`When ${DEFAULT_EVENT}`);
   const [selectedCategory, setSelectedCategory] = useState('Movement');
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
   const [dragOverTopBlockId, setDragOverTopBlockId] = useState(null);
@@ -127,10 +80,36 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
-    { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
-  ]);
+  const selectedProvider = getDefaultProviderName();
+  const selectedModel = getDefaultModelForProvider(selectedProvider);
+
+  const aiService = useMemo(
+    () => createDefaultAIService({ providerName: selectedProvider, model: selectedModel }),
+    [selectedModel, selectedProvider]
+  );
+
+  const { messages, sendMessage, addNotification, isStreaming, abortResponse } = useAIChat({
+    aiService,
+    contextData: {
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: sandboxAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    },
+  });
+
+  const dispatchRuntimeEvent = (eventType, payload = {}) => {
+    runtimeRef.current?.dispatch(eventType, payload);
+    if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+  };
+
+  useEffect(() => {
+    if (messages.length) return;
+    addNotification('Build one object at a time. Each placed object gets its own script.');
+    addNotification('Press Play to compile every script and make the sandbox follow the code.');
+  }, [addNotification, messages.length]);
 
   useEffect(() => {
     const instanceKeys = new Set(sceneInstances.map((instance) => instance.key));
@@ -165,7 +144,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
   }, []);
-
   useEffect(() => {
     if (mode === 'play') return undefined;
     const clearDragUi = () => {
@@ -183,13 +161,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
       window.removeEventListener('drop', clearDragUi);
     };
   }, [mode]);
-
-  const paletteBlocks = useMemo(() => palette[selectedCategory] || [], [selectedCategory]);
+  const paletteBlocks = useMemo(() => BLOCK_PALETTE[selectedCategory] || [], [selectedCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
   const selectedInstance = sceneInstances.find((instance) => instance.key === editorInstanceKey) || null;
-  const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || defaultEvent;
+  const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || DEFAULT_EVENT;
   const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
   const assetOptions = useMemo(() => {
     const dynamic = sceneInstances.map((instance) => ({
@@ -261,7 +238,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: hydrateParts(template.parts), tone: template.tone, children: [] }
     : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: hydrateParts(template.parts), tone: template.tone };
 
-  const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
+  const pushAiMessage = addNotification;
 
   const addTopLevel = (template) => {
     if (!editorInstanceKey || mode === 'play') return;
@@ -551,12 +528,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     rafRef.current = requestAnimationFrame(loop);
   };
 
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
-  };
-
   const quickEditorPosition = selectedInstance
     ? (() => {
         const x = selectedInstance.x || 0;
@@ -762,13 +733,21 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
   return (
     <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
+      {projectPlan ? (
+        <StageProgressSection
+          setupData={initialSetupData}
+          plan={projectPlan}
+          workspaceState={{ sceneInstances, scriptsByInstanceKey, runtimeSnapshot }}
+          provider={aiService?.provider ?? null}
+        />
+      ) : null}
       <section>
         <div className="relative h-[640px] w-full">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
+            initialPlacedAssets={initialSceneInstances}
             onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
               setSceneInstances(instances);
               if (nextKey) setFocusedInstanceKey(nextKey);
@@ -799,7 +778,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                 onChange={(e) => handleEventChange(e.target.value)}
                 className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
               >
-                {eventOptions.map((eventName) => (
+                {EVENT_OPTIONS.map((eventName) => (
                   <option key={eventName} value={eventName}>
                     {eventName}
                   </option>
@@ -836,7 +815,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                       disabled={!editorInstanceKey || mode === 'play'}
                       className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
                     >
-                      {eventOptions.map((eventName) => (
+                      {EVENT_OPTIONS.map((eventName) => (
                         <option key={eventName} value={eventName} className="bg-white text-slate-800">
                           {eventName}
                         </option>
@@ -873,7 +852,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                         onChange={(e) => setSelectedCategory(e.target.value)}
                         className="w-full rounded-[18px] border border-[#d3dae3] bg-white px-4 py-3 text-[15px] font-extrabold uppercase tracking-[0.04em] text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)] outline-none"
                       >
-                        {Object.keys(palette).map((category) => (
+                        {Object.keys(BLOCK_PALETTE).map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
@@ -1054,7 +1033,14 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
         </div>
       </section>
       <section>
-        <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+        <div className="w-full">
+          <AIChatPanel
+            messages={messages}
+            onSend={sendMessage}
+            isStreaming={isStreaming}
+            onAbort={abortResponse}
+          />
+        </div>
       </section>
       {draggingPaletteBlock && mode !== 'play' ? (
         <div className="pointer-events-none fixed inset-0 z-[80]">

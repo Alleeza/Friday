@@ -10,6 +10,23 @@
 import { createPlan, createStage } from './planModels.js';
 import { ALL_BLOCK_NAMES, AVAILABLE_EVENTS_SET, IMPOSSIBLE_KEYWORDS } from './planRegistry.js';
 
+function normalizeText(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function normalizeEventName(value) {
+  return normalizeText(value).replace(/^when\s+/, '');
+}
+
+function normalizeBlockName(value) {
+  return normalizeText(value);
+}
+
+function textMentionsAny(text, items) {
+  const normalized = normalizeText(text);
+  return items.some((item) => normalized.includes(normalizeText(item)));
+}
+
 // ---------------------------------------------------------------------------
 // Layer 1: Structure validation
 // ---------------------------------------------------------------------------
@@ -81,6 +98,21 @@ export function validateStructure(raw) {
     if (typeof raw.entities !== 'object' || Array.isArray(raw.entities)) {
       errors.push('"entities" must be an object');
     }
+  }
+
+  // stepChecks — soft requirement: validate shape but don't fail the plan, createStage() will normalise
+  if (Array.isArray(raw.stages)) {
+    raw.stages.forEach((stage, i) => {
+      if (!stage || typeof stage !== 'object') return;
+      if (stage.stepChecks !== undefined) {
+        if (!Array.isArray(stage.stepChecks)) {
+          errors.push(`Stage ${i + 1}: "stepChecks" must be an array if present`);
+        } else if (Array.isArray(stage.steps) && stage.stepChecks.length !== stage.steps.length) {
+          // Log a warning but don't fail — createStage() will pad/truncate
+          errors.push(`Stage ${i + 1}: "stepChecks" length (${stage.stepChecks.length}) does not match "steps" length (${stage.steps.length}) — will be padded`);
+        }
+      }
+    });
   }
 
   if (errors.length > 0) {
@@ -175,6 +207,119 @@ export function validateFeasibility(plan, { unlockedAssets, allowedBlockNames })
 }
 
 // ---------------------------------------------------------------------------
+// Layer 3: Semantic validation
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {Object} SemanticResult
+ * @property {boolean}  valid
+ * @property {string[]} issues
+ */
+
+/**
+ * Validates that step wording and stepChecks align with the planner catalog.
+ *
+ * @param {import('./planModels.js').Plan} plan
+ * @param {{
+ *   plannerAssets: Array<{ id: string, label: string }>,
+ *   plannerBlocks: Array<{ name: string, directlyCheckable: boolean, editableParts: Array<{ index: number }> }>,
+ *   plannerEvents: Array<{ value: string, displayName: string }>,
+ *   plannerCheckabilityGuide: Array<{ type: string }>,
+ * }} constraints
+ * @returns {SemanticResult}
+ */
+export function validateSemanticAlignment(plan, {
+  plannerAssets = [],
+  plannerBlocks = [],
+  plannerEvents = [],
+  plannerCheckabilityGuide = [],
+} = {}) {
+  const issues = [];
+  const assetIds = new Set(plannerAssets.map((asset) => asset.id));
+  const assetLabels = plannerAssets.map((asset) => asset.label);
+  const blockMap = new Map(plannerBlocks.map((block) => [normalizeBlockName(block.name), block]));
+  const blockNames = plannerBlocks.map((block) => block.name);
+  const eventValues = new Set(plannerEvents.map((event) => normalizeEventName(event.value)));
+  const eventPhrases = plannerEvents.flatMap((event) => [event.value, event.displayName]);
+  const knownCheckTypes = new Set(plannerCheckabilityGuide.map((guide) => guide.type));
+
+  plan.stages.forEach((stage) => {
+    stage.steps.forEach((stepText, stepIndex) => {
+      const checks = stage.stepChecks?.[stepIndex] ?? [];
+      const prefix = `${stage.label} / Step ${stepIndex + 1}`;
+      const normalizedStep = normalizeText(stepText);
+
+      if (!Array.isArray(checks)) {
+        issues.push(`${prefix}: stepChecks entry must be an array`);
+        return;
+      }
+
+      checks.forEach((check) => {
+        if (!check || typeof check.type !== 'string') return;
+
+        if (!knownCheckTypes.has(check.type)) {
+          issues.push(`${prefix}: unsupported check type "${check.type}"`);
+        }
+
+        if ((check.type === 'hasBlockOnAsset' || check.type === 'blockValueOnAsset') && typeof check.block === 'string') {
+          const normalizedBlock = normalizeBlockName(check.block);
+          if (eventValues.has(normalizeEventName(check.block)) || normalizedBlock.startsWith('when ')) {
+            issues.push(`${prefix}: "${check.block}" looks like an event, so use eventIs instead of ${check.type}`);
+          }
+          if (!blockMap.has(normalizedBlock)) {
+            issues.push(`${prefix}: block "${check.block}" is not present in the planner block catalog`);
+          }
+        }
+
+        if (check.type === 'scriptOnAssetContains' && Array.isArray(check.blocks)) {
+          check.blocks.forEach((blockName) => {
+            if (eventValues.has(normalizeEventName(blockName)) || normalizeBlockName(blockName).startsWith('when ')) {
+              issues.push(`${prefix}: "${blockName}" looks like an event, so use eventIs instead of scriptOnAssetContains`);
+            }
+            if (!blockMap.has(normalizeBlockName(blockName))) {
+              issues.push(`${prefix}: block "${blockName}" is not present in the planner block catalog`);
+            }
+          });
+        }
+
+        if (check.type === 'eventIs') {
+          if (!assetIds.has(check.asset)) {
+            issues.push(`${prefix}: eventIs references unknown asset "${check.asset}"`);
+          }
+          if (!eventValues.has(normalizeEventName(check.event))) {
+            issues.push(`${prefix}: eventIs references unknown event "${check.event}"`);
+          }
+        }
+
+        if ((check.type === 'hasAsset' && !assetIds.has(check.value)) || ((check.type === 'assetCount' || check.type === 'minBlockCount' || check.type === 'assetMoved') && !assetIds.has(check.asset ?? check.value))) {
+          issues.push(`${prefix}: check "${check.type}" references an asset that is not in the planner asset catalog`);
+        }
+
+        if (check.type === 'blockValueOnAsset') {
+          const block = blockMap.get(normalizeBlockName(check.block));
+          const editableIndexes = new Set((block?.editableParts || []).map((part) => part.index));
+          if (block && editableIndexes.size > 0 && !editableIndexes.has(check.partIndex ?? 1)) {
+            issues.push(`${prefix}: blockValueOnAsset uses partIndex ${check.partIndex ?? 1} but "${check.block}" exposes ${[...editableIndexes].join(', ')}`);
+          }
+        }
+      });
+
+      if (checks.length === 0) {
+        if (/(place|add|drag)/.test(normalizedStep) && textMentionsAny(stepText, assetLabels)) {
+          issues.push(`${prefix}: mentions placing an asset but has no machine check; prefer hasAsset or assetCount`);
+        } else if (/(event|when|clicked|tapped|key|bumps|touching|timer|score)/.test(normalizedStep) || textMentionsAny(stepText, eventPhrases)) {
+          issues.push(`${prefix}: mentions an observable event choice but has no machine check; prefer eventIs`);
+        } else if (textMentionsAny(stepText, blockNames) || /(loop|forever|repeat|move|turn|say|sound)/.test(normalizedStep)) {
+          issues.push(`${prefix}: mentions an observable block choice but has no machine check; prefer hasBlockOnAsset, scriptOnAssetContains, or blockValueOnAsset`);
+        }
+      }
+    });
+  });
+
+  return { valid: issues.length === 0, issues };
+}
+
+// ---------------------------------------------------------------------------
 // Combined validate helper
 // ---------------------------------------------------------------------------
 
@@ -195,9 +340,18 @@ export function validatePlan(raw, constraints) {
   }
 
   const feasResult = validateFeasibility(structResult.plan, constraints);
+  if (!feasResult.valid) {
+    return {
+      valid: false,
+      issues: feasResult.violations,
+      plan: structResult.plan,
+    };
+  }
+
+  const semanticResult = validateSemanticAlignment(structResult.plan, constraints);
   return {
-    valid: feasResult.valid,
-    issues: feasResult.violations,
+    valid: semanticResult.valid,
+    issues: semanticResult.issues,
     plan: structResult.plan,
   };
 }

@@ -71,7 +71,9 @@ export default function SandboxBuilderPage({
   initialProjectState = null,
   onProjectStateChange,
   onSaveProject,
+  onPublishProject,
   saveState = 'idle',
+  publishState = 'idle',
   projectPlan = null,
 }) {
   const lastPublishedProjectRef = useRef('');
@@ -784,7 +786,11 @@ export default function SandboxBuilderPage({
             onPlay={startRuntime}
             onStop={stopRuntime}
             onSave={onSaveProject}
+            onPublish={onPublishProject}
             saveState={saveState}
+            publishState={publishState}
+            showPublishButton
+            publishLabel="Share"
             suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {
               runtimeRef.current?.dispatch('sprite clicked', { instanceKey });

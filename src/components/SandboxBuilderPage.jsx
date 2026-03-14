@@ -62,7 +62,6 @@ const palette = {
     { id: 'point-direction', tone: 'movement', parts: ['Point in direction', { label: '90', numeric: true }] },
   ],
   'Looks & Sounds': [
-    { id: 'switch-costume', tone: 'looks', parts: ['Switch costume to', { type: 'dropdown', value: 'bunny jump', options: ['bunny jump', 'tree glow', 'crab legs'] }] },
     { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
     { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
     { id: 'hide', tone: 'looks', parts: ['Hide object'] },

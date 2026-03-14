@@ -706,6 +706,14 @@ export default function GamePreviewCanvas({
             onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)}
             onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}
           >
+            {asset.speechText ? (
+              <div className="pointer-events-none absolute -top-10 left-1/2 z-30 w-max max-w-[220px] -translate-x-1/2">
+                <div className="relative rounded-[22px] border-2 border-[#d8dfeb] bg-white px-5 py-3 text-center text-[17px] font-black leading-tight text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.14)]">
+                  {asset.speechText}
+                  <div className="absolute left-1/2 top-full h-4 w-4 -translate-x-1/2 -translate-y-[55%] rotate-45 border-b-2 border-r-2 border-[#d8dfeb] bg-white" />
+                </div>
+              </div>
+            ) : null}
             {isSelected && showSelectionChrome ? (
               <>
                 <div className="absolute inset-0 border-[3px] border-[#19a2ff]" />

@@ -182,7 +182,14 @@ function StepRow({ active, done, label, xp, onClick, tone = 'step' }) {
   );
 }
 
-export function StageProgressSection({ setupData, plan, workspaceState = null, provider = null }) {
+export function StageProgressSection({
+  setupData,
+  plan,
+  workspaceState = null,
+  provider = null,
+  compact = false,
+  className = '',
+}) {
   const [completedStepKeys, setCompletedStepKeys] = useState({});
   const [showSteps, setShowSteps] = useState(false);
   const [showBonusQuests, setShowBonusQuests] = useState(false);
@@ -280,8 +287,67 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
     console.groupEnd();
   }, [currentStage, workspaceState, workspaceDebugText, stepDebugInfo]);
 
+  if (compact) {
+    return (
+      <section className={`quest-card w-full border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] ${className}`.trim()}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="font-display text-[28px] font-bold leading-none text-slate-800">Stage Progress</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-extrabold">
+              <span className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-4 py-1 text-[#1b97dd]">
+                Stage {Math.min(currentIndex + 1, stages.length)} of {stages.length}
+              </span>
+              <span className="rounded-full border border-[#d3d7dd] bg-white px-4 py-1 text-slate-600">{progressPct}% complete</span>
+              <span className="rounded-full border border-[#bde59f] bg-[#eefadb] px-4 py-1 text-[#3f7f13]">
+                XP {earnedRequiredXp}/{totalRequiredXp}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-[#e2e8f0] bg-white px-4 py-3 shadow-[0_3px_0_rgba(148,163,184,0.12)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Current Stage</p>
+            <p className="mt-1 text-[15px] font-extrabold text-slate-800">{currentStage?.label || 'No stage selected'}</p>
+          </div>
+        </div>
+
+        <div className="relative mt-5 px-1 pb-1">
+          <div className="absolute left-4 right-4 top-5 h-[4px] rounded-full bg-[#d4dce6]" />
+          <div className="absolute left-4 top-5 h-[4px] rounded-full bg-[#25a8ef] transition-all" style={{ width: `${activeLinePct}%` }} />
+
+          <div
+            className="relative grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${Math.max(stages.length, 1)}, minmax(0, 1fr))` }}
+          >
+            {stages.map((stage, idx) => {
+              const isDone = done[idx];
+              const isActive = idx === currentIndex || (done.every(Boolean) && idx === stages.length - 1);
+              return (
+                <div key={stage.id} className="text-center">
+                  <div
+                    className={`mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full border-[3px] text-sm font-extrabold ${
+                      isDone
+                        ? 'border-[#58cc02] bg-[#58cc02] text-white shadow-sm'
+                        : isActive
+                          ? 'border-[#25a8ef] bg-white text-[#25a8ef] shadow-sm'
+                          : 'border-[#b9c4d2] bg-white text-[#8f9cad]'
+                    }`}
+                  >
+                    {isDone ? '✓' : idx + 1}
+                  </div>
+                  <p className={`text-[12px] font-bold leading-tight ${isActive ? 'text-[#25a8ef]' : 'text-slate-600'}`}>
+                    {stage.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="quest-card w-full border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)]">
+    <section className={`quest-card w-full border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] ${className}`.trim()}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-3 pl-1">
           <h2 className="font-display text-3xl font-bold leading-none text-slate-800">Stage Progress</h2>

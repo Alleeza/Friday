@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pencil, Save, Shapes, Trash2, X, Play, Square } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pencil, Play, Redo2, Save, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -11,7 +11,6 @@ import { sandboxAssets } from '../data/sandboxAssets';
 import questyImage from '../imgages/profile.png';
 import GamificationHUD from './GamificationHUD';
 import MissionPanel from './MissionPanel';
-import AchievementPanel from './AchievementPanel';
 import { useGamification } from '../hooks/useGamification';
 
 const eventOptions = [
@@ -228,7 +227,7 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
 function BuilderTopNav({ onCreateNewGame }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1920px] items-center justify-between px-4 py-2.5 lg:px-6">
+      <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
           <img
             src={questyImage}
@@ -238,13 +237,13 @@ function BuilderTopNav({ onCreateNewGame }) {
           <span className="font-display text-[22px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <GamificationHUD />
 
           <button
             type="button"
             onClick={onCreateNewGame}
-            className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2 text-[13px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2 text-[13px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none"
           >
             <span className="text-[16px] leading-none">+</span>
             Create New Game
@@ -268,24 +267,6 @@ export default function SandboxBuilderPage({
   onCreateNewGame,
 }) {
   const { processEvent } = useGamification();
-  const canvasContainerRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const toggleFullscreen = useCallback(() => {
-    if (!canvasContainerRef.current) return;
-    if (!document.fullscreenElement) {
-      canvasContainerRef.current.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -318,6 +299,11 @@ export default function SandboxBuilderPage({
   const [draggingPaletteBlock, setDraggingPaletteBlock] = useState(false);
   const [trashActive, setTrashActive] = useState(false);
   const [historyStack, setHistoryStack] = useState([]);
+  const [futureHistoryStack, setFutureHistoryStack] = useState([]);
+  const [canvasHistoryState, setCanvasHistoryState] = useState({ canUndo: false, canRedo: false });
+  const [canvasUndoSignal, setCanvasUndoSignal] = useState(0);
+  const [canvasRedoSignal, setCanvasRedoSignal] = useState(0);
+  const [activeHistoryDomain, setActiveHistoryDomain] = useState('scene');
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [pendingEventValue, setPendingEventValue] = useState('');
@@ -561,6 +547,8 @@ export default function SandboxBuilderPage({
   }, [editorInstanceKey, editorStage, mode]);
 
   const pushHistorySnapshot = () => {
+    setActiveHistoryDomain('script');
+    setFutureHistoryStack([]);
     setHistoryStack((prev) => [...prev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
   };
 
@@ -802,11 +790,26 @@ export default function SandboxBuilderPage({
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: block.children.filter((child) => child.id !== childId) }));
   };
 
-  const handleUndo = () => {
+  const handleScriptUndo = () => {
+    setActiveHistoryDomain('script');
     setHistoryStack((prev) => {
       if (!prev.length) return prev;
       const next = [...prev];
       const last = next.pop();
+      setFutureHistoryStack((futurePrev) => [...futurePrev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
+      setScriptsByInstanceKey(last.scriptsByInstanceKey);
+      setSelectedBlock(last.selectedBlock);
+      return next;
+    });
+  };
+
+  const handleScriptRedo = () => {
+    setActiveHistoryDomain('script');
+    setFutureHistoryStack((prev) => {
+      if (!prev.length) return prev;
+      const next = [...prev];
+      const last = next.pop();
+      setHistoryStack((historyPrev) => [...historyPrev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
       setScriptsByInstanceKey(last.scriptsByInstanceKey);
       setSelectedBlock(last.selectedBlock);
       return next;
@@ -1027,6 +1030,63 @@ export default function SandboxBuilderPage({
     setMessages((prev) => [...prev, { role: 'you', text }]);
     const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
     setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
+  };
+
+  const canScriptUndo = historyStack.length > 0;
+  const canScriptRedo = futureHistoryStack.length > 0;
+  const canSceneUndo = canvasHistoryState.canUndo;
+  const canSceneRedo = canvasHistoryState.canRedo;
+  const canUndo = activeHistoryDomain === 'scene'
+    ? canSceneUndo || canScriptUndo
+    : canScriptUndo || canSceneUndo;
+  const canRedo = activeHistoryDomain === 'scene'
+    ? canSceneRedo || canScriptRedo
+    : canScriptRedo || canSceneRedo;
+
+  const triggerUndo = () => {
+    if (activeHistoryDomain === 'scene') {
+      if (canSceneUndo) {
+        setCanvasUndoSignal((prev) => prev + 1);
+        return;
+      }
+      if (canScriptUndo) {
+        setActiveHistoryDomain('script');
+        handleScriptUndo();
+      }
+      return;
+    }
+
+    if (canScriptUndo) {
+      handleScriptUndo();
+      return;
+    }
+    if (canSceneUndo) {
+      setActiveHistoryDomain('scene');
+      setCanvasUndoSignal((prev) => prev + 1);
+    }
+  };
+
+  const triggerRedo = () => {
+    if (activeHistoryDomain === 'scene') {
+      if (canSceneRedo) {
+        setCanvasRedoSignal((prev) => prev + 1);
+        return;
+      }
+      if (canScriptRedo) {
+        setActiveHistoryDomain('script');
+        handleScriptRedo();
+      }
+      return;
+    }
+
+    if (canScriptRedo) {
+      handleScriptRedo();
+      return;
+    }
+    if (canSceneRedo) {
+      setActiveHistoryDomain('scene');
+      setCanvasRedoSignal((prev) => prev + 1);
+    }
   };
 
   const quickEditorPosition = selectedInstance
@@ -1511,140 +1571,159 @@ export default function SandboxBuilderPage({
   return (
     <>
       <BuilderTopNav onCreateNewGame={onCreateNewGame} />
-      <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      {projectPlan ? (
-        <StageProgressSection
-          setupData={initialSetupData}
-          plan={projectPlan}
-          workspaceState={progressWorkspaceState}
-        />
-      ) : null}
-      <section>
-        <div className="flex w-full gap-0" style={{ height: '720px' }}>
+      <main className="mx-auto w-full max-w-[1920px] space-y-4 px-4 py-4 lg:px-6">
+        {projectPlan ? (
+          <StageProgressSection
+            setupData={initialSetupData}
+            plan={projectPlan}
+            workspaceState={progressWorkspaceState}
+            compact
+            className="sticky top-[78px] z-20"
+          />
+        ) : null}
+
+        <section className="grid min-h-[720px] gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <MissionPanel />
-          <div ref={canvasContainerRef} className={`relative flex-1 h-full flex flex-col min-w-0 ${isFullscreen ? 'bg-[#1e1e2e]' : ''}`}>
-            {/* Canvas Header — controls above canvas */}
-            <div className={`flex items-center justify-between px-3 py-2 shrink-0 ${isFullscreen ? 'bg-[#1e1e2e]/90 backdrop-blur-md border-b border-white/10' : 'bg-white border-b border-slate-200'}`}>
-              <div className="flex items-center gap-1.5">
+
+          <div className="flex min-h-[720px] min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#dde3ea] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Sandbox Canvas</p>
+                <p className="text-sm font-semibold text-slate-600">Build and test the mission here.</p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={toggleFullscreen}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-bold transition ${isFullscreen ? 'text-white/80 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
-                  title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                  onClick={triggerUndo}
+                  disabled={!canUndo || mode === 'play'}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                  {isFullscreen ? 'Exit' : 'Fullscreen'}
+                  <Undo2 size={14} />
+                  Undo
                 </button>
-              </div>
-              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={triggerRedo}
+                  disabled={!canRedo || mode === 'play'}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Redo2 size={14} />
+                  Redo
+                </button>
                 <button
                   type="button"
                   onClick={onSaveProject}
                   disabled={saveState === 'saving'}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-[12px] font-bold text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[12px] font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Save size={13} />
+                  <Save size={14} />
                   {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
                 </button>
-                {hasSavedProject && (
-                  <button
-                    type="button"
-                    onClick={onPublishProject}
-                    disabled={publishState === 'publishing'}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-[12px] font-bold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
-                  >
-                    <Shapes size={13} />
-                    {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={onPublishProject}
+                  disabled={!hasSavedProject || publishState === 'publishing'}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Share2 size={14} />
+                  {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                </button>
                 {mode === 'play' ? (
                   <button
                     type="button"
                     onClick={stopRuntime}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-1.5 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(220,38,38,0.4)] hover:bg-red-600 transition"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(220,38,38,0.4)] transition hover:bg-red-600"
                   >
-                    <Square size={13} /> Stop
+                    <Square size={14} />
+                    Stop
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={startRuntime}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#1cb0f6] px-4 py-1.5 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(14,138,199,0.5)] hover:bg-[#19a0e0] transition"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#1cb0f6] px-4 py-2 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(14,138,199,0.5)] transition hover:bg-[#19a0e0]"
                   >
-                    <Play size={13} /> Play
+                    <Play size={14} />
+                    Play
                   </button>
                 )}
               </div>
             </div>
-            {/* Canvas Area */}
-            <div className="relative flex-1 min-h-0">
-          <GamePreviewCanvas
-            mode={mode}
-            runtimeSnapshot={runtimeSnapshot}
-            initialSceneState={initialProjectState?.scene}
-            availableSpriteAssets={availableBuilderAssets}
-            prioritySpriteAssetIds={priorityBuilderAssetIds}
-            selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            onSceneChange={handleSceneChange}
-            onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
-            onPlay={startRuntime}
-            onStop={stopRuntime}
-            onSave={onSaveProject}
-            saveState={saveState}
-            onPublish={onPublishProject}
-            publishState={publishState}
-            showPublishButton={false}
-            showSaveButton={false}
-            showEditToolbar={true}
-            publishLabel="Share"
-            suppressSelectionChrome={editorStage === 'expanded'}
-            onSpriteClick={(instanceKey) => {
-              runtimeRef.current?.dispatch('sprite clicked', { instanceKey });
-              runtimeRef.current?.dispatch('object is tapped', { instanceKey });
-              if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
-            }}
-          />
 
-          {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
-            <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
-              {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
-              {renderAddEventPill()}
-            </div>
-          ) : null}
+            <div className="relative min-h-0 flex-1 p-3 sm:p-4">
+              <GamePreviewCanvas
+                mode={mode}
+                runtimeSnapshot={runtimeSnapshot}
+                initialSceneState={initialProjectState?.scene}
+                availableSpriteAssets={availableBuilderAssets}
+                prioritySpriteAssetIds={priorityBuilderAssetIds}
+                selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
+                onSceneChange={handleSceneChange}
+                onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
+                onPlay={startRuntime}
+                onStop={stopRuntime}
+                onSave={onSaveProject}
+                saveState={saveState}
+                onPublish={onPublishProject}
+                publishState={publishState}
+                showPublishButton={false}
+                showSaveButton={false}
+                showEditToolbar={false}
+                showCanvasControls={false}
+                publishLabel="Share"
+                undoSignal={canvasUndoSignal}
+                redoSignal={canvasRedoSignal}
+                onHistoryStateChange={setCanvasHistoryState}
+                onHistoryAction={setActiveHistoryDomain}
+                suppressSelectionChrome={editorStage === 'expanded'}
+                onSpriteClick={(instanceKey) => {
+                  runtimeRef.current?.dispatch('sprite clicked', { instanceKey });
+                  runtimeRef.current?.dispatch('object is tapped', { instanceKey });
+                  if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+                }}
+              />
 
-          {draggingScriptBlock && mode !== 'play' ? (
-            <div
-              className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
-              onDragOver={(e) => {
-                const payload = readDragPayload(e);
-                if (!payload || payload.kind === 'palette-template') return;
-                e.preventDefault();
-                e.stopPropagation();
-                if (!trashActive) setTrashActive(true);
-              }}
-              onDragLeave={(e) => {
-                if (e.currentTarget.contains(e.relatedTarget)) return;
-                if (trashActive) setTrashActive(false);
-              }}
-              onDrop={handleTrashDrop}
-            >
-              <div
-                className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
-                  trashActive
-                    ? 'scale-110 border-rose-700 bg-rose-600 text-white'
-                    : 'border-rose-200 bg-white/95 text-rose-500'
-                }`}
-                aria-label="Delete dragged item"
-              >
-                <Trash2 size={28} strokeWidth={2.6} />
-              </div>
-            </div>
-          ) : null}
+              {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
+                <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
+                  {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
+                  {renderAddEventPill()}
+                </div>
+              ) : null}
 
-          {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
-            <div className="pointer-events-none absolute inset-0 z-30 p-6">
-              <div className="pointer-events-auto absolute inset-x-6 top-5 bottom-6 flex flex-col gap-4">
-                <div className="flex items-center gap-4 rounded-[30px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
+              {draggingScriptBlock && mode !== 'play' ? (
+                <div
+                  className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+                  onDragOver={(e) => {
+                    const payload = readDragPayload(e);
+                    if (!payload || payload.kind === 'palette-template') return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!trashActive) setTrashActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (e.currentTarget.contains(e.relatedTarget)) return;
+                    if (trashActive) setTrashActive(false);
+                  }}
+                  onDrop={handleTrashDrop}
+                >
+                  <div
+                    className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                      trashActive
+                        ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                        : 'border-rose-200 bg-white/95 text-rose-500'
+                    }`}
+                    aria-label="Delete dragged item"
+                  >
+                    <Trash2 size={28} strokeWidth={2.6} />
+                  </div>
+                </div>
+              ) : null}
+
+              {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
+                <div className="pointer-events-none absolute inset-0 z-30 p-6">
+                  <div className="pointer-events-auto absolute inset-x-6 top-5 bottom-6 flex flex-col gap-4">
+                    <div className="flex items-center gap-4 rounded-[30px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
                   <div className="flex h-14 items-center gap-3 rounded-[16px] border border-[#d3dae3] bg-[#eef3f8] px-4">
                     <div className="text-[24px] leading-none">{selectedInstance?.emoji}</div>
                     <div className="text-[20px] font-extrabold leading-none text-slate-700">
@@ -1760,7 +1839,7 @@ export default function SandboxBuilderPage({
                     </button>
                     <button
                       type="button"
-                      onClick={handleUndo}
+                      onClick={handleScriptUndo}
                       disabled={!historyStack.length || mode === 'play'}
                       className="grid h-11 w-11 place-items-center rounded-full bg-[#8f98a3] text-white shadow-[0_6px_0_rgba(71,85,105,0.22)] disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -1856,25 +1935,25 @@ export default function SandboxBuilderPage({
                   </div>
                 </div>
               </div>
+                </div>
+              ) : null}
             </div>
-          ) : null}
           </div>
+        </section>
+
+        <section>
+          <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+        </section>
+
+        {draggingPaletteBlock && mode !== 'play' ? (
+          <div className="pointer-events-none fixed inset-0 z-[80]">
+            <div
+              className={`absolute inset-0 transition ${
+                draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
+              }`}
+            />
           </div>
-          <AchievementPanel />
-        </div>
-      </section>
-      <section>
-        <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
-      </section>
-      {draggingPaletteBlock && mode !== 'play' ? (
-        <div className="pointer-events-none fixed inset-0 z-[80]">
-          <div
-            className={`absolute inset-0 transition ${
-              draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
-            }`}
-          />
-        </div>
-      ) : null}
+        ) : null}
       </main>
     </>
   );

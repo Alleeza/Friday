@@ -80,13 +80,18 @@ export default function GamePreviewCanvas({
   saveState = 'idle',
   publishState = 'idle',
   onSpriteClick,
+  onHistoryStateChange,
+  onHistoryAction,
   currentXp = 100,
   suppressSelectionChrome = false,
   showEditToolbar = true,
+  showCanvasControls = true,
   showSaveButton = true,
   showPublishButton = false,
   showTrayToggle = true,
   publishLabel = 'Share',
+  undoSignal = 0,
+  redoSignal = 0,
 }) {
   const canvasRef = useRef(null);
   const backdropRef = useRef(null);
@@ -106,12 +111,15 @@ export default function GamePreviewCanvas({
   const backdropResizedDuringDragRef = useRef(false);
   const onSceneChangeRef = useRef(onSceneChange);
   const initialSceneRef = useRef(normalizeSceneState(initialSceneState));
+  const lastUndoSignalRef = useRef(undoSignal);
+  const lastRedoSignalRef = useRef(redoSignal);
   const [trayOpen, setTrayOpen] = useState(false);
   const [trayTab, setTrayTab] = useState('sprites');
   const [placedAssets, setPlacedAssets] = useState(initialSceneRef.current.placedAssets);
   const [selectedPlacedAssetKey, setSelectedPlacedAssetKey] = useState(initialSceneRef.current.selectedPlacedAssetKey);
   const [backdropState, setBackdropState] = useState(initialSceneRef.current.backdropState);
   const [pastStates, setPastStates] = useState([]);
+  const [futureStates, setFutureStates] = useState([]);
   const [draggingPlacedAssetKey, setDraggingPlacedAssetKey] = useState(null);
   const [resizingPlacedAssetKey, setResizingPlacedAssetKey] = useState(null);
   const [draggingBackdrop, setDraggingBackdrop] = useState(false);
@@ -184,11 +192,30 @@ export default function GamePreviewCanvas({
     ));
   }, [selectedInstanceKey]);
 
+  useEffect(() => {
+    onHistoryStateChange?.({
+      canUndo: pastStates.length > 0,
+      canRedo: futureStates.length > 0,
+    });
+  }, [futureStates.length, onHistoryStateChange, pastStates.length]);
+
   useEffect(() => () => {
     if (wheelResizeTimeoutRef.current) {
       clearTimeout(wheelResizeTimeoutRef.current);
     }
   }, []);
+
+  const recordSceneHistory = (snapshot) => {
+    setPastStates((prev) => [...prev.slice(-29), snapshot]);
+    setFutureStates([]);
+    onHistoryAction?.('scene');
+  };
+
+  const restoreSceneState = (snapshot) => {
+    setPlacedAssets(snapshot.placedAssets);
+    updateSelection(snapshot.selectedPlacedAssetKey);
+    setBackdropState(snapshot.backdropState);
+  };
 
   useEffect(() => {
     if (!isEditMode || !trayOpen) return undefined;
@@ -258,7 +285,7 @@ export default function GamePreviewCanvas({
 
   const applyBackdrop = (backdrop) => {
     const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-    setPastStates((prev) => [...prev, snapshot]);
+    recordSceneHistory(snapshot);
     setBackdropState(clampBackdropState({
       id: backdrop.id,
       x: 0,
@@ -311,7 +338,7 @@ export default function GamePreviewCanvas({
         key: `${asset.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       };
       const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-      setPastStates((prev) => [...prev, snapshot]);
+      recordSceneHistory(snapshot);
       setPlacedAssets((prev) => [...prev, placed]);
       updateSelection(placed.key);
     } catch {
@@ -321,19 +348,29 @@ export default function GamePreviewCanvas({
 
   const handleUndo = () => {
     if (!isEditMode || !pastStates.length) return;
+    const currentSnapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
     const previous = pastStates[pastStates.length - 1];
     setPastStates((prev) => prev.slice(0, -1));
-    setPlacedAssets(previous.placedAssets);
-    updateSelection(previous.selectedPlacedAssetKey);
-    setBackdropState(previous.backdropState);
+    setFutureStates((prev) => [...prev, currentSnapshot]);
+    restoreSceneState(previous);
+  };
+
+  const handleRedo = () => {
+    if (!isEditMode || !futureStates.length) return;
+    const currentSnapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    const next = futureStates[futureStates.length - 1];
+    setFutureStates((prev) => prev.slice(0, -1));
+    setPastStates((prev) => [...prev.slice(-29), currentSnapshot]);
+    restoreSceneState(next);
   };
 
   const handleRestart = () => {
     if (!isEditMode || (!placedAssets.length && !backdropState)) return;
+    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    recordSceneHistory(snapshot);
     setPlacedAssets([]);
     updateSelection(null);
     setBackdropState(null);
-    setPastStates([]);
     setDraggingPlacedAssetKey(null);
     setResizingPlacedAssetKey(null);
     setDraggingBackdrop(false);
@@ -358,7 +395,7 @@ export default function GamePreviewCanvas({
   const deletePlacedAsset = (assetKey) => {
     if (!assetKey) return;
     const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-    setPastStates((prev) => [...prev, snapshot]);
+    recordSceneHistory(snapshot);
     setPlacedAssets((prev) => prev.filter((asset) => asset.key !== assetKey));
     updateSelection(selectedPlacedAssetKey === assetKey ? null : selectedPlacedAssetKey);
   };
@@ -495,7 +532,7 @@ export default function GamePreviewCanvas({
 
     if (draggingBackdrop) {
       if (backdropMovedDuringDragRef.current && backdropMoveStartRef.current) {
-        setPastStates((prev) => [...prev, backdropMoveStartRef.current]);
+        recordSceneHistory(backdropMoveStartRef.current);
       }
       setDraggingBackdrop(false);
       backdropMoveStartRef.current = null;
@@ -504,7 +541,7 @@ export default function GamePreviewCanvas({
 
     if (resizingBackdrop) {
       if (backdropResizedDuringDragRef.current && backdropResizeStartRef.current?.snapshot) {
-        setPastStates((prev) => [...prev, backdropResizeStartRef.current.snapshot]);
+        recordSceneHistory(backdropResizeStartRef.current.snapshot);
       }
       setResizingBackdrop(false);
       backdropResizeStartRef.current = null;
@@ -516,7 +553,7 @@ export default function GamePreviewCanvas({
       if (shouldDelete) {
         deletePlacedAsset(draggingPlacedAssetKey);
       } else if (movedDuringDragRef.current && moveStartSnapshotRef.current) {
-        setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
+        recordSceneHistory(moveStartSnapshotRef.current);
       }
       setDraggingPlacedAssetKey(null);
       setTrashHover(false);
@@ -526,7 +563,7 @@ export default function GamePreviewCanvas({
 
     if (resizingPlacedAssetKey) {
       if (resizedDuringDragRef.current && resizeStartRef.current?.snapshot) {
-        setPastStates((prev) => [...prev, resizeStartRef.current.snapshot]);
+        recordSceneHistory(resizeStartRef.current.snapshot);
       }
       setResizingPlacedAssetKey(null);
       resizeStartRef.current = null;
@@ -598,7 +635,7 @@ export default function GamePreviewCanvas({
     e.preventDefault();
     if (!wheelResizeSnapshotRef.current) {
       wheelResizeSnapshotRef.current = buildSnapshot(placedAssets, asset.key, backdropState);
-      setPastStates((prev) => [...prev, wheelResizeSnapshotRef.current]);
+      recordSceneHistory(wheelResizeSnapshotRef.current);
     }
 
     setPlacedAssets((prev) => prev.map((item) => {
@@ -616,6 +653,18 @@ export default function GamePreviewCanvas({
       wheelResizeTimeoutRef.current = null;
     }, 180);
   };
+
+  useEffect(() => {
+    if (undoSignal === lastUndoSignalRef.current) return;
+    lastUndoSignalRef.current = undoSignal;
+    handleUndo();
+  }, [undoSignal]);
+
+  useEffect(() => {
+    if (redoSignal === lastRedoSignalRef.current) return;
+    lastRedoSignalRef.current = redoSignal;
+    handleRedo();
+  }, [redoSignal]);
 
   const visibleAssets = placedAssets.map((asset) => getVisualAsset(asset, runtimeSnapshot));
   const showSelectionChrome = isEditMode && !suppressSelectionChrome;
@@ -663,27 +712,29 @@ export default function GamePreviewCanvas({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.45)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.45)_1px,transparent_1px)] bg-[size:48px_48px] opacity-60" />
 
-      <div ref={controlsRef} className={`absolute right-4 top-4 z-10 flex items-center gap-2 ${draggingPlacedAssetKey ? 'pointer-events-none' : ''}`}>
-        {showEditToolbar ? (
-          <>
-            <button type="button" onClick={handleUndo} disabled={!isEditMode || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
-            <button type="button" onClick={handleRestart} disabled={!isEditMode || (!placedAssets.length && !backdropState)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
-          </>
-        ) : null}
-        {showSaveButton ? (
-          <button type="button" onClick={onSave} disabled={saveState === 'saving'} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
-            <Save size={24} />
-            {saveLabel}
-          </button>
-        ) : null}
-        {showPublishButton ? (
-          <button type="button" onClick={onPublish} disabled={publishState === 'publishing'} className="duo-btn-green inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
-            <Shapes size={24} />
-            {resolvedPublishLabel}
-          </button>
-        ) : null}
-        {isPlayMode ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={onPlay} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
-      </div>
+      {showCanvasControls ? (
+        <div ref={controlsRef} className={`absolute right-4 top-4 z-10 flex items-center gap-2 ${draggingPlacedAssetKey ? 'pointer-events-none' : ''}`}>
+          {showEditToolbar ? (
+            <>
+              <button type="button" onClick={handleUndo} disabled={!isEditMode || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
+              <button type="button" onClick={handleRestart} disabled={!isEditMode || (!placedAssets.length && !backdropState)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
+            </>
+          ) : null}
+          {showSaveButton ? (
+            <button type="button" onClick={onSave} disabled={saveState === 'saving'} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
+              <Save size={24} />
+              {saveLabel}
+            </button>
+          ) : null}
+          {showPublishButton ? (
+            <button type="button" onClick={onPublish} disabled={publishState === 'publishing'} className="duo-btn-green inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
+              <Shapes size={24} />
+              {resolvedPublishLabel}
+            </button>
+          ) : null}
+          {isPlayMode ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={onPlay} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
+        </div>
+      ) : null}
 
       {isPlayMode ? <div className="absolute left-4 top-4 z-10 rounded-2xl border border-[#d3dae3] bg-white/90 px-4 py-2 text-sm font-extrabold text-slate-700 shadow">Timer: {Math.ceil(runtimeSnapshot?.variables?.time ?? 0)}s | Score: {Math.round(runtimeSnapshot?.variables?.score ?? 0)}</div> : null}
 

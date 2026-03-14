@@ -230,7 +230,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
   const stepTask = (task, asset, deltaMs) => {
     if (task.waitRemainingMs > 0) {
       task.waitRemainingMs = Math.max(0, task.waitRemainingMs - deltaMs);
-      return task.waitRemainingMs > 0 || task.frames.length > 0;
+      if (task.waitRemainingMs > 0) return true;
     }
 
     let remainingBudget = MAX_STEPS_PER_TICK;

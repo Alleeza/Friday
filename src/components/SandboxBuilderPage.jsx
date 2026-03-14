@@ -10,35 +10,52 @@ import { StageProgressSection } from './ProjectRoadmapPage';
 
 const eventOptions = [
   'game starts',
-  'sprite clicked',
   'object is tapped',
   'key is pressed',
-  'timer reaches 0',
-  'score reaches 10',
   'bumps',
-  'is touching',
-  'is not touching',
+];
+const collisionEventOptions = new Set(['bumps']);
+const hiddenPaletteCategories = new Set(['Collisions', 'Conditionals']);
+const keyPressOptions = [
+  { value: 'arrowup', label: 'Top Arrow' },
+  { value: 'arrowdown', label: 'Down Arrow' },
+  { value: 'arrowleft', label: 'Left Arrow' },
+  { value: 'arrowright', label: 'Right Arrow' },
+  { value: 'space', label: 'Space' },
+  { value: 'c', label: 'C' },
 ];
 const defaultEvent = 'game starts';
+const objectPropertyOptions = [
+  'X Position',
+  'Y Position',
+  'Rotation',
+  'Size as a %',
+  'Invisibility as a %',
+  'Speed',
+  'Width',
+  'Height',
+];
 
 const palette = {
   Collisions: [
     { id: 'bumps', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'bumps', { type: 'asset', value: 'Self' }] },
-    { id: 'touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is touching', { type: 'asset', value: 'Self' }] },
-    { id: 'not-touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is not touching', { type: 'asset', value: 'Self' }] },
   ],
   Conditionals: [
-    { id: 'cond-eq', tone: 'condition', parts: [{ label: 'A' }, '=', { label: 'B' }] },
-    { id: 'cond-neq', tone: 'condition', parts: [{ label: 'A' }, '≠', { label: 'B' }] },
-    { id: 'cond-lt', tone: 'condition', parts: [{ label: 'A' }, '<', { label: 'B' }] },
-    { id: 'cond-gt', tone: 'condition', parts: [{ label: 'A' }, '>', { label: 'B' }] },
-    { id: 'cond-lte', tone: 'condition', parts: [{ label: 'A' }, '≤', { label: 'B' }] },
-    { id: 'cond-gte', tone: 'condition', parts: [{ label: 'A' }, '≥', { label: 'B' }] },
-    { id: 'cond-and', tone: 'condition', parts: [{ label: 'A' }, 'and', { label: 'B' }] },
-    { id: 'cond-or', tone: 'condition', parts: [{ label: 'A' }, 'or', { label: 'B' }] },
-    { id: 'cond-not', tone: 'condition', parts: ['not', { label: 'A' }] },
-    { id: 'cond-flipped', tone: 'condition', parts: ['flipped'] },
-    { id: 'cond-matches', tone: 'condition', parts: [{ label: 'A' }, 'matches', { label: 'B' }] },
+    {
+      id: 'cond-eq',
+      tone: 'condition',
+      parts: [{ type: 'asset', value: 'Self' }, { type: 'dropdown', value: 'X Position', options: objectPropertyOptions }, '=', { type: 'asset', value: 'Self' }, { type: 'dropdown', value: 'X Position', options: objectPropertyOptions }],
+    },
+    {
+      id: 'cond-lt',
+      tone: 'condition',
+      parts: [{ type: 'asset', value: 'Self' }, { type: 'dropdown', value: 'X Position', options: objectPropertyOptions }, '<', { type: 'asset', value: 'Self' }, { type: 'dropdown', value: 'X Position', options: objectPropertyOptions }],
+    },
+    {
+      id: 'cond-gt',
+      tone: 'condition',
+      parts: [{ type: 'asset', value: 'Self' }, { type: 'dropdown', value: 'X Position', options: objectPropertyOptions }, '>', { type: 'asset', value: 'Self' }, { type: 'dropdown', value: 'X Position', options: objectPropertyOptions }],
+    },
   ],
   Movement: [
     { id: 'move-forward', tone: 'movement', parts: ['Move Forward', { label: '12' }] },
@@ -73,6 +90,19 @@ const palette = {
 
 function createSeedScript(eventName = defaultEvent) {
   return [{ id: 'event-start', type: 'block', parts: ['When', eventName], tone: 'events' }];
+}
+
+function readTokenValue(token) {
+  if (typeof token === 'string') return token;
+  if (!token) return '';
+  return token.label || token.value || '';
+}
+
+function normalizeKeyPressValue(rawKey) {
+  const normalized = String(rawKey || '').toLowerCase();
+  if (normalized === ' ') return 'space';
+  if (normalized === 'spacebar') return 'space';
+  return normalized;
 }
 
 function blockText(parts = []) {
@@ -152,19 +182,19 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     setEditorInstanceKey((current) => current && instanceKeys.has(current) ? current : null);
   }, [sceneInstances]);
 
+  useEffect(() => () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  }, []);
+
   useEffect(() => {
     if (mode !== 'play') return undefined;
-    const onKeyDown = () => {
-      runtimeRef.current?.dispatch('key is pressed');
+    const onKeyDown = (event) => {
+      runtimeRef.current?.dispatch('key is pressed', { key: normalizeKeyPressValue(event.key) });
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mode]);
-
-  useEffect(() => () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  }, []);
 
   useEffect(() => {
     if (mode === 'play') return undefined;
@@ -184,12 +214,20 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     };
   }, [mode]);
 
-  const paletteBlocks = useMemo(() => palette[selectedCategory] || [], [selectedCategory]);
+  const availableCategoryNames = useMemo(
+    () => Object.keys(palette).filter((category) => !hiddenPaletteCategories.has(category)),
+    [],
+  );
+  const paletteBlocks = useMemo(() => {
+    if (availableCategoryNames.includes(selectedCategory)) return palette[selectedCategory] || [];
+    return palette[availableCategoryNames[0]] || [];
+  }, [selectedCategory, availableCategoryNames]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
   const selectedInstance = sceneInstances.find((instance) => instance.key === editorInstanceKey) || null;
-  const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || defaultEvent;
+  const selectedEventRaw = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1];
+  const selectedEvent = readTokenValue(selectedEventRaw) || defaultEvent;
   const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
   const assetOptions = useMemo(() => {
     const dynamic = sceneInstances.map((instance) => ({
@@ -198,6 +236,23 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     }));
     return [{ value: 'Self', label: '🙂 Self' }, ...dynamic];
   }, [sceneInstances]);
+  const collisionTargetOptions = useMemo(() => {
+    const dynamic = assetOptions.filter((option) => option.value !== 'Self' && option.value !== editorInstanceKey);
+    return dynamic.length ? dynamic : [{ value: 'Self', label: '🙂 Self' }];
+  }, [assetOptions, editorInstanceKey]);
+  const eventStartParts = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts || [];
+  const rawSelectedEventLeft = readTokenValue(eventStartParts[2]);
+  const rawSelectedEventRight = readTokenValue(eventStartParts[3] ?? eventStartParts[2]);
+  const rawSelectedPressedKey = normalizeKeyPressValue(readTokenValue(eventStartParts[2]));
+  const selectedPressedKey = keyPressOptions.some((option) => option.value === rawSelectedPressedKey)
+    ? rawSelectedPressedKey
+    : keyPressOptions[0].value;
+  const selectedEventLeft = assetOptions.some((option) => option.value === rawSelectedEventLeft)
+    ? rawSelectedEventLeft
+    : (assetOptions[0]?.value || 'Self');
+  const selectedEventRight = collisionTargetOptions.some((option) => option.value === rawSelectedEventRight)
+    ? rawSelectedEventRight
+    : (collisionTargetOptions[0]?.value || 'Self');
 
   const hydratePart = (part) => {
     if (typeof part === 'string') return part;
@@ -247,6 +302,11 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     document.addEventListener('pointerdown', handlePointerDown, true);
     return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [editorInstanceKey, editorStage, mode]);
+
+  useEffect(() => {
+    if (availableCategoryNames.includes(selectedCategory)) return;
+    if (availableCategoryNames[0]) setSelectedCategory(availableCategoryNames[0]);
+  }, [availableCategoryNames, selectedCategory]);
 
   const pushHistorySnapshot = () => {
     setHistoryStack((prev) => [...prev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
@@ -336,8 +396,58 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const handleEventChange = (nextEvent) => {
     if (!editorInstanceKey || mode === 'play') return;
     pushHistorySnapshot();
-    updateSelectedScript((blocks) => blocks.map((block) => block.id === 'event-start' ? { ...block, parts: ['When', nextEvent] } : block));
+    updateSelectedScript((blocks) => blocks.map((block) => {
+      if (block.id !== 'event-start') return block;
+      if (nextEvent === 'key is pressed') {
+        return { ...block, parts: ['When', nextEvent, { type: 'dropdown', value: selectedPressedKey, options: keyPressOptions.map((option) => option.value) }] };
+      }
+      if (!collisionEventOptions.has(nextEvent)) return { ...block, parts: ['When', nextEvent] };
+      const left = selectedEventLeft || 'Self';
+      const right = selectedEventRight || collisionTargetOptions[0]?.value || 'Self';
+      return { ...block, parts: ['When', nextEvent, { type: 'asset', value: left }, { type: 'asset', value: right }] };
+    }));
+    if (collisionEventOptions.has(nextEvent)) {
+      setSelectedBlock(`When ${selectedEventLeft} ${nextEvent} ${selectedEventRight}`);
+      return;
+    }
+    if (nextEvent === 'key is pressed') {
+      setSelectedBlock(`When ${nextEvent} ${selectedPressedKey}`);
+      return;
+    }
     setSelectedBlock(`When ${nextEvent}`);
+  };
+
+  const handleEventLeftChange = (nextLeft) => {
+    if (!editorInstanceKey || mode === 'play') return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => blocks.map((block) => {
+      if (block.id !== 'event-start') return block;
+      if (!collisionEventOptions.has(selectedEvent)) return block;
+      return { ...block, parts: ['When', selectedEvent, { type: 'asset', value: nextLeft }, { type: 'asset', value: selectedEventRight }] };
+    }));
+    setSelectedBlock(`When ${nextLeft} ${selectedEvent} ${selectedEventRight}`);
+  };
+
+  const handleEventRightChange = (nextRight) => {
+    if (!editorInstanceKey || mode === 'play') return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => blocks.map((block) => {
+      if (block.id !== 'event-start') return block;
+      if (!collisionEventOptions.has(selectedEvent)) return block;
+      return { ...block, parts: ['When', selectedEvent, { type: 'asset', value: selectedEventLeft }, { type: 'asset', value: nextRight }] };
+    }));
+    setSelectedBlock(`When ${selectedEventLeft} ${selectedEvent} ${nextRight}`);
+  };
+
+  const handlePressedKeyChange = (nextKey) => {
+    if (!editorInstanceKey || mode === 'play') return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => blocks.map((block) => {
+      if (block.id !== 'event-start') return block;
+      if (selectedEvent !== 'key is pressed') return block;
+      return { ...block, parts: ['When', selectedEvent, { type: 'dropdown', value: nextKey, options: keyPressOptions.map((option) => option.value) }] };
+    }));
+    setSelectedBlock(`When ${selectedEvent} ${nextKey}`);
   };
 
   const removeTopLevelBlock = (blockId) => {
@@ -781,7 +891,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
             onStop={stopRuntime}
             suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {
-              runtimeRef.current?.dispatch('sprite clicked', { instanceKey });
               runtimeRef.current?.dispatch('object is tapped', { instanceKey });
               if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
             }}
@@ -790,21 +899,74 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
             <div
               ref={quickEditorRef}
-              className="absolute z-30 inline-flex max-w-[360px] items-center gap-2 rounded-[22px] border-b-4 border-[#b72d63] bg-[#d22d72] pl-4 pr-4 py-2.5 text-white shadow-[0_8px_18px_rgba(183,45,99,0.26)]"
+              className="absolute z-30 inline-flex max-w-[560px] items-center gap-3 rounded-[22px] border border-[#e5e7eb] bg-white pl-4 pr-4 py-2.5 text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
               style={quickEditorPosition}
             >
               <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
-              <select
-                value={selectedEvent}
-                onChange={(e) => handleEventChange(e.target.value)}
-                className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
-              >
-                {eventOptions.map((eventName) => (
-                  <option key={eventName} value={eventName}>
-                    {eventName}
-                  </option>
-                ))}
-              </select>
+              {collisionEventOptions.has(selectedEvent) ? (
+                <div className="inline-flex items-center rounded-full bg-[#b32062] p-1.5 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
+                  <select
+                    value={selectedEventLeft}
+                    onChange={(e) => handleEventLeftChange(e.target.value)}
+                    className="h-10 min-w-[130px] max-w-[170px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
+                  >
+                    {assetOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedEvent}
+                    onChange={(e) => handleEventChange(e.target.value)}
+                    className="h-10 min-w-[110px] max-w-[190px] appearance-none bg-transparent px-4 pr-7 text-[16px] font-black text-white outline-none"
+                  >
+                    {eventOptions.map((eventName) => (
+                      <option key={eventName} value={eventName}>
+                        {eventName}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedEventRight}
+                    onChange={(e) => handleEventRightChange(e.target.value)}
+                    className="h-10 min-w-[130px] max-w-[170px] rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
+                  >
+                    {collisionTargetOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <>
+                  <select
+                    value={selectedEvent}
+                    onChange={(e) => handleEventChange(e.target.value)}
+                    className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
+                  >
+                    {eventOptions.map((eventName) => (
+                      <option key={eventName} value={eventName}>
+                        {eventName}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedEvent === 'key is pressed' ? (
+                    <select
+                      value={selectedPressedKey}
+                      onChange={(e) => handlePressedKeyChange(e.target.value)}
+                      className="min-w-0 max-w-[180px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
+                    >
+                      {keyPressOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setEditorStage('expanded')}
@@ -830,18 +992,75 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                   </div>
                   <div className="flex h-14 min-w-0 flex-1 items-center gap-3 rounded-[24px] border border-[#e5e7eb] bg-[#fffef9] px-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
                     <span className="text-[20px] font-black leading-none tracking-[-0.01em] text-slate-800">When</span>
-                    <select
-                      value={selectedEvent}
-                      onChange={(e) => handleEventChange(e.target.value)}
-                      disabled={!editorInstanceKey || mode === 'play'}
-                      className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
-                    >
-                      {eventOptions.map((eventName) => (
-                        <option key={eventName} value={eventName} className="bg-white text-slate-800">
-                          {eventName}
-                        </option>
-                      ))}
-                    </select>
+                    {collisionEventOptions.has(selectedEvent) ? (
+                      <div className="inline-flex items-center rounded-full bg-[#b32062] p-1.5 text-white shadow-[inset_0_-2px_0_rgba(118,24,66,0.55)]">
+                        <select
+                          value={selectedEventLeft}
+                          onChange={(e) => handleEventLeftChange(e.target.value)}
+                          disabled={!editorInstanceKey || mode === 'play'}
+                          className="h-10 min-w-[145px] max-w-[220px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
+                        >
+                          {assetOptions.map((option) => (
+                            <option key={option.value} value={option.value} className="bg-white text-slate-800">
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={selectedEvent}
+                          onChange={(e) => handleEventChange(e.target.value)}
+                          disabled={!editorInstanceKey || mode === 'play'}
+                          className="h-10 min-w-[120px] max-w-[210px] appearance-none bg-transparent pl-4 pr-7 text-[17px] font-black text-white outline-none disabled:opacity-40"
+                        >
+                          {eventOptions.map((eventName) => (
+                            <option key={eventName} value={eventName} className="bg-white text-slate-800">
+                              {eventName}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={selectedEventRight}
+                          onChange={(e) => handleEventRightChange(e.target.value)}
+                          disabled={!editorInstanceKey || mode === 'play'}
+                          className="h-10 min-w-[145px] max-w-[220px] rounded-full border-2 border-white/85 bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-extrabold text-slate-700 outline-none disabled:opacity-40"
+                        >
+                          {collisionTargetOptions.map((option) => (
+                            <option key={option.value} value={option.value} className="bg-white text-slate-800">
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <>
+                        <select
+                          value={selectedEvent}
+                          onChange={(e) => handleEventChange(e.target.value)}
+                          disabled={!editorInstanceKey || mode === 'play'}
+                          className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
+                        >
+                          {eventOptions.map((eventName) => (
+                            <option key={eventName} value={eventName} className="bg-white text-slate-800">
+                              {eventName}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedEvent === 'key is pressed' ? (
+                          <select
+                            value={selectedPressedKey}
+                            onChange={(e) => handlePressedKeyChange(e.target.value)}
+                            disabled={!editorInstanceKey || mode === 'play'}
+                            className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
+                          >
+                            {keyPressOptions.map((option) => (
+                              <option key={option.value} value={option.value} className="bg-white text-slate-800">
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   <div className="ml-auto flex items-center gap-3">
                     <button
@@ -873,7 +1092,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                         onChange={(e) => setSelectedCategory(e.target.value)}
                         className="w-full rounded-[18px] border border-[#d3dae3] bg-white px-4 py-3 text-[15px] font-extrabold uppercase tracking-[0.04em] text-slate-700 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)] outline-none"
                       >
-                        {Object.keys(palette).map((category) => (
+                        {availableCategoryNames.map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
@@ -933,9 +1152,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                         <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Script</p>
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-hidden">
-                        {selectedScriptBlocks.filter((block) => block.id === 'event-start').map((block) => (
-                          <div key={block.id}>{renderScriptBlock(block)}</div>
-                        ))}
                         <div
                           className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${dragOverTopBlockId === 'script-end' ? 'bg-sky-100/70' : 'bg-slate-50/65'}`}
                           onDragOver={(e) => {

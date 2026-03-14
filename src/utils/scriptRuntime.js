@@ -25,6 +25,8 @@ function createAssetState(instance) {
     costume: 'default',
     costumeIndex: 0,
     lastSound: null,
+    lastSpeed: 0,
+    invisibility: 0,
     facing: 1,
   };
 }
@@ -63,6 +65,36 @@ function resolveAssetKey(ref, asset, state) {
   return matched?.key || null;
 }
 
+function resolveOperandValue(raw, asset, state) {
+  if (raw && typeof raw === 'object' && raw.kind === 'assetProp') {
+    const key = resolveAssetKey(raw.assetRef, asset, state);
+    const target = key ? state.assetsByKey[key] : null;
+    const prop = String(raw.property || '').toLowerCase();
+    if (!target) return 0;
+    switch (prop) {
+      case 'x position':
+        return target.x || 0;
+      case 'y position':
+        return target.y || 0;
+      case 'rotation':
+        return target.rotation || 0;
+      case 'size as a %':
+        return Math.round((target.scale || 1) * 100);
+      case 'invisibility as a %':
+        return target.invisibility || 0;
+      case 'speed':
+        return target.lastSpeed || 0;
+      case 'width':
+        return Math.round(68 * (target.scale || 1));
+      case 'height':
+        return Math.round(68 * (target.scale || 1));
+      default:
+        return 0;
+    }
+  }
+  return readComparableValue(raw, state.variables);
+}
+
 function areAssetsTouching(leftAsset, rightAsset) {
   if (!leftAsset || !rightAsset || leftAsset.key === rightAsset.key) return false;
   const leftRadius = 34 * (leftAsset.scale || 1);
@@ -86,8 +118,8 @@ function evaluatePredicate(predicate, asset, state) {
       return false;
     }
     case 'comparison': {
-      const left = readComparableValue(predicate.left, state.variables);
-      const right = readComparableValue(predicate.right, state.variables);
+      const left = resolveOperandValue(predicate.left, asset, state);
+      const right = resolveOperandValue(predicate.right, asset, state);
       switch (predicate.operator) {
         case 'eq': return left === right;
         case 'neq': return left !== right;
@@ -100,14 +132,14 @@ function evaluatePredicate(predicate, asset, state) {
       }
     }
     case 'logic': {
-      const left = readComparableValue(predicate.left, state.variables);
-      const right = readComparableValue(predicate.right, state.variables);
+      const left = resolveOperandValue(predicate.left, asset, state);
+      const right = resolveOperandValue(predicate.right, asset, state);
       if (predicate.operator === 'and') return Boolean(left) && Boolean(right);
       if (predicate.operator === 'or') return Boolean(left) || Boolean(right);
       return false;
     }
     case 'not':
-      return !Boolean(readComparableValue(predicate.value, state.variables));
+      return !Boolean(resolveOperandValue(predicate.value, asset, state));
     case 'flipped':
       return (asset?.facing || 1) < 0;
     default:
@@ -135,6 +167,13 @@ function evaluateCondition(condition, asset, state) {
   return evaluatePredicate(condition, asset, state);
 }
 
+function normalizeRuntimeKey(rawKey) {
+  const next = String(rawKey || '').toLowerCase();
+  if (next === ' ') return 'space';
+  if (next === 'spacebar') return 'space';
+  return next;
+}
+
 export function createScriptRuntime({ instances, programsByKey }) {
   const state = {
     assetsByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, createAssetState(instance)])),
@@ -144,7 +183,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
     logs: [],
     timerEventSent: false,
     scoreEventSent: false,
-    touchingByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, false])),
+    touchingByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, { touching: false, otherKey: null }])),
   };
 
   const log = (message) => {
@@ -167,6 +206,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
         asset.x += Math.cos(radians) * amount;
         asset.y += Math.sin(radians) * amount;
         asset.facing = amount >= 0 ? 1 : -1;
+        asset.lastSpeed = Math.abs(amount);
         clampPosition(asset);
         break;
       }
@@ -183,13 +223,16 @@ export function createScriptRuntime({ instances, programsByKey }) {
       case 'changeX':
         asset.x += instruction.amount;
         asset.facing = instruction.amount >= 0 ? 1 : -1;
+        asset.lastSpeed = Math.abs(instruction.amount);
         clampPosition(asset);
         break;
       case 'changeY':
         asset.y += instruction.amount;
+        asset.lastSpeed = Math.abs(instruction.amount);
         clampPosition(asset);
         break;
       case 'goTo':
+        asset.lastSpeed = Math.hypot((instruction.x || 0) - asset.x, (instruction.y || 0) - asset.y);
         asset.x = instruction.x;
         asset.y = instruction.y;
         clampPosition(asset);
@@ -298,13 +341,21 @@ export function createScriptRuntime({ instances, programsByKey }) {
 
   return {
     dispatch(eventType, payload = {}) {
-      if ((eventType === 'sprite clicked' || eventType === 'object is tapped' || eventType === 'bumps' || eventType === 'is touching' || eventType === 'is not touching') && payload.instanceKey) {
-        const instructions = state.programsByKey[payload.instanceKey]?.events?.[eventType];
-        enqueueInstructions(payload.instanceKey, eventType, instructions);
+      if ((eventType === 'object is tapped' || eventType === 'bumps') && payload.instanceKey) {
+        const program = state.programsByKey[payload.instanceKey];
+        enqueueInstructions(payload.instanceKey, eventType, program?.events?.[eventType]);
+        if (payload.otherInstanceKey) {
+          const filteredEventType = `${eventType}|${payload.otherInstanceKey}`;
+          enqueueInstructions(payload.instanceKey, filteredEventType, program?.events?.[filteredEventType]);
+        }
         return;
       }
       Object.entries(state.programsByKey).forEach(([instanceKey, program]) => {
         enqueueInstructions(instanceKey, eventType, program?.events?.[eventType]);
+        if (eventType === 'key is pressed' && payload.key) {
+          const normalizedKey = normalizeRuntimeKey(payload.key);
+          enqueueInstructions(instanceKey, `${eventType}|${normalizedKey}`, program?.events?.[`${eventType}|${normalizedKey}`]);
+        }
       });
     },
     tick(deltaMs) {
@@ -319,16 +370,15 @@ export function createScriptRuntime({ instances, programsByKey }) {
       }
       Object.keys(state.assetsByKey).forEach((instanceKey) => {
         const asset = state.assetsByKey[instanceKey];
-        const isTouchingAny = Object.values(state.assetsByKey).some((otherAsset) => areAssetsTouching(asset, otherAsset));
-        const wasTouching = Boolean(state.touchingByKey[instanceKey]);
+        const touchingAssets = Object.values(state.assetsByKey).filter((otherAsset) => areAssetsTouching(asset, otherAsset));
+        const isTouchingAny = touchingAssets.length > 0;
+        const previousTouchState = state.touchingByKey[instanceKey] || { touching: false, otherKey: null };
+        const wasTouching = Boolean(previousTouchState.touching);
+        const otherInstanceKey = touchingAssets[0]?.key || null;
         if (isTouchingAny && !wasTouching) {
-          this.dispatch('bumps', { instanceKey });
-          this.dispatch('is touching', { instanceKey });
+          this.dispatch('bumps', { instanceKey, otherInstanceKey });
         }
-        if (!isTouchingAny && wasTouching) {
-          this.dispatch('is not touching', { instanceKey });
-        }
-        state.touchingByKey[instanceKey] = isTouchingAny;
+        state.touchingByKey[instanceKey] = { touching: isTouchingAny, otherKey: otherInstanceKey };
       });
       Object.entries(state.taskQueuesByKey).forEach(([instanceKey, tasks]) => {
         const asset = state.assetsByKey[instanceKey];

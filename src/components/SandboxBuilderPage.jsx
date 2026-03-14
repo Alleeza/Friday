@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, X } from 'lucide-react';
+import { Pencil, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -972,6 +972,31 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     </div>
                   </div>
                 </div>
+                {draggingScriptBlock ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-6">
+                    <div
+                      className={`pointer-events-auto flex items-center gap-3 rounded-[24px] border-2 px-5 py-4 text-white shadow-[0_16px_40px_rgba(15,23,42,0.22)] transition ${
+                        trashActive
+                          ? 'scale-105 border-rose-900 bg-rose-700'
+                          : 'border-rose-300 bg-rose-500'
+                      }`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!trashActive) setTrashActive(true);
+                      }}
+                      onDragLeave={() => setTrashActive(false)}
+                      onDrop={handleTrashDrop}
+                    >
+                      <span className="grid h-10 w-10 place-items-center rounded-full bg-white/20">
+                        <Trash2 size={20} />
+                      </span>
+                      <div>
+                        <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/80">Delete block</p>
+                        <p className="text-sm font-extrabold">Drop here to remove</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -980,7 +1005,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
       <section>
         <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
       </section>
-      {draggingScriptBlock && mode !== 'play' ? <div className={`fixed bottom-6 right-6 z-50 rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-lg transition ${trashActive ? 'border-rose-700 bg-rose-600 text-white scale-105' : 'border-rose-400 bg-rose-500 text-white'}`} onDragOver={(e) => { e.preventDefault(); if (!trashActive) setTrashActive(true); }} onDragLeave={() => setTrashActive(false)} onDrop={handleTrashDrop}>Drop to delete</div> : null}
     </main>
   );
 }

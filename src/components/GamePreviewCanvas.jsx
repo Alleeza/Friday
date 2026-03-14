@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, RotateCcw, Square, Undo2, X } from 'lucide-react';
+import { Play, RotateCcw, Square, Trash2, Undo2, X } from 'lucide-react';
 import { sandboxAssets } from '../data/sandboxAssets';
 
 function getVisualAsset(asset, runtimeSnapshot) {
@@ -28,6 +28,7 @@ export default function GamePreviewCanvas({
   suppressSelectionChrome = false,
 }) {
   const canvasRef = useRef(null);
+  const trashZoneRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
   const movedDuringDragRef = useRef(false);
   const resizeStartRef = useRef(null);
@@ -39,6 +40,7 @@ export default function GamePreviewCanvas({
   const [draggingPlacedAssetKey, setDraggingPlacedAssetKey] = useState(null);
   const [resizingPlacedAssetKey, setResizingPlacedAssetKey] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [trashHover, setTrashHover] = useState(false);
 
   const trayAssets = useMemo(() => sandboxAssets, []);
   const selectedPlacedAsset = placedAssets.find((asset) => asset.key === selectedPlacedAssetKey) || null;
@@ -109,10 +111,25 @@ export default function GamePreviewCanvas({
     setPastStates([]);
     setDraggingPlacedAssetKey(null);
     setResizingPlacedAssetKey(null);
+    setTrashHover(false);
     moveStartSnapshotRef.current = null;
     resizeStartRef.current = null;
     movedDuringDragRef.current = false;
     resizedDuringDragRef.current = false;
+  };
+
+  const isPointerOverTrash = (clientX, clientY) => {
+    const rect = trashZoneRef.current?.getBoundingClientRect();
+    if (!rect) return false;
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  };
+
+  const deletePlacedAsset = (assetKey) => {
+    if (!assetKey) return;
+    const snapshot = { placedAssets: placedAssets.map((item) => ({ ...item })), selectedPlacedAssetKey };
+    setPastStates((prev) => [...prev, snapshot]);
+    setPlacedAssets((prev) => prev.filter((asset) => asset.key !== assetKey));
+    updateSelection(selectedPlacedAssetKey === assetKey ? null : selectedPlacedAssetKey);
   };
 
   const handlePlacedAssetPointerDown = (e, asset) => {
@@ -148,13 +165,20 @@ export default function GamePreviewCanvas({
     const y = Math.max(frameHalf, Math.min(pointerY - dragOffset.y, rect.height - frameHalf));
     setPlacedAssets((prev) => prev.map((asset) => asset.key !== draggingPlacedAssetKey ? asset : { ...asset, x, y }));
     movedDuringDragRef.current = true;
+    setTrashHover(isPointerOverTrash(e.clientX, e.clientY));
   };
 
-  const handleCanvasPointerUp = () => {
+  const handleCanvasPointerUp = (e) => {
     if (mode !== 'edit') return;
     if (draggingPlacedAssetKey) {
-      if (movedDuringDragRef.current && moveStartSnapshotRef.current) setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
+      const shouldDelete = Boolean(e) && isPointerOverTrash(e.clientX, e.clientY);
+      if (shouldDelete) {
+        deletePlacedAsset(draggingPlacedAssetKey);
+      } else if (movedDuringDragRef.current && moveStartSnapshotRef.current) {
+        setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
+      }
       setDraggingPlacedAssetKey(null);
+      setTrashHover(false);
       moveStartSnapshotRef.current = null;
       movedDuringDragRef.current = false;
     }
@@ -212,7 +236,7 @@ export default function GamePreviewCanvas({
         const frameSize = 180 * scale;
         const emojiSize = 96 * scale;
         return (
-          <div key={asset.key} className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 touch-none ${mode === 'edit' && draggingPlacedAssetKey === asset.key ? 'cursor-grabbing' : mode === 'edit' ? 'cursor-grab' : 'cursor-pointer'}`} style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize }} title={asset.label} onClick={(e) => {
+          <div key={asset.key} className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none ${mode === 'edit' && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-10'} ${mode === 'edit' && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : mode !== 'edit' ? 'cursor-pointer' : ''}`} style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize }} title={asset.label} onClick={(e) => {
             e.stopPropagation();
             updateSelection(asset.key);
             if (mode === 'play') onSpriteClick?.(asset.key);
@@ -226,6 +250,24 @@ export default function GamePreviewCanvas({
       {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
       <button onClick={() => mode === 'edit' && setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button>
       {trayOpen && mode === 'edit' ? <div className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]"><p className="mb-3 text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p><div className="grid grid-cols-3 gap-3 md:grid-cols-6">{trayAssets.map((asset) => <div key={asset.id} draggable={(asset.unlockXp || 0) <= currentXp} onDragStart={(e) => onAssetDragStart(e, asset)} className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`} title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}><div className="text-3xl">{asset.emoji}</div><div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div></div>)}</div></div> : null}
+      {mode === 'edit' && draggingPlacedAssetKey ? (
+        <div
+          ref={trashZoneRef}
+          className={`pointer-events-none absolute left-4 top-24 z-30 flex items-center gap-3 rounded-[24px] border-2 px-5 py-4 text-white shadow-[0_16px_40px_rgba(15,23,42,0.22)] transition ${
+            trashHover
+              ? 'scale-105 border-[#7f1d1d] bg-[#dc2626]'
+              : 'border-[#fca5a5] bg-[#ef4444]'
+          }`}
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-white/20">
+            <Trash2 size={22} />
+          </span>
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/80">Delete asset</p>
+            <p className="text-sm font-extrabold">Drag here to remove</p>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

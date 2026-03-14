@@ -172,32 +172,7 @@ export default function SandboxBuilderPage({
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
   }, []);
 
-  useEffect(() => {
-    onProjectStateChange?.({
-      setupData: initialSetupData,
-      scene: persistedSceneState,
-      scriptsByInstanceKey,
-    });
-  }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
-
-  useEffect(() => {
-    if (mode === 'play') return undefined;
-    const clearDragUi = () => {
-      setDraggingScriptBlock(null);
-      setDraggingPaletteBlock(false);
-      setTrashActive(false);
-      setDragOverTopBlockId(null);
-      setDragOverChildKey(null);
-      setDragOverLoopId(null);
-    };
-    window.addEventListener('dragend', clearDragUi);
-    window.addEventListener('drop', clearDragUi);
-    return () => {
-      window.removeEventListener('dragend', clearDragUi);
-      window.removeEventListener('drop', clearDragUi);
-    };
-  }, [mode]);
-  const paletteBlocks = useMemo(() => BLOCK_PALETTE[selectedCategory] || [], [selectedCategory]);
+  const paletteBlocks = useMemo(() => palette[selectedCategory] || [], [selectedCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
@@ -784,7 +759,7 @@ export default function SandboxBuilderPage({
             runtimeSnapshot={runtimeSnapshot}
             initialSceneState={persistedSceneState}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
+            onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
               setSceneInstances(instances);
               if (sceneState) setPersistedSceneState(sceneState);
               setFocusedInstanceKey(nextKey || null);

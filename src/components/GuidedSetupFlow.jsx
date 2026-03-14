@@ -1,13 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
 import { usePlanSession } from '../hooks/usePlanSession.js';
 import PlanReview from './PlanReview.jsx';
 import {
   getDefaultModelForProvider,
   getDefaultProviderName,
-  getProviderOptions,
 } from '../ai/providerCatalog.js';
-import { useProviderModels } from '../hooks/useProviderModels.js';
 
 /* ─── Option data ─── */
 const STYLES = [
@@ -72,83 +70,22 @@ function TopNav({ step }) {
   );
 }
 
-function ModelPicker({
-  providerOptions,
-  selectedProvider,
-  selectedModel,
-  modelOptions,
-  isLoadingModels,
-  onProviderChange,
-  onModelChange,
-}) {
-  return (
-    <div className="rounded-2xl border border-[#dfe8d4] bg-[#f7fbf1] p-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="min-w-[180px] flex-1">
-          <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
-            AI Provider
-          </span>
-          <select
-            value={selectedProvider}
-            onChange={(event) => onProviderChange(event.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-slate-700 focus:border-[#58cc02] focus:outline-none"
-          >
-            {providerOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="min-w-[220px] flex-[1.2]">
-          <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
-            Model
-          </span>
-          <select
-            value={selectedModel}
-            onChange={(event) => onModelChange(event.target.value)}
-            disabled={!modelOptions.length}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-slate-700 focus:border-[#58cc02] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-          >
-            {modelOptions.map((model) => (
-              <option key={model} value={model}>{model}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <p className="mt-3 text-[12px] text-slate-500">
-        {isLoadingModels ? 'Loading available models…' : `Your plan will be generated with ${selectedProvider} / ${selectedModel}.`}
-      </p>
-    </div>
-  );
-}
-
 /* ─── Main Component ─── */
-export default function GuidedSetupFlow({ onComplete }) {
+export default function GuidedSetupFlow({ onComplete, onLaunchExample }) {
   const [step, setStep] = useState('idea');
   const [idea, setIdea] = useState('');
   const [style, setStyle] = useState('platformer');
   const [goals, setGoals] = useState(['collect']);
   const [difficulty, setDifficulty] = useState('normal');
-  const [selectedProvider, setSelectedProvider] = useState(() => getDefaultProviderName());
-  const [selectedModel, setSelectedModel] = useState(() => getDefaultModelForProvider(getDefaultProviderName()));
   const formRef = useRef(null);
-  const providerOptions = useMemo(() => getProviderOptions(), []);
-  const { modelOptions, isLoadingModels } = useProviderModels({ selectedProvider });
+  const selectedProvider = getDefaultProviderName();
+  const selectedModel = getDefaultModelForProvider(selectedProvider);
 
   const {
     plan, status, error, infeasible, suggestion, usedFallback,
     turnStats, refinementHistory,
     generatePlan, refinePlan, abort, reset,
   } = usePlanSession({ xp: 0, providerName: selectedProvider, model: selectedModel });
-
-  useEffect(() => {
-    setSelectedModel((current) => (
-      modelOptions.includes(current)
-        ? current
-        : getDefaultModelForProvider(selectedProvider, modelOptions)
-    ));
-  }, [modelOptions, selectedProvider]);
 
   // ⌘+Enter / Ctrl+Enter keyboard shortcut
   useEffect(() => {
@@ -278,18 +215,6 @@ export default function GuidedSetupFlow({ onComplete }) {
                     />
                   </div>
 
-                  <div className="mt-4">
-                    <ModelPicker
-                      providerOptions={providerOptions}
-                      selectedProvider={selectedProvider}
-                      selectedModel={selectedModel}
-                      modelOptions={modelOptions}
-                      isLoadingModels={isLoadingModels}
-                      onProviderChange={setSelectedProvider}
-                      onModelChange={setSelectedModel}
-                    />
-                  </div>
-
                   {/* Tip + CTA */}
                   <div className="mt-5 flex items-center justify-between gap-4">
                     <p className="text-[13px] font-medium text-slate-400">
@@ -316,6 +241,28 @@ export default function GuidedSetupFlow({ onComplete }) {
                     </div>
                   </div>
                 </form>
+
+                <div className="relative mt-6 rounded-3xl border border-[#d8e7c6] bg-white/90 p-5 shadow-[0_10px_28px_-16px_rgba(88,204,2,0.45)]">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58cc02]">Offline Example</p>
+                      <h2 className="mt-1 font-display text-2xl leading-none text-slate-900">Bunny Chases Carrot</h2>
+                      <p className="mt-2 max-w-[560px] text-sm font-medium leading-6 text-slate-500">
+                        Open a ready-to-debug sample project with a Bunny, a Carrot, and starter scripts. It works even if the AI API is unavailable.
+                      </p>
+                    </div>
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => onLaunchExample?.()}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-[#b7d89c] bg-[#f4fce8] px-5 py-3 text-[14px] font-bold text-[#3f7f10] shadow-[0_3px_0_rgba(88,204,2,0.15)] transition-all hover:brightness-95 active:translate-y-[1px]"
+                      >
+                        Open Example Game
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -359,7 +306,7 @@ export default function GuidedSetupFlow({ onComplete }) {
                 </div>
                 <h2 className="font-display text-2xl text-slate-800">Something went wrong</h2>
                 <p className="mt-2 max-w-[360px] text-[14px] leading-relaxed text-slate-400">
-                  {error || 'Could not generate a plan. Check your AI provider settings.'}
+                  {error || 'Could not generate a plan. Check your AI configuration.'}
                 </p>
                 <div className="mt-8 flex items-center justify-center gap-3">
                   <button
@@ -376,6 +323,13 @@ export default function GuidedSetupFlow({ onComplete }) {
                     className="flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_0_rgba(0,0,0,0.3)] transition-all hover:bg-slate-700"
                   >
                     Try Again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onLaunchExample?.()}
+                    className="flex items-center gap-2 rounded-xl bg-[#f4fce8] px-5 py-2.5 text-[13px] font-bold text-[#3f7f10] shadow-[0_2px_0_rgba(88,204,2,0.18)] transition-all hover:bg-[#ebf8d8]"
+                  >
+                    Open Example Game
                   </button>
                 </div>
               </>
@@ -535,18 +489,6 @@ export default function GuidedSetupFlow({ onComplete }) {
                     <p className="text-[12px] font-medium text-slate-400">Difficulty</p>
                     <p className="mt-1 text-[16px] font-bold text-slate-800">{selectedDiffLabel}</p>
                   </div>
-                </div>
-
-                <div className="mt-6">
-                  <ModelPicker
-                    providerOptions={providerOptions}
-                    selectedProvider={selectedProvider}
-                    selectedModel={selectedModel}
-                    modelOptions={modelOptions}
-                    isLoadingModels={isLoadingModels}
-                    onProviderChange={setSelectedProvider}
-                    onModelChange={setSelectedModel}
-                  />
                 </div>
               </section>
 

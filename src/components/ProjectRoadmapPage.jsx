@@ -1,7 +1,41 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useStepDetection } from '../hooks/useStepDetection.js';
+import { buildContext } from '../ai/context/contextBuilder.js';
+import { sandboxAssets } from '../data/sandboxAssets.js';
+import { evaluateStepChecks } from '../utils/stepChecker.js';
 import { ArrowRight } from 'lucide-react';
 
 const STAGE_GRAPHICS = ['🐰', '🕹️', '🥕', '🪨', '🛠️'];
+
+function buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, manualStepKeys) {
+  if (!currentStage || !workspaceState) return [];
+
+  return currentStage.steps.map((stepText, stepIndex) => {
+    const stepKey = `${currentStage.id}:${stepIndex}`;
+    const checks = currentStage.stepChecks?.[stepIndex] ?? [];
+    const evaluation = checks.length > 0
+      ? evaluateStepChecks(checks, workspaceState)
+      : { passed: false, pendingAiChecks: [] };
+    const programmaticChecks = checks.filter((check) => check?.type !== 'aiCheck');
+    const programmaticEvaluation = programmaticChecks.length > 0
+      ? evaluateStepChecks(programmaticChecks, workspaceState)
+      : { passed: true, pendingAiChecks: [] };
+
+    return {
+      stepIndex,
+      stepKey,
+      stepText,
+      checks,
+      isCompleted: Boolean(completedStepKeys[stepKey]),
+      isManualOverride: Boolean(manualStepKeys[stepKey]),
+      evaluation: {
+        passed: evaluation.passed,
+        pendingAiChecks: evaluation.pendingAiChecks,
+        programmaticPassed: programmaticEvaluation.passed,
+      },
+    };
+  });
+}
 
 function buildStageProgress(plan, completedStepKeys) {
   const stages = plan.stages.map((stage, index) => ({
@@ -15,20 +49,29 @@ function buildStageProgress(plan, completedStepKeys) {
     stepHelp: stage.steps.map(() => stage.why),
   }));
 
-  const stageRequiredCompletedCounts = stages.map((stage) =>
-    stage.steps.filter((_, stepIndex) => completedStepKeys[`${stage.id}:${stepIndex}`]).length,
+  const stageStepStatuses = stages.map((stage) =>
+    stage.steps.map((_, stepIndex) => Boolean(completedStepKeys[`${stage.id}:${stepIndex}`])),
   );
+  const stageRequiredCompletedCounts = stageStepStatuses.map((statuses) => statuses.filter(Boolean).length);
+  const stageLeadingCompletedCounts = stageStepStatuses.map((statuses) => statuses.findIndex((value) => !value));
+  const normalizedLeadingCompletedCounts = stageLeadingCompletedCounts.map((count, stageIndex) => (
+    count === -1 ? stages[stageIndex].steps.length : count
+  ));
 
-  const done = stages.map((stage, stageIndex) => stageRequiredCompletedCounts[stageIndex] >= stage.steps.length);
+  const done = stageStepStatuses.map((statuses) => statuses.every(Boolean));
   const currentIndex = Math.max(0, done.findIndex((value) => !value));
   const safeCurrentIndex = done.every(Boolean) ? Math.max(0, stages.length - 1) : currentIndex;
   const currentStage = stages[safeCurrentIndex];
   const currentStageCompletedCount = stageRequiredCompletedCounts[safeCurrentIndex] ?? 0;
-  const currentStageStepIndex = Math.min(currentStageCompletedCount, Math.max((currentStage?.steps.length || 1) - 1, 0));
+  const currentStageLeadingCompletedCount = normalizedLeadingCompletedCounts[safeCurrentIndex] ?? 0;
+  const currentStageStepIndex = Math.min(currentStageLeadingCompletedCount, Math.max((currentStage?.steps.length || 1) - 1, 0));
 
   const earnedRequiredXp = stages.reduce(
     (sum, stage, stageIndex) =>
-      sum + stage.stepXp.slice(0, stageRequiredCompletedCounts[stageIndex] || 0).reduce((stageSum, xp) => stageSum + xp, 0),
+      sum + stage.stepXp.reduce(
+        (stageSum, xp, stepIndex) => stageSum + (stageStepStatuses[stageIndex][stepIndex] ? xp : 0),
+        0,
+      ),
     0,
   );
   const totalRequiredXp = stages.reduce((sum, stage) => sum + stage.stepXp.reduce((stageSum, xp) => stageSum + xp, 0), 0);
@@ -99,12 +142,14 @@ function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
   );
 }
 
-export function StageProgressSection({ setupData, plan }) {
+export function StageProgressSection({ setupData, plan, workspaceState = null, provider = null }) {
   const [completedStepKeys, setCompletedStepKeys] = useState({});
   const [completedBonusKeys, setCompletedBonusKeys] = useState({});
   const [showSteps, setShowSteps] = useState(true);
   const [showBonusQuests, setShowBonusQuests] = useState(false);
   const [selectedItem, setSelectedItem] = useState({ type: 'step', index: 0 });
+  // Track which steps were auto-completed (vs manually toggled) so the checker can revert them
+  const manualStepKeysRef = useRef({});
 
   const {
     stages,
@@ -138,6 +183,64 @@ export function StageProgressSection({ setupData, plan }) {
   useEffect(() => {
     setSelectedItem({ type: 'step', index: safeStepIndex });
   }, [currentStage?.id, safeStepIndex]);
+
+  // Callbacks for the detection hook — stable refs via useCallback
+  const handleStepAutoCompleted = useCallback((stepKey) => {
+    setCompletedStepKeys((prev) => ({ ...prev, [stepKey]: true }));
+  }, []);
+
+  const handleStepAutoReverted = useCallback((stepKey) => {
+    setCompletedStepKeys((prev) => {
+      if (!prev[stepKey]) return prev;
+      const next = { ...prev };
+      delete next[stepKey];
+      return next;
+    });
+  }, []);
+
+  useStepDetection({
+    provider,
+    currentStage,
+    workspaceState,
+    completedStepKeys,
+    manualStepKeys: manualStepKeysRef.current,
+    onStepAutoCompleted: handleStepAutoCompleted,
+    onStepAutoReverted: handleStepAutoReverted,
+  });
+
+  const stepDebugInfo = useMemo(
+    () => buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, manualStepKeysRef.current),
+    [currentStage, workspaceState, completedStepKeys],
+  );
+
+  const workspaceDebugText = useMemo(() => {
+    if (!workspaceState) return 'No workspace state available yet.';
+    return buildContext({
+      sceneInstances: workspaceState.sceneInstances ?? [],
+      scriptsByInstanceKey: workspaceState.scriptsByInstanceKey ?? {},
+      runtimeSnapshot: workspaceState.runtimeSnapshot ?? null,
+      availableAssets: sandboxAssets,
+      mode: workspaceState.runtimeSnapshot ? 'play' : 'edit',
+    });
+  }, [workspaceState]);
+
+  useEffect(() => {
+    if (!currentStage || !workspaceState) return;
+
+    console.groupCollapsed(`[Step Debug] ${currentStage.label}`);
+    console.debug('Canvas and workspace snapshot');
+    console.debug(workspaceDebugText);
+    console.debug('Stage metadata', {
+      stageId: currentStage.id,
+      stageLabel: currentStage.label,
+      objective: currentStage.objective,
+      success: currentStage.success,
+      steps: currentStage.steps,
+      stepChecks: currentStage.stepChecks,
+    });
+    console.debug('Step evaluation', stepDebugInfo);
+    console.groupEnd();
+  }, [currentStage, workspaceState, workspaceDebugText, stepDebugInfo]);
 
   return (
     <section className="quest-card border border-[#e3e6eb] bg-[#f8fafc] p-6 shadow-[0_6px_0_rgba(148,163,184,0.12)]">
@@ -207,7 +310,7 @@ export function StageProgressSection({ setupData, plan }) {
           <div className="mt-3 space-y-2">
             {visibleSteps.map((step, idx) => {
               const stepKey = `${currentStage.id}:${idx}`;
-              const isDone = idx < currentStageCompletedCount;
+              const isDone = Boolean(completedStepKeys[stepKey]);
               return (
                 <StepRow
                   key={stepKey}
@@ -217,7 +320,17 @@ export function StageProgressSection({ setupData, plan }) {
                   xp={currentStage.stepXp[idx] || 0}
                   onToggle={() => {
                     setSelectedItem({ type: 'step', index: idx });
-                    setCompletedStepKeys((prev) => ({ ...prev, [stepKey]: !prev[stepKey] }));
+                    setCompletedStepKeys((prev) => {
+                      const next = { ...prev, [stepKey]: !prev[stepKey] };
+                      // Track manual toggles so the auto-checker never reverts them
+                      if (next[stepKey]) {
+                        manualStepKeysRef.current = { ...manualStepKeysRef.current, [stepKey]: true };
+                      } else {
+                        const { [stepKey]: _, ...rest } = manualStepKeysRef.current;
+                        manualStepKeysRef.current = rest;
+                      }
+                      return next;
+                    });
                   }}
                 />
               );
@@ -285,6 +398,7 @@ export function StageProgressSection({ setupData, plan }) {
           </div>
         </article>
       </div>
+
     </section>
   );
 }

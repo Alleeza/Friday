@@ -775,8 +775,15 @@ export default function GamePreviewCanvas({
       ) : null}
 
       {isEditMode && draggingPlacedAssetKey ? (
-        <div ref={trashZoneRef} className="pointer-events-none absolute left-4 top-24 z-30">
-          <div className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${trashHover ? 'scale-110 border-rose-700 bg-rose-600 text-white' : 'border-rose-200 bg-white/95 text-rose-500'}`} aria-label="Delete dragged asset">
+        <div ref={trashZoneRef} className="absolute left-4 top-24 z-30">
+          <div
+            className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+              trashHover
+                ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                : 'border-rose-200 bg-white/95 text-rose-500'
+            }`}
+            aria-label="Delete dragged asset"
+          >
             <Trash2 size={34} strokeWidth={2.6} />
           </div>
         </div>

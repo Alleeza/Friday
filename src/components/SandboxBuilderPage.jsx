@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Flame, Pencil, Star, Trash2, X } from 'lucide-react';
+import { Flame, Pencil, Star, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -278,6 +278,7 @@ export default function SandboxBuilderPage({
   const lastSnapshotPublishRef = useRef(0);
   const lastPublishedProjectRef = useRef('');
   const quickEditorRef = useRef(null);
+  const draggingScriptPayloadRef = useRef(null);
   const initialSceneInstances = useMemo(
     () => {
       const persistedScene = normalizeSceneState(initialProjectState?.scene).placedAssets;
@@ -766,6 +767,7 @@ export default function SandboxBuilderPage({
       setDraggingScriptBlock(payload);
       setTrashActive(false);
     });
+    draggingScriptPayloadRef.current = payload;
     const dragPayload = JSON.stringify({ kind: 'script-block', ...payload });
     e.dataTransfer.setData('application/json', dragPayload);
     e.dataTransfer.setData('text/plain', dragPayload);
@@ -773,11 +775,14 @@ export default function SandboxBuilderPage({
   };
 
   const handleScriptBlockDragEnd = () => {
-    setDraggingScriptBlock(null);
-    setDraggingPaletteBlock(false);
-    setTrashActive(false);
-    setDragOverTopBlockId(null);
-    setDragOverChildKey(null);
+    requestAnimationFrame(() => {
+      draggingScriptPayloadRef.current = null;
+      setDraggingScriptBlock(null);
+      setDraggingPaletteBlock(false);
+      setTrashActive(false);
+      setDragOverTopBlockId(null);
+      setDragOverChildKey(null);
+    });
   };
 
   const moveTopLevelBlockBefore = (sourceId, targetId) => {
@@ -886,20 +891,37 @@ export default function SandboxBuilderPage({
     if (payload.scope === 'child') removeNestedBlock(payload.loopId, payload.id);
   };
 
+  const removeDraggedEventThread = (payload) => {
+    if (!payload) return;
+    removeEventSection(payload.id);
+  };
+
+  const readDragPayload = (e) => {
+    const rawJson = e.dataTransfer.getData('application/json');
+    const rawText = e.dataTransfer.getData('text/plain');
+
+    for (const raw of [rawJson, rawText]) {
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        // Ignore malformed drag data and keep trying fallbacks.
+      }
+    }
+
+    return draggingScriptPayloadRef.current || draggingScriptBlock;
+  };
+
   const handleTrashDrop = (e) => {
     e.preventDefault();
     setTrashActive(false);
-    try {
-      const raw = e.dataTransfer.getData('application/json');
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed?.kind === 'script-block') removeDraggedScriptBlock(parsed);
-      else if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
-    } catch {
-      if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
-    } finally {
-      setDraggingScriptBlock(null);
-      setDraggingPaletteBlock(false);
-    }
+    const payload = readDragPayload(e);
+    if (payload?.kind === 'event-thread') removeDraggedEventThread(payload);
+    else if (payload?.kind === 'script-block') removeDraggedScriptBlock(payload);
+    draggingScriptPayloadRef.current = null;
+    setDraggingScriptBlock(null);
+    setDraggingPaletteBlock(false);
   };
 
   const stopRuntime = () => {
@@ -1269,6 +1291,9 @@ export default function SandboxBuilderPage({
         className={`inline-flex max-w-[500px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-4 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
           active ? 'ring-4 ring-[#f6bfd1]/70' : ''
         }`}
+        draggable={mode !== 'play' && eventSections.length > 1}
+        onDragStart={(e) => handleScriptBlockDragStart(e, { kind: 'event-thread', id: eventBlock.id })}
+        onDragEnd={handleScriptBlockDragEnd}
       >
         <button
           type="button"
@@ -1404,7 +1429,7 @@ export default function SandboxBuilderPage({
         >
           <Pencil size={18} strokeWidth={3} />
         </button>
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-white/12">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/12">
           <span className="grid grid-cols-2 gap-0.5">
             {Array.from({ length: 4 }).map((_, i) => (
               <span key={`${eventBlock.id}-dots-${i}`} className="h-1.5 w-1.5 rounded-full bg-white/95" />
@@ -1681,35 +1706,13 @@ export default function SandboxBuilderPage({
       <section>
         <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
       </section>
-      {(draggingScriptBlock || draggingPaletteBlock) && mode !== 'play' ? (
+      {draggingPaletteBlock && mode !== 'play' ? (
         <div className="pointer-events-none fixed inset-0 z-[80]">
           <div
             className={`absolute inset-0 transition ${
-              draggingPaletteBlock
-                ? 'bg-slate-950/70'
-                : draggingScriptBlock && trashActive && !isOverValidScriptDropTarget
-                  ? 'bg-slate-950/70'
-                  : 'bg-transparent'
+              draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
             }`}
           />
-          {draggingScriptBlock ? <div className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
-            <div
-              className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
-                trashActive
-                  ? 'scale-110 border-rose-700 bg-rose-600 text-white opacity-100'
-                  : 'border-rose-200 bg-white/95 text-rose-500 opacity-100'
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!trashActive) setTrashActive(true);
-              }}
-              onDragLeave={() => setTrashActive(false)}
-              onDrop={handleTrashDrop}
-              aria-label="Delete dragged block"
-            >
-              <Trash2 size={34} strokeWidth={2.6} />
-            </div>
-          </div> : null}
         </div>
       ) : null}
       </main>

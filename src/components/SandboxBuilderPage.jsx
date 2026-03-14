@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Plus, Trash2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
@@ -116,6 +116,15 @@ function normalizeKeyPressValue(rawKey) {
   if (normalized === ' ') return 'space';
   if (normalized === 'spacebar') return 'space';
   return normalized;
+}
+
+function getLiveSandboxStageSize() {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.querySelector('[data-sandbox-canvas-root="true"]');
+  if (!(canvas instanceof HTMLElement)) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  return { width: rect.width, height: rect.height };
 }
 
 function blockText(parts = []) {
@@ -510,6 +519,15 @@ export default function SandboxBuilderPage({
     }
   };
 
+  const handleSceneChange = useCallback(({ instances, selectedInstanceKey: nextKey, sceneState }) => {
+    setSceneInstances(instances);
+    if (sceneState) setPersistedSceneState(sceneState);
+    setFocusedInstanceKey(nextKey || null);
+    setEditorInstanceKey((current) => (
+      current && !instances.some((instance) => instance.key === current) ? null : current
+    ));
+  }, []);
+
   const closeEditor = () => {
     setFocusedInstanceKey(null);
     setEditorInstanceKey(null);
@@ -884,7 +902,11 @@ export default function SandboxBuilderPage({
       pushAiMessage(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
       return;
     }
-    const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
+    const runtime = createScriptRuntime({
+      instances: sceneInstances,
+      programsByKey,
+      stageSize: getLiveSandboxStageSize(),
+    });
     runtime.dispatch('game starts');
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());
@@ -1117,14 +1139,7 @@ export default function SandboxBuilderPage({
             availableSpriteAssets={availableBuilderAssets}
             prioritySpriteAssetIds={priorityBuilderAssetIds}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
-              setSceneInstances(instances);
-              if (sceneState) setPersistedSceneState(sceneState);
-              setFocusedInstanceKey(nextKey || null);
-              if (editorInstanceKey && !instances.some((instance) => instance.key === editorInstanceKey)) {
-                setEditorInstanceKey(null);
-              }
-            }}
+            onSceneChange={handleSceneChange}
             onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
             onPlay={startRuntime}
             onStop={stopRuntime}

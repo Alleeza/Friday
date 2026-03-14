@@ -162,6 +162,8 @@ ${checkabilityList}
   - BAD:  "Add a Forever loop, then put Move Forward 12 inside it"
   - GOOD: "Think about how to make your character keep moving — which loop type runs forever?"
 - Each step should be ONE small action
+- Every required step must map to a concrete, observable workspace change that can be measured with a programmatic stepCheck
+- Avoid vague wording about spacing, feel, excitement, or quality unless you can rewrite it into something the checker can verify directly
 - The "why" field must connect to a real programming concept (e.g. loops, events, variables)
 - The "success" field must be observable: something the student can see or test
 - Keep stage labels short and encouraging (e.g. "Bring your world to life")
@@ -172,8 +174,8 @@ ${checkabilityList}
 - Event choice is meaningful and should usually be checked with {"type":"eventIs", ...}
 - Default movement values matter: Move Forward defaults to 12, Turn degrees defaults to 15, Wait defaults to 1, Repeat defaults to 5
 - If a step is visible in the canvas, script, or runtime, prefer a programmatic stepCheck over []
-- Use AI checks only when the judgment depends on layout quality, feel, or visual spacing
-- Do not write steps that imply mechanics the checker cannot infer, such as "make it feel exciting" unless you also make that step subjective and AI-checkable
+- Do NOT use non-programmatic or subjective checks of any kind
+- Do not write steps that imply mechanics the checker cannot infer, such as "make it feel exciting" or "leave enough space"
 
 ## Infeasibility Protocol
 If the student's idea requires capabilities that do NOT exist in the available blocks (e.g. shooting, gravity, jumping, health bars, multiplayer):
@@ -207,25 +209,24 @@ For each step, provide a parallel "stepChecks" array (same length as "steps"). E
 - {"type":"blockValueOnAsset","asset":"<asset-id>","block":"<block-name>","partIndex":1,"op":"!=","value":"12"}  — a matching block has a specific configured value
 - {"type":"assetMoved","asset":"<asset-id>","minDistance":10}  — in play mode, the asset has moved from its starting position
 
-### AI check (use ONLY for subjective steps):
-- {"type":"aiCheck","condition":"<specific, observable condition>"}
-
 ### Rules:
 - Always scope checks to a specific asset using "asset" or "value" fields — never check globally
 - The default seed script auto-adds "When game starts" to every placed object — do NOT use hasBlockOnAsset with a bare event block; use "eventIs" instead when the chosen event is itself meaningful to the step
 - Prefer programmatic checks over [] whenever the student's work is already visible in the canvas, script, or runtime state
 - Use [] only for genuinely internal reflection steps that leave no observable trace in the workspace
-- Use aiCheck sparingly — only for judgment steps like "tune the movement speed to feel right"
+- Never use any subjective or non-programmatic checker
 - "stepChecks" length MUST equal "steps" length
 
 ## Good Step Patterns
 - Good: "Choose which event should start the Bunny moving" with [{"type":"eventIs","asset":"bunny","event":"game starts"}]
 - Good: "What loop keeps the Bunny moving the whole time?" with [{"type":"scriptOnAssetContains","asset":"bunny","blocks":["Forever","Move Forward"]}]
 - Good: "Change the movement number so it feels faster or slower" with [{"type":"blockValueOnAsset","asset":"bunny","block":"Move Forward","partIndex":1,"op":"!=","value":"12"}]
+- Good: "Place at least 3 Rocks on the canvas to build your obstacle field" with [{"type":"assetCount","asset":"rock","min":3}]
 
 ## Brittle Patterns To Avoid
 - Avoid steps that mention an observable event choice but use []
 - Avoid using event names as if they were regular action blocks in hasBlockOnAsset
+- Avoid subjective steps like "leave enough space", "make it look right", or "tune it until it feels good"
 - Avoid plans that require a specific mechanic when a broader observable behavior would be more robust
 - Avoid telling the student to add unsupported systems like enemies with health, jumping, inventory, or locks`;
 }
@@ -287,7 +288,7 @@ ${issues.map((issue) => `  - ${issue}`).join('\n')}
 Please regenerate the plan for:
 "${originalIdea}"
 
-Keep the plan buildable, observable, and auto-checkable wherever possible.`;
+Keep the plan buildable, observable, measurable, and limited to supported programmatic step checks.`;
 }
 
 // ---------------------------------------------------------------------------

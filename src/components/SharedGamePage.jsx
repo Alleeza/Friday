@@ -4,6 +4,15 @@ import { loadPublishedProject } from '../api/projectState';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 
+function getLiveSandboxStageSize() {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.querySelector('[data-sandbox-canvas-root="true"]');
+  if (!(canvas instanceof HTMLElement)) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  return { width: rect.width, height: rect.height };
+}
+
 function normalizeProjectState(projectState) {
   return {
     setupData: projectState?.setupData || null,
@@ -85,7 +94,11 @@ export default function SharedGamePage({ shareId }) {
       return;
     }
 
-    const runtime = createScriptRuntime({ instances, programsByKey });
+    const runtime = createScriptRuntime({
+      instances,
+      programsByKey,
+      stageSize: getLiveSandboxStageSize(),
+    });
     runtime.dispatch('game starts');
     runtimeRef.current = runtime;
     setRuntimeSnapshot(runtime.getSnapshot());

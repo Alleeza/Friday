@@ -44,6 +44,8 @@ test('planning prompt includes structured catalog guidance and hides locked asse
   assert.doesNotMatch(prompt, /Goal \(id: "goal"/);
   assert.match(prompt, /Move Forward/);
   assert.match(prompt, /When game starts/);
+  assert.match(prompt, /Never use any subjective or non-programmatic checker/);
+  assert.doesNotMatch(prompt, /aiCheck/);
 });
 
 test('semantic validation rejects brittle event-as-block plans', () => {
@@ -82,6 +84,41 @@ test('semantic validation rejects brittle event-as-block plans', () => {
   assert.equal(result.valid, false);
   assert.ok(result.issues.some((issue) => issue.includes('use eventIs instead')));
   assert.ok(result.issues.some((issue) => issue.includes('prefer hasAsset or assetCount')));
+});
+
+test('semantic validation rejects aiCheck steps for MVP plans', () => {
+  const constraints = buildConstraints(0);
+  const badPlan = {
+    summary: 'Bad subjective plan',
+    eta: '10 minutes',
+    entities: {
+      assets: ['bunny', 'rock'],
+      blocks: ['Move Forward'],
+      events: ['When game starts'],
+    },
+    checkpoints: ['Start'],
+    stages: [
+      {
+        id: 'stage-1',
+        label: 'Build the field',
+        objective: 'Place obstacles',
+        why: 'Scenes need layout',
+        success: 'The field looks good',
+        steps: [
+          'Leave enough space between the Rocks',
+        ],
+        stepXp: [10],
+        stepChecks: [
+          [{ type: 'aiCheck', condition: 'The Rocks have enough space between them' }],
+        ],
+        optionalSteps: [],
+      },
+    ],
+  };
+
+  const result = validateSemanticAlignment(badPlan, constraints);
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((issue) => issue.includes('aiCheck is disabled for the MVP')));
 });
 
 test('fallback plans satisfy semantic validation under the planner catalog', () => {

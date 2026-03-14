@@ -11,7 +11,7 @@ export class OllamaProvider extends AIProvider {
   /**
    * @param {{ apiUrl?: string, model?: string }} options
    */
-  constructor({ apiUrl = '/api/ollama/api/chat', model = 'llama3.2' } = {}) {
+  constructor({ apiUrl = '/api/ollama/api/chat', model = 'gemma3:12b' } = {}) {
     super();
     this.apiUrl = apiUrl;
     this.model = model;

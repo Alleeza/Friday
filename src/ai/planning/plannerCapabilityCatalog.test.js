@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getFallbackPlan } from './fallbackPlans.js';
+import { getFallbackPlan, getFallbackPlanResultMeta } from './fallbackPlans.js';
 import { getDifficultyProfile, getAllowedBlockNames, getUnlockedAssets } from './planRegistry.js';
 import {
   buildPlanningSystemPrompt,
@@ -90,4 +90,18 @@ test('fallback plans satisfy semantic validation under the planner catalog', () 
   const result = validateSemanticAlignment(plan, constraints);
 
   assert.equal(result.valid, true, result.issues.join('\n'));
+});
+
+test('space shooter fallbacks stay themed and mark the idea as infeasible', () => {
+  const constraints = buildConstraints(0);
+  const prompt = 'Create a space shooter where the player dodges asteroids, shoots enemies, and survives for 60 seconds.';
+  const plan = getFallbackPlan(prompt, 0);
+  const meta = getFallbackPlanResultMeta(prompt, 0);
+  const result = validateSemanticAlignment(plan, constraints);
+
+  assert.equal(result.valid, true, result.issues.join('\n'));
+  assert.match(plan.summary, /asteroid field|Rocks/i);
+  assert.deepEqual(plan.entities.assets, ['bunny', 'rock']);
+  assert.equal(meta.infeasible, true);
+  assert.match(meta.suggestion, /shooting|combat/i);
 });

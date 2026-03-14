@@ -210,7 +210,7 @@ export default function PlanReview({
             <div className="mb-6 flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <p className="text-[13px] text-slate-500">
-                We generated a starter plan for you. Refine it below to match your vision!
+                We could not generate a safe custom plan for that exact prompt, so we made a starter version using mechanics the builder supports.
               </p>
             </div>
           )}

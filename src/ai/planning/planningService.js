@@ -30,7 +30,7 @@ import {
 } from './planningPrompt.js';
 import { validateStructure, validateFeasibility, validateSemanticAlignment } from './planValidator.js';
 import { createPlan, createSuccessResult, createErrorResult } from './planModels.js';
-import { getFallbackPlan } from './fallbackPlans.js';
+import { getFallbackPlan, getFallbackPlanResultMeta } from './fallbackPlans.js';
 import { getPlannerCapabilityConstraints } from './plannerCapabilityCatalog.js';
 
 // Max idea text length accepted (chars)
@@ -160,6 +160,12 @@ export class PlanningService {
     };
   }
 
+  _createFallbackResult(ideaText) {
+    const plan = getFallbackPlan(ideaText, this._xp);
+    const meta = getFallbackPlanResultMeta(ideaText, this._xp);
+    return createSuccessResult(plan, { ...meta, usedFallback: true });
+  }
+
   /**
    * Core pipeline: call AI → parse → validate structure → validate feasibility.
    * Each validation stage gets one retry before falling back.
@@ -198,7 +204,7 @@ export class PlanningService {
         structResult = validateStructure(parsed);
       }
       if (!structResult.valid || !structResult.plan) {
-        return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+        return this._createFallbackResult(ideaText);
       }
     }
 
@@ -221,13 +227,13 @@ export class PlanningService {
             plan = retryStruct.plan;
           } else {
             // Still failing after retry — use fallback
-            return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+            return this._createFallbackResult(ideaText);
           }
         } else {
-          return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+          return this._createFallbackResult(ideaText);
         }
       } else {
-        return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+        return this._createFallbackResult(ideaText);
       }
     }
 
@@ -252,13 +258,13 @@ export class PlanningService {
             plan = retryStruct.plan;
             parsed = retryParsed;
           } else {
-            return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+            return this._createFallbackResult(ideaText);
           }
         } else {
-          return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+          return this._createFallbackResult(ideaText);
         }
       } else {
-        return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+        return this._createFallbackResult(ideaText);
       }
     }
 

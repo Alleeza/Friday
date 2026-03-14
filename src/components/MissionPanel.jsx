@@ -40,6 +40,13 @@ const STEP_DETAILS = {
   },
 };
 
+function distributeStepRewards(totalXp, stepCount) {
+  if (!stepCount) return [];
+  const baseReward = Math.floor(totalXp / stepCount);
+  const remainder = totalXp % stepCount;
+  return Array.from({ length: stepCount }, (_, index) => baseReward + (index < remainder ? 1 : 0));
+}
+
 function getStepDetails(missionId, step, stepXp) {
   const fromMap = STEP_DETAILS[missionId]?.[step.id];
   return {
@@ -60,11 +67,17 @@ export default function MissionPanel() {
   const missionSteps = currentMission?.steps || [];
   const missionProgress = currentMission ? (userProgress.mission_progress[currentMission.id] || {}) : {};
   const totalSteps = missionSteps.length;
+  const stepRewards = currentMission ? distributeStepRewards(currentMission.reward_xp, totalSteps) : [];
   const completedSteps = missionSteps.filter((step) => (missionProgress[step.id] || 0) >= step.target).length;
   const progressPercent = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
   const isAllComplete = completedSteps === totalSteps;
   const activeStep = missionSteps.find((step) => (missionProgress[step.id] || 0) < step.target);
-  const stepXp = currentMission ? Math.round(currentMission.reward_xp / Math.max(totalSteps, 1)) : 0;
+  const missionXpTotal = stepRewards.reduce((sum, reward) => sum + reward, 0);
+  const missionXpEarned = missionSteps.reduce(
+    (sum, step, index) => sum + ((missionProgress[step.id] || 0) >= step.target ? (stepRewards[index] || 0) : 0),
+    0,
+  );
+  const missionXpPercent = missionXpTotal > 0 ? (missionXpEarned / missionXpTotal) * 100 : 0;
   const stepCompletionMap = useMemo(
     () => Object.fromEntries(missionSteps.map((step) => [step.id, (missionProgress[step.id] || 0) >= step.target])),
     [missionProgress, missionSteps],
@@ -164,15 +177,29 @@ export default function MissionPanel() {
           <div className="mt-2 text-right text-[11px] font-extrabold text-[#58cc02]">{Math.round(progressPercent)}%</div>
         </div>
 
+        <div className="rounded-[22px] border border-[#e8edf3] bg-[#f8fafc] p-3">
+          <div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+            <span>Mission XP Progress</span>
+            <span>{missionXpEarned} / {missionXpTotal} XP</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-[#1b97dd] transition-all duration-500"
+              style={{ width: `${missionXpPercent}%` }}
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col gap-2">
           <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Steps</div>
           <ul className="flex flex-col gap-1.5">
-            {currentMission.steps.map((step) => {
+            {currentMission.steps.map((step, index) => {
               const count = missionProgress[step.id] || 0;
               const isChecked = count >= step.target;
               const isHovered = hoveredStepId === step.id;
               const isCelebrating = celebratingStepId === step.id;
-              const stepDetails = getStepDetails(currentMission.id, step, stepXp);
+              const stepReward = stepRewards[index] || 0;
+              const stepDetails = getStepDetails(currentMission.id, step, stepReward);
 
               return (
                 <li
@@ -209,7 +236,7 @@ export default function MissionPanel() {
                         }`}
                         style={isCelebrating ? { animation: 'cq-xp-flash 420ms ease-out 1' } : undefined}
                       >
-                        +{stepXp} XP
+                        +{stepReward} XP
                       </span>
                     </div>
                     {step.target > 1 ? (

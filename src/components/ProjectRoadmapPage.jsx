@@ -290,24 +290,8 @@ export function StageProgressSection({
   if (compact) {
     return (
       <section className={`quest-card w-full border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] ${className}`.trim()}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h2 className="font-display text-[28px] font-bold leading-none text-slate-800">Stage Progress</h2>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-extrabold">
-              <span className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-4 py-1 text-[#1b97dd]">
-                Stage {Math.min(currentIndex + 1, stages.length)} of {stages.length}
-              </span>
-              <span className="rounded-full border border-[#d3d7dd] bg-white px-4 py-1 text-slate-600">{progressPct}% complete</span>
-              <span className="rounded-full border border-[#bde59f] bg-[#eefadb] px-4 py-1 text-[#3f7f13]">
-                XP {earnedRequiredXp}/{totalRequiredXp}
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-[24px] border border-[#e2e8f0] bg-white px-4 py-3 shadow-[0_3px_0_rgba(148,163,184,0.12)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Current Stage</p>
-            <p className="mt-1 text-[15px] font-extrabold text-slate-800">{currentStage?.label || 'No stage selected'}</p>
-          </div>
+        <div>
+          <h2 className="font-display text-[28px] font-bold leading-none text-slate-800">Stage Progress</h2>
         </div>
 
         <div className="relative mt-5 px-1 pb-1">

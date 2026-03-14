@@ -1504,6 +1504,7 @@ export default function SandboxBuilderPage({
             initialSceneState={initialProjectState?.scene}
             availableSpriteAssets={availableBuilderAssets}
             prioritySpriteAssetIds={priorityBuilderAssetIds}
+            currentXp={0}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
             onSceneChange={handleSceneChange}
             onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}

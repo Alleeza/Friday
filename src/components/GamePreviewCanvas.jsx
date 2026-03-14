@@ -269,6 +269,11 @@ export default function GamePreviewCanvas({
     updateSelection(null);
   };
 
+  const getUnlockLevelLabel = (unlockXp = 0) => {
+    const normalizedXp = Math.max(0, Number(unlockXp) || 0);
+    return `Level ${Math.floor(normalizedXp / 10) + 1}`;
+  };
+
   const renderSpriteAssetCard = (asset) => (
     <div
       key={asset.id}
@@ -279,6 +284,11 @@ export default function GamePreviewCanvas({
     >
       <div className="text-3xl">{asset.emoji}</div>
       <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
+      {(asset.unlockXp || 0) > currentXp ? (
+        <div className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
+          🔒 {getUnlockLevelLabel(asset.unlockXp)}
+        </div>
+      ) : null}
     </div>
   );
 
@@ -748,11 +758,38 @@ export default function GamePreviewCanvas({
             <div className="max-h-[360px] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
                 {trayAssets.map((asset) => (
-                  <button key={asset.id} type="button" draggable onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')} onClick={() => applyBackdrop(asset)} className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`} title={asset.label}>
+                  <button
+                    key={asset.id}
+                    type="button"
+                    draggable={(asset.unlockXp || 0) <= currentXp}
+                    onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')}
+                    onClick={() => {
+                      if ((asset.unlockXp || 0) > currentXp) return;
+                      applyBackdrop(asset);
+                    }}
+                    className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${
+                      (asset.unlockXp || 0) <= currentXp
+                        ? `hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`
+                        : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'
+                    }`}
+                    title={(asset.unlockXp || 0) <= currentXp ? asset.label : `🔒 ${getUnlockLevelLabel(asset.unlockXp)}`}
+                  >
+                    {(asset.unlockXp || 0) > currentXp ? (
+                      <div className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-2 py-1 text-[11px] font-extrabold text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
+                        🔒
+                      </div>
+                    ) : null}
                     <div className="aspect-[16/9] w-full bg-slate-200">
                       <img src={asset.src} alt={asset.label} className="h-full w-full object-cover" />
                     </div>
                     <div className="px-3 py-2 text-sm font-extrabold text-[#475569]">{asset.label}</div>
+                    {(asset.unlockXp || 0) > currentXp ? (
+                      <div className="absolute right-3 top-3 z-10">
+                        <div className="inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
+                          🔒 {getUnlockLevelLabel(asset.unlockXp)}
+                        </div>
+                      </div>
+                    ) : null}
                   </button>
                 ))}
               </div>

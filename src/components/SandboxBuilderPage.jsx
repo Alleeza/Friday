@@ -309,10 +309,7 @@ export default function SandboxBuilderPage({
   const [pendingEventValue, setPendingEventValue] = useState('');
   const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
-    { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
-  ]);
+  const [messages, setMessages] = useState([]);
 
   const priorityBuilderAssetIds = useMemo(
     () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
@@ -324,6 +321,15 @@ export default function SandboxBuilderPage({
     if (!priorityBuilderAssetIds.length) return sandboxAssets;
     return prioritizeAssets(sandboxAssets, new Set(priorityBuilderAssetIds));
   }, [priorityBuilderAssetIds, projectPlan]);
+
+  const progressWorkspaceState = useMemo(
+    () => ({
+      sceneInstances,
+      scriptsByInstanceKey,
+      runtimeSnapshot,
+    }),
+    [sceneInstances, scriptsByInstanceKey, runtimeSnapshot]
+  );
 
   useEffect(() => {
     const nextProjectState = {
@@ -544,8 +550,6 @@ export default function SandboxBuilderPage({
     ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: hydrateParts(template.parts), tone: template.tone, children: [] }
     : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: hydrateParts(template.parts), tone: template.tone };
 
-  const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
-
   const addTopLevel = (template, targetEventBlockId = null) => {
     if (!editorInstanceKey || mode === 'play') return;
     if (isEventBlock(template)) return;
@@ -562,7 +566,6 @@ export default function SandboxBuilderPage({
     });
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
-    pushAiMessage(`Added "${text}" to ${selectedLabel}.`);
   };
 
   const addInsideLoop = (loopId, template) => {
@@ -573,7 +576,6 @@ export default function SandboxBuilderPage({
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: [...block.children, instance] }));
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
-    pushAiMessage(`Dropped "${text}" inside the loop for ${selectedLabel}.`);
   };
 
   const handleDragStart = (e, template) => {
@@ -780,7 +782,6 @@ export default function SandboxBuilderPage({
       const last = next.pop();
       setScriptsByInstanceKey(last.scriptsByInstanceKey);
       setSelectedBlock(last.selectedBlock);
-      pushAiMessage('Undid the last script edit.');
       return next;
     });
   };
@@ -956,12 +957,10 @@ export default function SandboxBuilderPage({
     lastSnapshotPublishRef.current = 0;
     setMode('edit');
     setRuntimeSnapshot(null);
-    pushAiMessage('Stopped play mode. Edit the scripts and run again.');
   };
 
   const startRuntime = () => {
     if (!sceneInstances.length) {
-      pushAiMessage('Place at least one object in the sandbox before pressing Play.');
       return;
     }
 
@@ -972,7 +971,6 @@ export default function SandboxBuilderPage({
       setFocusedInstanceKey(firstKey);
       setEditorInstanceKey(firstKey);
       setEditorStage('expanded');
-      pushAiMessage(`Play blocked. ${getInstanceDisplayLabel(sceneInstances, firstKey)} has compile errors.`);
       return;
     }
     const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
@@ -984,7 +982,6 @@ export default function SandboxBuilderPage({
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
     lastSnapshotPublishRef.current = 0;
-    pushAiMessage("Play started. Your objects are running their scripts now.");
     const loop = (timestamp) => {
       if (!runtimeRef.current) return;
       const delta = lastTickRef.current ? Math.min(timestamp - lastTickRef.current, 50) : 16;
@@ -1488,7 +1485,13 @@ export default function SandboxBuilderPage({
     <>
       <BuilderTopNav onCreateNewGame={onCreateNewGame} />
       <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
+      {projectPlan ? (
+        <StageProgressSection
+          setupData={initialSetupData}
+          plan={projectPlan}
+          workspaceState={progressWorkspaceState}
+        />
+      ) : null}
       <section>
         <div className="relative h-[720px] w-full">
           <GamePreviewCanvas

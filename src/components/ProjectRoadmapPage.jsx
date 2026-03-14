@@ -68,7 +68,6 @@ function buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, man
       stepText,
       checks,
       isCompleted: Boolean(completedStepKeys[stepKey]),
-      isManualOverride: Boolean(manualStepKeys[stepKey]),
       evaluation: {
         passed: evaluation.passed,
         pendingAiChecks: evaluation.pendingAiChecks,
@@ -133,7 +132,7 @@ function buildStageProgress(plan, completedStepKeys) {
   };
 }
 
-function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
+function StepRow({ active, done, label, xp, onClick, tone = 'step' }) {
   const palette = tone === 'bonus'
     ? {
         done: 'border-[#8fd0f8] bg-[#dff3ff] text-[#166b9a]',
@@ -155,7 +154,7 @@ function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={onClick}
       className={`flex w-full items-start gap-2 rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold ${
         done
           ? palette.done
@@ -185,12 +184,9 @@ function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
 
 export function StageProgressSection({ setupData, plan, workspaceState = null, provider = null }) {
   const [completedStepKeys, setCompletedStepKeys] = useState({});
-  const [completedBonusKeys, setCompletedBonusKeys] = useState({});
   const [showSteps, setShowSteps] = useState(false);
   const [showBonusQuests, setShowBonusQuests] = useState(false);
   const [selectedItem, setSelectedItem] = useState({ type: 'step', index: 0 });
-  // Track which steps were auto-completed (vs manually toggled) so the checker can revert them
-  const manualStepKeysRef = useRef({});
 
   const {
     stages,
@@ -246,13 +242,12 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
     currentStage,
     workspaceState,
     completedStepKeys,
-    manualStepKeys: manualStepKeysRef.current,
     onStepAutoCompleted: handleStepAutoCompleted,
     onStepAutoReverted: handleStepAutoReverted,
   });
 
   const stepDebugInfo = useMemo(
-    () => buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, manualStepKeysRef.current),
+    () => buildStepDebugInfo(currentStage, workspaceState, completedStepKeys),
     [currentStage, workspaceState, completedStepKeys],
   );
 
@@ -360,19 +355,8 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
                   done={isDone}
                   label={`Step ${index + 1}: ${step}`}
                   xp={currentStage.stepXp[index] || 0}
-                  onToggle={() => {
+                  onClick={() => {
                     setSelectedItem({ type: 'step', index });
-                    setCompletedStepKeys((prev) => {
-                      const next = { ...prev, [stepKey]: !prev[stepKey] };
-                      // Track manual toggles so the auto-checker never reverts them
-                      if (next[stepKey]) {
-                        manualStepKeysRef.current = { ...manualStepKeysRef.current, [stepKey]: true };
-                      } else {
-                        const { [stepKey]: _, ...rest } = manualStepKeysRef.current;
-                        manualStepKeysRef.current = rest;
-                      }
-                      return next;
-                    });
                   }}
                 />
               );
@@ -400,12 +384,11 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
                         key={bonusKey}
                         tone="bonus"
                         active={selectedItem.type === 'bonus' && idx === selectedBonusIndex}
-                        done={Boolean(completedBonusKeys[bonusKey])}
+                        done={false}
                         label={bonus.text}
                         xp={bonus.xp || 0}
-                        onToggle={() => {
+                        onClick={() => {
                           setSelectedItem({ type: 'bonus', index: idx });
-                          setCompletedBonusKeys((prev) => ({ ...prev, [bonusKey]: !prev[bonusKey] }));
                         }}
                       />
                     );

@@ -1,5 +1,10 @@
 import { buildSystemPrompt } from './context/systemPrompt.js';
 import { buildContext } from './context/contextBuilder.js';
+// ── Profanity filter ────────────────────────────────────────────────────────
+// Applied at the service layer so that EVERY user message is cleaned before
+// it reaches any AI provider (Claude, Ollama, etc.).  This is the deepest
+// gate in the pipeline and cannot be bypassed by frontend code.
+import { cleanMessage } from '../utils/profanityFilter.js';
 
 /**
  * AIService — facade that wires together a provider, the system prompt,
@@ -31,6 +36,10 @@ export class AIService {
    * Converts app-internal messages to provider-agnostic format and
    * injects workspace context into the latest user message.
    *
+   * PROFANITY FILTER: Every user message is run through cleanMessage()
+   * here so that offensive words are replaced with "****" before the
+   * message is sent over the network to the AI provider.
+   *
    * @param {Array<{ role: string, text: string }>} messages - app messages (excludes system notifications)
    * @param {string} contextString - serialized workspace context
    * @returns {Array<{ role: 'user'|'assistant', content: string }>}
@@ -41,7 +50,8 @@ export class AIService {
       .filter((m) => m.role === 'you' || m.role === 'ai')
       .map((m) => ({
         role: m.role === 'ai' ? 'assistant' : 'user',
-        content: m.text,
+        // Profanity filter: clean user messages before they reach the AI
+        content: m.role === 'you' ? cleanMessage(m.text) : m.text,
       }));
 
     // Inject workspace context into the last user message

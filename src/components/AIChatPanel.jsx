@@ -1,5 +1,5 @@
 import { MessageCircle, Minimize2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import questyImage from '../imgages/profile.png';
 
 const quickReplies = [
@@ -128,11 +128,14 @@ export default function AIChatPanel({
   isStreaming = false,
   onAbort,
 }) {
+  const SCROLL_BOTTOM_THRESHOLD = 8;
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const [lastViewedMessageKey, setLastViewedMessageKey] = useState('');
+  const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const conversationMessages = messages.filter((msg) => msg.role === 'you' || msg.role === 'ai');
   const latestMessage = conversationMessages[conversationMessages.length - 1];
@@ -152,10 +155,40 @@ export default function AIChatPanel({
     setIsOpen(false);
   };
 
-  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  };
+
+  const updateScrollLock = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
+  };
+
+  // Keep following the latest message only when the user is already at the bottom.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    if (!shouldStickToBottomRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      scrollToBottom();
+      updateScrollLock();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, latestMessageKey]);
+
+  // Opening the panel should reveal the latest message immediately.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversationMessages, isOpen]);
+    if (!isOpen) return;
+    shouldStickToBottomRef.current = true;
+    const frame = requestAnimationFrame(() => {
+      scrollToBottom();
+      updateScrollLock();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -223,7 +256,11 @@ export default function AIChatPanel({
             </div>
           </div>
 
-          <div className="flex-1 space-y-2 overflow-y-auto bg-[#f3f7fb] px-4 py-4">
+          <div
+            ref={messagesContainerRef}
+            onScroll={updateScrollLock}
+            className="flex-1 space-y-2 overflow-y-auto bg-[#f3f7fb] px-4 py-4"
+          >
             {showWelcomeHint ? (
               <div className="flex h-full min-h-40 items-center justify-center px-6 text-center">
                 <div>

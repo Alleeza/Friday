@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "scripts": {
     "dev": "node scripts/dev.js",
@@ -16,6 +16,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "bad-words": "^4.0.0",
     "lucide-react": "^0.511.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

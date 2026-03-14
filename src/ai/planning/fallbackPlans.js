@@ -41,7 +41,7 @@ const COLLECTOR_ARCHETYPE = {
         'Place a Bunny on the canvas — where do you want it to start?',
         'Think about which event should start the Bunny moving',
         'Which block makes a character keep moving forever?',
-        'What number makes the movement feel right — fast or slow?',
+        'Change the Move Forward number from the default so the Bunny moves differently',
       ],
       stepXp: [5, 10, 10, 5],
       stepChecks: [
@@ -98,14 +98,12 @@ const SPACE_DODGER_ARCHETYPE = {
       why: 'Level design starts with placing obstacles in intentional positions',
       success: 'Your canvas has several Rocks arranged like an asteroid field with gaps to move through',
       steps: [
-        'Place several Rocks around the canvas to act like drifting asteroids',
-        'Leave gaps wide enough for the Bunny to weave through',
-        'Choose a starting spot for the Bunny away from the Rocks',
+        'Place at least 3 Rocks on the canvas to build your asteroid field',
+        'Add a Bunny to the canvas so you have a ship to pilot through the Rocks',
       ],
-      stepXp: [5, 10, 5],
+      stepXp: [10, 10],
       stepChecks: [
         [{ type: 'assetCount', asset: 'rock', min: 3 }],
-        [{ type: 'aiCheck', condition: 'The Rocks are spaced out with visible gaps so the Bunny can navigate between them like an asteroid field' }],
         [{ type: 'hasAsset', value: 'bunny' }],
       ],
       optionalSteps: [
@@ -121,7 +119,7 @@ const SPACE_DODGER_ARCHETYPE = {
       steps: [
         'Pick the event that should make the Bunny react when the player presses a key',
         'Choose a movement block that helps the Bunny travel through the field',
-        'Test the route and tune the movement so dodging the Rocks feels manageable',
+        'Press Play and move the Bunny so you can prove the controls work',
       ],
       stepXp: [10, 10, 10],
       stepChecks: [
@@ -160,14 +158,12 @@ const MAZE_ARCHETYPE = {
       why: 'Positioning objects at different coordinates is the foundation of game level design',
       success: 'There is a clear (but narrow!) path between the Rocks',
       steps: [
-        'Place several Rocks on the canvas to form a path',
-        'Make sure there is a gap the Bunny can fit through',
-        'Think about where the Bunny should start — far from the Goal',
+        'Place at least 2 Rocks on the canvas to build your maze walls',
+        'Add a Bunny to the canvas so the player has a character to guide',
       ],
-      stepXp: [5, 10, 5],
+      stepXp: [10, 10],
       stepChecks: [
         [{ type: 'assetCount', asset: 'rock', min: 2 }],
-        [{ type: 'aiCheck', condition: 'There are multiple Rocks placed on the canvas with visible gaps between them forming a navigable path' }],
         [{ type: 'hasAsset', value: 'bunny' }],
       ],
       optionalSteps: [
@@ -244,14 +240,12 @@ const EXPLORER_ARCHETYPE = {
       success: 'Your canvas has at least two different objects placed around it',
       steps: [
         'Drag a Bunny onto the canvas — pick a good starting spot',
-        'Add some Trees to make the world feel alive',
-        'Think about the spacing — does it feel like an open world?',
+        'Add at least one Tree to build the world around the Bunny',
       ],
-      stepXp: [5, 5, 5],
+      stepXp: [5, 10],
       stepChecks: [
         [{ type: 'hasAsset', value: 'bunny' }],
         [{ type: 'hasAsset', value: 'tree' }],
-        [{ type: 'aiCheck', condition: 'The Bunny and Trees are placed with noticeable spacing so the scene feels like an open world' }],
       ],
       optionalSteps: [
         { description: 'Add a third type of object to your world', bonusXp: 5 },

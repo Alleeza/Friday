@@ -141,7 +141,13 @@ function compileInstruction(block, errors, path) {
 
 function compileScript(blocks) {
   const errors = [];
-  const eventBlocks = Array.isArray(blocks) ? blocks.filter((block) => isEventBlock(block)) : [];
+  const normalizedBlocks = Array.isArray(blocks) ? blocks.filter(Boolean) : [];
+  const eventBlocks = normalizedBlocks.filter((block) => isEventBlock(block));
+
+  // An unconfigured asset is valid for MVP play mode: it simply does nothing.
+  if (!normalizedBlocks.length) {
+    return { program: { events: {} }, errors: [] };
+  }
 
   if (!eventBlocks.length) {
     return { program: null, errors: ['Missing a "When ..." event block at the top of the script.'] };
@@ -150,7 +156,7 @@ function compileScript(blocks) {
   let currentSection = null;
   let blockCounter = 0;
 
-  (blocks || []).forEach((block) => {
+  normalizedBlocks.forEach((block) => {
     if (isEventBlock(block)) {
       currentSection = {
         eventName: normalizeSymbol(readTokenValue(block.parts?.[1])),
@@ -171,15 +177,17 @@ function compileScript(blocks) {
   });
 
   const events = {};
+  const hasInstructions = sections.some((section) => section.instructions.length > 0);
   sections.forEach((section) => {
     if (!EVENT_LABELS.has(section.eventName)) errors.push(`Unsupported event "${section.eventName || 'unknown'}".`);
-    if (!section.instructions.length) errors.push(`Add at least one action or loop after "When ${section.eventName}".`);
     if (!events[section.eventName]) events[section.eventName] = [];
-    events[section.eventName].push(...section.instructions);
+    if (section.instructions.length) {
+      events[section.eventName].push(...section.instructions);
+    }
   });
 
   return {
-    program: errors.length ? null : { events },
+    program: errors.length ? null : { events: hasInstructions ? events : {} },
     errors,
   };
 }

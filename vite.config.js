@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
+        // Proxy Claude API routes so the API key stays server-side.
+        // Set ANTHROPIC_API_KEY in .env.local (never commit this file).
         '/api/claude/messages': {
           target: 'https://api.anthropic.com',
           changeOrigin: true,
@@ -36,14 +38,11 @@ export default defineConfig(({ mode }) => {
             'anthropic-version': '2023-06-01',
           },
         },
+        // Proxy /api/ollama → local Ollama server to avoid browser CORS issues.
         '/api/ollama': {
           target: 'http://127.0.0.1:11434',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/ollama/, ''),
-        },
-        '/api/project-state': {
-          target: 'http://127.0.0.1:3001',
-          changeOrigin: true,
         },
       },
     },

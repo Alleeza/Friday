@@ -148,8 +148,10 @@ export default function GamePreviewCanvas({
     if (!canvasRef.current || mode !== 'edit') return;
     if (resizingPlacedAssetKey && resizeStartRef.current) {
       const start = resizeStartRef.current;
+      const deltaX = e.clientX - start.pointerX;
       const deltaY = e.clientY - start.pointerY;
-      const nextScale = Math.max(0.6, Math.min(1.8, Math.round((start.scale - deltaY / 220) * 10) / 10));
+      const projectedDelta = ((deltaX * start.directionX) + (deltaY * start.directionY)) / 2;
+      const nextScale = Math.max(0.6, Math.min(1.8, Math.round((start.scale + projectedDelta / 220) * 10) / 10));
       setPlacedAssets((prev) => prev.map((asset) => asset.key !== resizingPlacedAssetKey ? asset : { ...asset, scale: nextScale }));
       resizedDuringDragRef.current = true;
       return;
@@ -190,13 +192,16 @@ export default function GamePreviewCanvas({
     }
   };
 
-  const handleResizeHandlePointerDown = (e, asset) => {
+  const handleResizeHandlePointerDown = (e, asset, directionX, directionY) => {
     if (mode !== 'edit') return;
     e.stopPropagation();
     setSelectedPlacedAssetKey(asset.key);
     setResizingPlacedAssetKey(asset.key);
     resizeStartRef.current = {
+      pointerX: e.clientX,
       pointerY: e.clientY,
+      directionX,
+      directionY,
       scale: asset.scale || 1,
       snapshot: { placedAssets: placedAssets.map((item) => ({ ...item })), selectedPlacedAssetKey: asset.key },
     };
@@ -219,7 +224,7 @@ export default function GamePreviewCanvas({
   const showSelectionChrome = mode === 'edit' && !suppressSelectionChrome;
 
   return (
-    <section ref={canvasRef} className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]" onClick={(e) => {
+    <section ref={canvasRef} data-sandbox-canvas-root="true" className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]" onClick={(e) => {
       if (mode === 'edit' && e.target === e.currentTarget) updateSelection(null);
     }} onPointerMove={handleCanvasPointerMove} onPointerUp={handleCanvasPointerUp} onPointerCancel={handleCanvasPointerUp} onLostPointerCapture={handleCanvasPointerUp} onDragOver={(e) => mode === 'edit' && e.preventDefault()} onDrop={onCanvasDrop}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
@@ -241,7 +246,7 @@ export default function GamePreviewCanvas({
             updateSelection(asset.key);
             if (mode === 'play') onSpriteClick?.(asset.key);
           }} onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)} onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}>
-            {isSelected && showSelectionChrome ? <><div className="absolute inset-0 border-[3px] border-[#19a2ff]" /><div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /></> : null}
+            {isSelected && showSelectionChrome ? <><div className="absolute inset-0 border-[3px] border-[#19a2ff]" /><div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, -1)} /><div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, -1)} /><div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, 1)} /><div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, 1)} /></> : null}
             <div className="grid h-full w-full place-items-center bg-transparent leading-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
             {asset.costume && asset.costume !== 'default' ? <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-slate-600 shadow">{asset.costume}</div> : null}
           </div>
@@ -253,18 +258,17 @@ export default function GamePreviewCanvas({
       {mode === 'edit' && draggingPlacedAssetKey ? (
         <div
           ref={trashZoneRef}
-          className={`pointer-events-none absolute left-4 top-24 z-30 flex items-center gap-3 rounded-[24px] border-2 px-5 py-4 text-white shadow-[0_16px_40px_rgba(15,23,42,0.22)] transition ${
-            trashHover
-              ? 'scale-105 border-[#7f1d1d] bg-[#dc2626]'
-              : 'border-[#fca5a5] bg-[#ef4444]'
-          }`}
+          className="pointer-events-none absolute left-4 top-24 z-30"
         >
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-white/20">
-            <Trash2 size={22} />
-          </span>
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/80">Delete asset</p>
-            <p className="text-sm font-extrabold">Drag here to remove</p>
+          <div
+            className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+            trashHover
+              ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+              : 'border-rose-200 bg-white/95 text-rose-500'
+          }`}
+            aria-label="Delete dragged asset"
+          >
+            <Trash2 size={34} strokeWidth={2.6} />
           </div>
         </div>
       ) : null}

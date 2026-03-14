@@ -422,15 +422,18 @@ export default function SandboxBuilderPage({
   const selectedEvent = getEventValue(activeEventSection?.eventBlock || primaryEventBlock);
   const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
   const assetOptions = useMemo(() => {
-    const dynamic = sceneInstances.map((instance) => ({
-      value: instance.key,
-      label: `${instance.emoji} ${getInstanceDisplayLabel(sceneInstances, instance.key)}`,
-    }));
-    return [{ value: 'Self', label: '🙂 Self' }, ...dynamic];
-  }, [sceneInstances]);
+    const selfEmoji = selectedInstance?.emoji || '🙂';
+    const dynamic = sceneInstances
+      .filter((instance) => instance.key !== editorInstanceKey)
+      .map((instance) => ({
+        value: instance.key,
+        label: `${instance.emoji} ${getInstanceDisplayLabel(sceneInstances, instance.key)}`,
+      }));
+    return [{ value: 'Self', label: `${selfEmoji} Self` }, ...dynamic];
+  }, [editorInstanceKey, sceneInstances, selectedInstance]);
   const collisionTargetOptions = useMemo(() => {
     const dynamic = assetOptions.filter((option) => option.value !== 'Self' && option.value !== editorInstanceKey);
-    return dynamic.length ? dynamic : [{ value: 'Self', label: '🙂 Self' }];
+    return dynamic.length ? dynamic : [assetOptions[0] || { value: 'Self', label: '🙂 Self' }];
   }, [assetOptions, editorInstanceKey]);
   const activeEventParts = activeEventSection?.eventBlock.parts || primaryEventBlock?.parts || [];
   const rawSelectedEventLeft = readTokenValue(activeEventParts[2]);

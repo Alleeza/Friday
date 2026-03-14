@@ -6,7 +6,7 @@ import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
-import { BLOCK_PALETTE, DEFAULT_EVENT, EVENT_OPTIONS } from '../data/builderCapabilities.js';
+import { BLOCK_PALETTE, DEFAULT_EVENT } from '../data/builderCapabilities.js';
 import { sandboxAssets } from '../data/sandboxAssets';
 import { createDefaultAIService } from '../ai/createDefaultAIService.js';
 import {
@@ -129,6 +129,76 @@ function blockText(parts = []) {
   }).join(' ').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeEventName(value) {
+  return String(value || '').trim().replace(/^when\s+/i, '').toLowerCase();
+}
+
+function normalizeBlockName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getCanonicalBlockName(template) {
+  return template?.parts?.find((part) => typeof part === 'string') || '';
+}
+
+function collectPlanAssetIds(plan, sceneInstances = []) {
+  const ids = new Set(sceneInstances.map((instance) => instance?.id).filter(Boolean));
+
+  if (!plan) return [...ids];
+  (plan.entities?.assets || []).forEach((id) => ids.add(id));
+
+  plan.stages?.forEach((stage) => {
+    stage.stepChecks?.forEach((checks) => {
+      checks?.forEach((check) => {
+        if (check?.type === 'hasAsset' && check.value) ids.add(check.value);
+        if (check?.type === 'assetCount' && check.asset) ids.add(check.asset);
+        if (check?.asset) ids.add(check.asset);
+      });
+    });
+  });
+
+  return [...ids];
+}
+
+function collectPlanBlockNames(plan) {
+  const names = new Set();
+  if (!plan) return names;
+
+  (plan.entities?.blocks || []).forEach((name) => names.add(normalizeBlockName(name)));
+  plan.stages?.forEach((stage) => {
+    stage.stepChecks?.forEach((checks) => {
+      checks?.forEach((check) => {
+        if (check?.block) names.add(normalizeBlockName(check.block));
+        (check?.blocks || []).forEach((block) => names.add(normalizeBlockName(block)));
+      });
+    });
+  });
+
+  return names;
+}
+
+function collectPlanEvents(plan, scriptsByInstanceKey = {}) {
+  const events = new Set();
+  if (plan) {
+    (plan.entities?.events || []).forEach((eventName) => events.add(normalizeEventName(eventName)));
+    plan.stages?.forEach((stage) => {
+      stage.stepChecks?.forEach((checks) => {
+        checks?.forEach((check) => {
+          if (check?.type === 'eventIs' && check.event) events.add(normalizeEventName(check.event));
+        });
+      });
+    });
+  }
+
+  Object.values(scriptsByInstanceKey || {}).forEach((blocks) => {
+    const eventValue = blocks?.find((block) => block.id === 'event-start')?.parts?.[1];
+    const normalized = normalizeEventName(readTokenValue(eventValue));
+    if (normalized) events.add(normalized);
+  });
+
+  return events;
+}
+
 function cloneScripts(scriptsByInstanceKey) {
   return JSON.parse(JSON.stringify(scriptsByInstanceKey));
 }
@@ -225,12 +295,50 @@ export default function SandboxBuilderPage({
     [selectedModel, selectedProvider]
   );
 
+  const availableBuilderAssets = useMemo(() => {
+    if (!projectPlan) return sandboxAssets;
+    const allowedIds = collectPlanAssetIds(projectPlan, sceneInstances);
+    if (!allowedIds.length) return sandboxAssets;
+    const allowed = new Set(allowedIds);
+    const filtered = sandboxAssets.filter((asset) => allowed.has(asset.id));
+    return filtered.length ? filtered : sandboxAssets;
+  }, [projectPlan, sceneInstances]);
+
+  const availablePaletteByCategory = useMemo(() => {
+    const visibleEntries = Object.entries(BLOCK_PALETTE)
+      .filter(([category]) => !hiddenPaletteCategories.has(String(category).toLowerCase()));
+    if (!projectPlan) return Object.fromEntries(visibleEntries);
+    const allowedBlockNames = collectPlanBlockNames(projectPlan);
+
+    if (!allowedBlockNames.size) {
+      return Object.fromEntries(visibleEntries);
+    }
+
+    const filteredEntries = visibleEntries
+      .map(([category, templates]) => [
+        category,
+        templates.filter((template) => allowedBlockNames.has(normalizeBlockName(getCanonicalBlockName(template)))),
+      ])
+      .filter(([, templates]) => templates.length > 0);
+
+    return filteredEntries.length ? Object.fromEntries(filteredEntries) : Object.fromEntries(visibleEntries);
+  }, [projectPlan]);
+
+  const filteredEventOptions = useMemo(() => {
+    if (!projectPlan) return eventOptions;
+    const allowedEvents = collectPlanEvents(projectPlan, scriptsByInstanceKey);
+    if (!allowedEvents.size) return eventOptions;
+
+    const filtered = eventOptions.filter((eventName) => allowedEvents.has(normalizeEventName(eventName)));
+    return filtered.length ? filtered : eventOptions;
+  }, [projectPlan, scriptsByInstanceKey]);
+
   const { messages, sendMessage, addNotification, isStreaming, abortResponse } = useAIChat({
     aiService,
     contextData: {
       sceneInstances,
       scriptsByInstanceKey,
-      availableAssets: sandboxAssets,
+      availableAssets: availableBuilderAssets,
       compileErrors: compileErrorsByInstance,
       runtimeSnapshot,
       mode,
@@ -303,10 +411,7 @@ export default function SandboxBuilderPage({
       window.removeEventListener('drop', clearDragUi);
     };
   }, [mode]);
-  const availableCategoryNames = useMemo(
-    () => Object.keys(BLOCK_PALETTE).filter((category) => !hiddenPaletteCategories.has(String(category).toLowerCase())),
-    [],
-  );
+  const availableCategoryNames = useMemo(() => Object.keys(availablePaletteByCategory), [availablePaletteByCategory]);
 
   useEffect(() => {
     const nextProjectState = {
@@ -321,9 +426,9 @@ export default function SandboxBuilderPage({
   }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
 
   const paletteBlocks = useMemo(() => {
-    if (availableCategoryNames.includes(selectedCategory)) return BLOCK_PALETTE[selectedCategory] || [];
-    return BLOCK_PALETTE[availableCategoryNames[0]] || [];
-  }, [selectedCategory, availableCategoryNames]);
+    if (availableCategoryNames.includes(selectedCategory)) return availablePaletteByCategory[selectedCategory] || [];
+    return availablePaletteByCategory[availableCategoryNames[0]] || [];
+  }, [selectedCategory, availableCategoryNames, availablePaletteByCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
@@ -987,6 +1092,7 @@ export default function SandboxBuilderPage({
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
             initialSceneState={persistedSceneState}
+            availableSpriteAssets={availableBuilderAssets}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
             onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
               setSceneInstances(instances);
@@ -1033,7 +1139,7 @@ export default function SandboxBuilderPage({
                     onChange={(e) => handleEventChange(e.target.value)}
                     className="h-10 min-w-[110px] max-w-[190px] appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] px-4 pr-7 text-[16px] font-black text-slate-900 outline-none"
                   >
-                    {eventOptions.map((eventName) => (
+                    {filteredEventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
                         {eventName}
                       </option>
@@ -1083,7 +1189,7 @@ export default function SandboxBuilderPage({
                     onChange={(e) => handleEventChange(e.target.value)}
                     className="h-10 min-w-0 appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-6 text-[16px] font-black text-slate-900 outline-none"
                   >
-                    {eventOptions.map((eventName) => (
+                    {filteredEventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
                         {eventName === 'object is tapped' ? 'is tapped' : eventName === 'key is pressed' ? 'is pressed' : eventName}
                       </option>
@@ -1097,7 +1203,7 @@ export default function SandboxBuilderPage({
                     onChange={(e) => handleEventChange(e.target.value)}
                     className="h-10 min-w-0 max-w-[220px] rounded-full border-[3px] border-white bg-[#f8f9fb] px-4 pr-7 text-[16px] font-black text-slate-900 outline-none"
                   >
-                    {eventOptions.map((eventName) => (
+                    {filteredEventOptions.map((eventName) => (
                       <option key={eventName} value={eventName}>
                         {eventName}
                       </option>
@@ -1168,7 +1274,7 @@ export default function SandboxBuilderPage({
                           disabled={!editorInstanceKey || mode === 'play'}
                           className="h-10 min-w-[120px] max-w-[210px] appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] pl-4 pr-7 text-[17px] font-black text-slate-900 outline-none disabled:opacity-40"
                         >
-                          {eventOptions.map((eventName) => (
+                          {filteredEventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
                               {eventName}
                             </option>
@@ -1222,7 +1328,7 @@ export default function SandboxBuilderPage({
                           disabled={!editorInstanceKey || mode === 'play'}
                           className="h-10 min-w-0 appearance-none rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-6 text-[17px] font-black text-slate-900 outline-none disabled:opacity-40"
                         >
-                          {eventOptions.map((eventName) => (
+                          {filteredEventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
                               {eventName === 'object is tapped' ? 'is tapped' : eventName === 'key is pressed' ? 'is pressed' : eventName}
                             </option>
@@ -1237,7 +1343,7 @@ export default function SandboxBuilderPage({
                           disabled={!editorInstanceKey || mode === 'play'}
                           className="h-9 rounded-full border-2 border-[#b72d63] bg-white pl-4 pr-5 text-[17px] font-extrabold text-slate-900 shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
                         >
-                          {eventOptions.map((eventName) => (
+                          {filteredEventOptions.map((eventName) => (
                             <option key={eventName} value={eventName} className="bg-white text-slate-800">
                               {eventName}
                             </option>

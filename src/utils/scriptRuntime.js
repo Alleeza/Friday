@@ -161,10 +161,12 @@ export function createScriptRuntime({ instances, programsByKey }) {
     if (!asset) return;
     switch (instruction.type) {
       case 'moveForward': {
+        const directionMultiplier = asset.rotationStyle === 'left-right' ? (asset.facing || 1) : 1;
+        const amount = instruction.amount * directionMultiplier;
         const radians = (asset.rotation * Math.PI) / 180;
-        asset.x += Math.cos(radians) * instruction.amount;
-        asset.y += Math.sin(radians) * instruction.amount;
-        asset.facing = instruction.amount >= 0 ? 1 : -1;
+        asset.x += Math.cos(radians) * amount;
+        asset.y += Math.sin(radians) * amount;
+        asset.facing = amount >= 0 ? 1 : -1;
         clampPosition(asset);
         break;
       }
@@ -173,6 +175,10 @@ export function createScriptRuntime({ instances, programsByKey }) {
         break;
       case 'setRotationStyle':
         asset.rotationStyle = instruction.style;
+        break;
+      case 'flip':
+        asset.rotationStyle = 'left-right';
+        asset.facing = (asset.facing || 1) * -1;
         break;
       case 'changeX':
         asset.x += instruction.amount;
@@ -230,7 +236,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
   const stepTask = (task, asset, deltaMs) => {
     if (task.waitRemainingMs > 0) {
       task.waitRemainingMs = Math.max(0, task.waitRemainingMs - deltaMs);
-      return task.waitRemainingMs > 0 || task.frames.length > 0;
+      if (task.waitRemainingMs > 0) return true;
     }
 
     let remainingBudget = MAX_STEPS_PER_TICK;
@@ -292,7 +298,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
 
   return {
     dispatch(eventType, payload = {}) {
-      if ((eventType === 'sprite clicked' || eventType === 'object is tapped' || eventType === 'bumps' || eventType === 'is touching' || eventType === 'is not touching (pro)') && payload.instanceKey) {
+      if ((eventType === 'sprite clicked' || eventType === 'object is tapped' || eventType === 'bumps' || eventType === 'is touching' || eventType === 'is not touching') && payload.instanceKey) {
         const instructions = state.programsByKey[payload.instanceKey]?.events?.[eventType];
         enqueueInstructions(payload.instanceKey, eventType, instructions);
         return;
@@ -320,7 +326,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
           this.dispatch('is touching', { instanceKey });
         }
         if (!isTouchingAny && wasTouching) {
-          this.dispatch('is not touching (pro)', { instanceKey });
+          this.dispatch('is not touching', { instanceKey });
         }
         state.touchingByKey[instanceKey] = isTouchingAny;
       });

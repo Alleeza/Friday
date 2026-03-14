@@ -1,5 +1,5 @@
-export const CLAUDE_HAIKU_MODEL = 'claude-haiku-4-5-20251001';
-const DEFAULT_OLLAMA_MODEL = 'llama3.2';
+export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_OLLAMA_MODEL = 'gemma3:12b';
 
 export function getDefaultProviderName() {
   const configuredProvider = String(import.meta.env.VITE_AI_PROVIDER ?? 'claude').trim().toLowerCase();
@@ -8,7 +8,7 @@ export function getDefaultProviderName() {
 
 export function getDefaultModelForProvider(providerName, availableModels = []) {
   if (providerName === 'claude') {
-    return CLAUDE_HAIKU_MODEL;
+    return String(import.meta.env.VITE_CLAUDE_MODEL ?? DEFAULT_CLAUDE_MODEL).trim() || DEFAULT_CLAUDE_MODEL;
   }
 
   const configuredDefault = String(import.meta.env.VITE_OLLAMA_MODEL ?? '').trim();

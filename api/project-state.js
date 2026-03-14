@@ -1,4 +1,5 @@
 import { getProjectState, putProjectState } from '../lib/projectApi.js';
+import { formatErrorPayload } from '../lib/temporaryDiagnostics.js';
 import { getBody, getProjectId, sendJson } from '../lib/vercelApi.js';
 
 export default async function handler(req, res) {
@@ -22,8 +23,6 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'GET, PUT');
     sendJson(res, 405, { error: 'Method not allowed.' });
   } catch (error) {
-    sendJson(res, error.statusCode || 500, {
-      error: error.message || 'Unable to handle project state.',
-    });
+    sendJson(res, error.statusCode || 500, formatErrorPayload(error, 'Unable to handle project state.'));
   }
 }

@@ -113,6 +113,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (requestUrl.pathname === '/api/published-project' && req.method === 'GET') {
+    try {
+      const result = await getPublishedProject(requestUrl.searchParams.get('shareId'));
+      sendJson(res, result.statusCode, result.payload);
+    } catch (error) {
+      sendError(res, error, 'Unable to load shared game.');
+    }
+    return;
+  }
+
   if (requestUrl.pathname.startsWith('/api/published-project/') && req.method === 'GET') {
     try {
       const shareId = requestUrl.pathname.split('/').pop();

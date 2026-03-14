@@ -19,7 +19,6 @@ import {
   getDifficultyProfile,
   getUnlockedAssets,
   getAllowedBlockNames,
-  AVAILABLE_EVENTS,
 } from './planRegistry.js';
 import {
   buildPlanningSystemPrompt,
@@ -27,10 +26,12 @@ import {
   buildRefinementUserMessage,
   buildStructureRetryMessage,
   buildFeasibilityRetryMessage,
+  buildSemanticRetryMessage,
 } from './planningPrompt.js';
-import { validateStructure, validateFeasibility } from './planValidator.js';
+import { validateStructure, validateFeasibility, validateSemanticAlignment } from './planValidator.js';
 import { createPlan, createSuccessResult, createErrorResult } from './planModels.js';
 import { getFallbackPlan } from './fallbackPlans.js';
+import { getPlannerCapabilityConstraints } from './plannerCapabilityCatalog.js';
 
 // Max idea text length accepted (chars)
 const MAX_IDEA_LENGTH = 500;
@@ -87,8 +88,10 @@ export class PlanningService {
     const systemPrompt = buildPlanningSystemPrompt({
       unlockedAssets: constraints.unlockedAssets,
       difficultyProfile: constraints.difficultyProfile,
-      allowedBlockNames: constraints.allowedBlockNames,
-      availableEvents: AVAILABLE_EVENTS,
+      plannerAssets: constraints.plannerAssets,
+      plannerBlocks: constraints.plannerBlocks,
+      plannerEvents: constraints.plannerEvents,
+      plannerCheckabilityGuide: constraints.plannerCheckabilityGuide,
     });
 
     // 4. Call AI → parse → validate (with one retry per stage)
@@ -120,8 +123,10 @@ export class PlanningService {
     const systemPrompt = buildRefinementSystemPrompt({
       unlockedAssets: constraints.unlockedAssets,
       difficultyProfile: constraints.difficultyProfile,
-      allowedBlockNames: constraints.allowedBlockNames,
-      availableEvents: AVAILABLE_EVENTS,
+      plannerAssets: constraints.plannerAssets,
+      plannerBlocks: constraints.plannerBlocks,
+      plannerEvents: constraints.plannerEvents,
+      plannerCheckabilityGuide: constraints.plannerCheckabilityGuide,
     });
 
     const userMessage = buildRefinementUserMessage(currentPlan, sanitized);
@@ -147,7 +152,12 @@ export class PlanningService {
     const difficultyProfile = getDifficultyProfile(this._xp);
     const unlockedAssets = getUnlockedAssets(this._xp);
     const allowedBlockNames = getAllowedBlockNames(difficultyProfile);
-    return { difficultyProfile, unlockedAssets, allowedBlockNames };
+    return {
+      difficultyProfile,
+      unlockedAssets,
+      allowedBlockNames,
+      ...getPlannerCapabilityConstraints(difficultyProfile, this._xp),
+    };
   }
 
   /**
@@ -211,6 +221,37 @@ export class PlanningService {
             plan = retryStruct.plan;
           } else {
             // Still failing after retry — use fallback
+            return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+          }
+        } else {
+          return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+        }
+      } else {
+        return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
+      }
+    }
+
+    // --- Semantic validation (retry if needed) ---
+    const semanticResult = validateSemanticAlignment(plan, constraints);
+    if (!semanticResult.valid) {
+      const retryText = await this._retry({
+        systemPrompt,
+        retryMessage: buildSemanticRetryMessage(ideaText, semanticResult.issues),
+        signal,
+      });
+      if (retryText) {
+        const retryParsed = this._parseJSON(retryText);
+        const retryStruct = validateStructure(retryParsed);
+        if (retryStruct.valid && retryStruct.plan) {
+          const retryFeas = validateFeasibility(retryStruct.plan, constraints);
+          const retrySemantic = retryFeas.valid
+            ? validateSemanticAlignment(retryStruct.plan, constraints)
+            : { valid: false };
+
+          if (retryFeas.valid && retrySemantic.valid) {
+            plan = retryStruct.plan;
+            parsed = retryParsed;
+          } else {
             return createSuccessResult(getFallbackPlan(ideaText, this._xp), { usedFallback: true });
           }
         } else {

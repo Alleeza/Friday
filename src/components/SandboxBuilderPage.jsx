@@ -6,6 +6,14 @@ import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
+import { BLOCK_PALETTE, DEFAULT_EVENT, EVENT_OPTIONS } from '../data/builderCapabilities.js';
+import { sandboxAssets } from '../data/sandboxAssets';
+import { createDefaultAIService } from '../ai/createDefaultAIService.js';
+import {
+  getDefaultModelForProvider,
+  getDefaultProviderName,
+} from '../ai/providerCatalog.js';
+import { useAIChat } from '../hooks/useAIChat';
 import { StageProgressSection } from './ProjectRoadmapPage';
 
 const eventOptions = [
@@ -15,7 +23,7 @@ const eventOptions = [
   'bumps',
 ];
 const collisionEventOptions = new Set(['bumps']);
-const hiddenPaletteCategories = new Set(['Collisions', 'Conditionals']);
+const hiddenPaletteCategories = new Set(['collisions', 'conditionals', 'conditions']);
 const keyPressOptions = [
   { value: 'arrowup', label: 'Top Arrow' },
   { value: 'arrowdown', label: 'Down Arrow' },
@@ -88,8 +96,13 @@ const palette = {
   ],
 };
 
-function createSeedScript(eventName = defaultEvent) {
+function createSeedScript(eventName = DEFAULT_EVENT) {
   return [{ id: 'event-start', type: 'block', parts: ['When', eventName], tone: 'events' }];
+}
+
+function cloneValue(value, fallback) {
+  if (value == null) return fallback;
+  return JSON.parse(JSON.stringify(value));
 }
 
 function readTokenValue(token) {
@@ -140,12 +153,16 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
   const quickEditorRef = useRef(null);
-  const [sceneInstances, setSceneInstances] = useState([]);
+  const initialSceneInstances = useMemo(
+    () => cloneValue(initialSetupData?.initialScene, []),
+    [initialSetupData]
+  );
+  const [sceneInstances, setSceneInstances] = useState(() => initialSceneInstances);
   const [focusedInstanceKey, setFocusedInstanceKey] = useState(null);
   const [editorInstanceKey, setEditorInstanceKey] = useState(null);
   const [editorStage, setEditorStage] = useState('event');
-  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState({});
-  const [selectedBlock, setSelectedBlock] = useState(`When ${defaultEvent}`);
+  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => cloneValue(initialSetupData?.initialScripts, {}));
+  const [selectedBlock, setSelectedBlock] = useState(`When ${DEFAULT_EVENT}`);
   const [selectedCategory, setSelectedCategory] = useState('Movement');
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
   const [dragOverTopBlockId, setDragOverTopBlockId] = useState(null);
@@ -157,10 +174,36 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
-    { role: 'ai', text: 'Press Play to compile every script and make the sandbox follow the code.' },
-  ]);
+  const selectedProvider = getDefaultProviderName();
+  const selectedModel = getDefaultModelForProvider(selectedProvider);
+
+  const aiService = useMemo(
+    () => createDefaultAIService({ providerName: selectedProvider, model: selectedModel }),
+    [selectedModel, selectedProvider]
+  );
+
+  const { messages, sendMessage, addNotification, isStreaming, abortResponse } = useAIChat({
+    aiService,
+    contextData: {
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: sandboxAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    },
+  });
+
+  const dispatchRuntimeEvent = (eventType, payload = {}) => {
+    runtimeRef.current?.dispatch(eventType, payload);
+    if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+  };
+
+  useEffect(() => {
+    if (messages.length) return;
+    addNotification('Build one object at a time. Each placed object gets its own script.');
+    addNotification('Press Play to compile every script and make the sandbox follow the code.');
+  }, [addNotification, messages.length]);
 
   useEffect(() => {
     const instanceKeys = new Set(sceneInstances.map((instance) => instance.key));
@@ -196,6 +239,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mode]);
 
+  useEffect(() => () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  }, []);
   useEffect(() => {
     if (mode === 'play') return undefined;
     const clearDragUi = () => {
@@ -213,14 +259,13 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
       window.removeEventListener('drop', clearDragUi);
     };
   }, [mode]);
-
   const availableCategoryNames = useMemo(
-    () => Object.keys(palette).filter((category) => !hiddenPaletteCategories.has(category)),
+    () => Object.keys(BLOCK_PALETTE).filter((category) => !hiddenPaletteCategories.has(String(category).toLowerCase())),
     [],
   );
   const paletteBlocks = useMemo(() => {
-    if (availableCategoryNames.includes(selectedCategory)) return palette[selectedCategory] || [];
-    return palette[availableCategoryNames[0]] || [];
+    if (availableCategoryNames.includes(selectedCategory)) return BLOCK_PALETTE[selectedCategory] || [];
+    return BLOCK_PALETTE[availableCategoryNames[0]] || [];
   }, [selectedCategory, availableCategoryNames]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
@@ -325,7 +370,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: hydrateParts(template.parts), tone: template.tone, children: [] }
     : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: hydrateParts(template.parts), tone: template.tone };
 
-  const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
+  const pushAiMessage = addNotification;
 
   const addTopLevel = (template) => {
     if (!editorInstanceKey || mode === 'play') return;
@@ -683,12 +728,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     rafRef.current = requestAnimationFrame(loop);
   };
 
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
-  };
-
   const quickEditorPosition = selectedInstance
     ? (() => {
         const x = selectedInstance.x || 0;
@@ -894,13 +933,21 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
   return (
     <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      {projectPlan ? <StageProgressSection setupData={initialSetupData} plan={projectPlan} /> : null}
+      {projectPlan ? (
+        <StageProgressSection
+          setupData={initialSetupData}
+          plan={projectPlan}
+          workspaceState={{ sceneInstances, scriptsByInstanceKey, runtimeSnapshot }}
+          provider={aiService?.provider ?? null}
+        />
+      ) : null}
       <section>
         <div className="relative h-[640px] w-full">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
+            initialPlacedAssets={initialSceneInstances}
             onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
               setSceneInstances(instances);
               if (nextKey) setFocusedInstanceKey(nextKey);
@@ -1202,7 +1249,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                       >
                         {availableCategoryNames.map((category) => (
                           <option key={category} value={category}>
-                            {category}
+                            {category === 'Control' ? 'Control Flow' : category}
                           </option>
                         ))}
                       </select>
@@ -1352,43 +1399,50 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     </div>
                   </div>
                 </div>
+                {draggingScriptBlock ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-6">
+                    <div
+                      className={`pointer-events-auto grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                        trashActive
+                          ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                          : 'border-rose-200 bg-white/95 text-rose-500'
+                      }`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!trashActive) setTrashActive(true);
+                      }}
+                      onDragLeave={() => setTrashActive(false)}
+                      onDrop={handleTrashDrop}
+                      aria-label="Delete dragged block"
+                    >
+                      <Trash2 size={34} strokeWidth={2.6} />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
         </div>
       </section>
       <section>
-        <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+        <div className="w-full">
+          <AIChatPanel
+            messages={messages}
+            onSend={sendMessage}
+            isStreaming={isStreaming}
+            onAbort={abortResponse}
+          />
+        </div>
       </section>
-      {(draggingScriptBlock || draggingPaletteBlock) && mode !== 'play' ? (
+      {draggingPaletteBlock && mode !== 'play' ? (
         <div className="pointer-events-none fixed inset-0 z-[80]">
           <div
             className={`absolute inset-0 transition ${
               draggingPaletteBlock
                 ? 'bg-slate-950/70'
-                : draggingScriptBlock && trashActive && !isOverValidScriptDropTarget
-                  ? 'bg-slate-950/70'
-                  : 'bg-transparent'
+                : 'bg-transparent'
             }`}
           />
-          {draggingScriptBlock ? <div className="pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
-            <div
-              className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
-                trashActive
-                  ? 'scale-110 border-rose-700 bg-rose-600 text-white opacity-100'
-                  : 'border-rose-200 bg-white/95 text-rose-500 opacity-100'
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!trashActive) setTrashActive(true);
-              }}
-              onDragLeave={() => setTrashActive(false)}
-              onDrop={handleTrashDrop}
-              aria-label="Delete dragged block"
-            >
-              <Trash2 size={34} strokeWidth={2.6} />
-            </div>
-          </div> : null}
         </div>
       ) : null}
     </main>

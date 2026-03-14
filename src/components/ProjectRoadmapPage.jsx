@@ -1,7 +1,41 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useStepDetection } from '../hooks/useStepDetection.js';
+import { buildContext } from '../ai/context/contextBuilder.js';
+import { sandboxAssets } from '../data/sandboxAssets.js';
+import { evaluateStepChecks } from '../utils/stepChecker.js';
+import { ArrowRight, Milestone } from 'lucide-react';
 
 const STAGE_GRAPHICS = ['🐰', '🕹️', '🥕', '🪨', '🛠️'];
+
+function buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, manualStepKeys) {
+  if (!currentStage || !workspaceState) return [];
+
+  return currentStage.steps.map((stepText, stepIndex) => {
+    const stepKey = `${currentStage.id}:${stepIndex}`;
+    const checks = currentStage.stepChecks?.[stepIndex] ?? [];
+    const evaluation = checks.length > 0
+      ? evaluateStepChecks(checks, workspaceState)
+      : { passed: false, pendingAiChecks: [] };
+    const programmaticChecks = checks.filter((check) => check?.type !== 'aiCheck');
+    const programmaticEvaluation = programmaticChecks.length > 0
+      ? evaluateStepChecks(programmaticChecks, workspaceState)
+      : { passed: true, pendingAiChecks: [] };
+
+    return {
+      stepIndex,
+      stepKey,
+      stepText,
+      checks,
+      isCompleted: Boolean(completedStepKeys[stepKey]),
+      isManualOverride: Boolean(manualStepKeys[stepKey]),
+      evaluation: {
+        passed: evaluation.passed,
+        pendingAiChecks: evaluation.pendingAiChecks,
+        programmaticPassed: programmaticEvaluation.passed,
+      },
+    };
+  });
+}
 
 function buildStageProgress(plan, completedStepKeys) {
   const stages = plan.stages.map((stage, index) => ({
@@ -15,20 +49,29 @@ function buildStageProgress(plan, completedStepKeys) {
     stepHelp: stage.steps.map(() => stage.why),
   }));
 
-  const stageRequiredCompletedCounts = stages.map((stage) =>
-    stage.steps.filter((_, stepIndex) => completedStepKeys[`${stage.id}:${stepIndex}`]).length,
+  const stageStepStatuses = stages.map((stage) =>
+    stage.steps.map((_, stepIndex) => Boolean(completedStepKeys[`${stage.id}:${stepIndex}`])),
   );
+  const stageRequiredCompletedCounts = stageStepStatuses.map((statuses) => statuses.filter(Boolean).length);
+  const stageLeadingCompletedCounts = stageStepStatuses.map((statuses) => statuses.findIndex((value) => !value));
+  const normalizedLeadingCompletedCounts = stageLeadingCompletedCounts.map((count, stageIndex) => (
+    count === -1 ? stages[stageIndex].steps.length : count
+  ));
 
-  const done = stages.map((stage, stageIndex) => stageRequiredCompletedCounts[stageIndex] >= stage.steps.length);
+  const done = stageStepStatuses.map((statuses) => statuses.every(Boolean));
   const currentIndex = Math.max(0, done.findIndex((value) => !value));
   const safeCurrentIndex = done.every(Boolean) ? Math.max(0, stages.length - 1) : currentIndex;
   const currentStage = stages[safeCurrentIndex];
   const currentStageCompletedCount = stageRequiredCompletedCounts[safeCurrentIndex] ?? 0;
-  const currentStageStepIndex = Math.min(currentStageCompletedCount, Math.max((currentStage?.steps.length || 1) - 1, 0));
+  const currentStageLeadingCompletedCount = normalizedLeadingCompletedCounts[safeCurrentIndex] ?? 0;
+  const currentStageStepIndex = Math.min(currentStageLeadingCompletedCount, Math.max((currentStage?.steps.length || 1) - 1, 0));
 
   const earnedRequiredXp = stages.reduce(
     (sum, stage, stageIndex) =>
-      sum + stage.stepXp.slice(0, stageRequiredCompletedCounts[stageIndex] || 0).reduce((stageSum, xp) => stageSum + xp, 0),
+      sum + stage.stepXp.reduce(
+        (stageSum, xp, stepIndex) => stageSum + (stageStepStatuses[stageIndex][stepIndex] ? xp : 0),
+        0,
+      ),
     0,
   );
   const totalRequiredXp = stages.reduce((sum, stage) => sum + stage.stepXp.reduce((stageSum, xp) => stageSum + xp, 0), 0);
@@ -99,12 +142,14 @@ function StepRow({ active, done, label, xp, onToggle, tone = 'step' }) {
   );
 }
 
-export function StageProgressSection({ setupData, plan }) {
+export function StageProgressSection({ setupData, plan, workspaceState = null, provider = null }) {
   const [completedStepKeys, setCompletedStepKeys] = useState({});
   const [completedBonusKeys, setCompletedBonusKeys] = useState({});
-  const [showSteps, setShowSteps] = useState(true);
+  const [showSteps, setShowSteps] = useState(false);
   const [showBonusQuests, setShowBonusQuests] = useState(false);
   const [selectedItem, setSelectedItem] = useState({ type: 'step', index: 0 });
+  // Track which steps were auto-completed (vs manually toggled) so the checker can revert them
+  const manualStepKeysRef = useRef({});
 
   const {
     stages,
@@ -120,7 +165,9 @@ export function StageProgressSection({ setupData, plan }) {
 
   const safeStepIndex = Math.min(currentStageStepIndex, Math.max((currentStage?.steps.length || 1) - 1, 0));
   const activeLinePct = stages.length ? ((Math.max(currentIndex, 0) + 0.5) / stages.length) * 100 : 0;
-  const visibleSteps = showSteps ? (currentStage?.steps || []) : (currentStage?.steps || []).slice(0, 1);
+  const visibleSteps = showSteps
+    ? (currentStage?.steps || []).map((step, index) => ({ step, index }))
+    : (currentStage?.steps?.length ? [{ step: currentStage.steps[safeStepIndex], index: safeStepIndex }] : []);
   const selectedStepIndex = selectedItem.type === 'step'
     ? Math.min(selectedItem.index, Math.max((currentStage?.steps.length || 1) - 1, 0))
     : safeStepIndex;
@@ -139,25 +186,85 @@ export function StageProgressSection({ setupData, plan }) {
     setSelectedItem({ type: 'step', index: safeStepIndex });
   }, [currentStage?.id, safeStepIndex]);
 
+  // Callbacks for the detection hook — stable refs via useCallback
+  const handleStepAutoCompleted = useCallback((stepKey) => {
+    setCompletedStepKeys((prev) => ({ ...prev, [stepKey]: true }));
+  }, []);
+
+  const handleStepAutoReverted = useCallback((stepKey) => {
+    setCompletedStepKeys((prev) => {
+      if (!prev[stepKey]) return prev;
+      const next = { ...prev };
+      delete next[stepKey];
+      return next;
+    });
+  }, []);
+
+  useStepDetection({
+    provider,
+    currentStage,
+    workspaceState,
+    completedStepKeys,
+    manualStepKeys: manualStepKeysRef.current,
+    onStepAutoCompleted: handleStepAutoCompleted,
+    onStepAutoReverted: handleStepAutoReverted,
+  });
+
+  const stepDebugInfo = useMemo(
+    () => buildStepDebugInfo(currentStage, workspaceState, completedStepKeys, manualStepKeysRef.current),
+    [currentStage, workspaceState, completedStepKeys],
+  );
+
+  const workspaceDebugText = useMemo(() => {
+    if (!workspaceState) return 'No workspace state available yet.';
+    return buildContext({
+      sceneInstances: workspaceState.sceneInstances ?? [],
+      scriptsByInstanceKey: workspaceState.scriptsByInstanceKey ?? {},
+      runtimeSnapshot: workspaceState.runtimeSnapshot ?? null,
+      availableAssets: sandboxAssets,
+      mode: workspaceState.runtimeSnapshot ? 'play' : 'edit',
+    });
+  }, [workspaceState]);
+
+  useEffect(() => {
+    if (!currentStage || !workspaceState) return;
+
+    console.groupCollapsed(`[Step Debug] ${currentStage.label}`);
+    console.debug('Canvas and workspace snapshot');
+    console.debug(workspaceDebugText);
+    console.debug('Stage metadata', {
+      stageId: currentStage.id,
+      stageLabel: currentStage.label,
+      objective: currentStage.objective,
+      success: currentStage.success,
+      steps: currentStage.steps,
+      stepChecks: currentStage.stepChecks,
+    });
+    console.debug('Step evaluation', stepDebugInfo);
+    console.groupEnd();
+  }, [currentStage, workspaceState, workspaceDebugText, stepDebugInfo]);
+
   return (
-    <section className="quest-card border border-[#e3e6eb] bg-[#f8fafc] p-6 shadow-[0_6px_0_rgba(148,163,184,0.12)]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">Project Roadmap</p>
-          <h2 className="font-display text-5xl font-bold leading-none text-slate-800">Stage Progress</h2>
+    <section className="quest-card mx-2 border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] sm:mx-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3 pl-1">
+          <h2 className="font-display text-3xl font-bold leading-none text-slate-800">Stage Progress</h2>
+          <span className="grid h-10 w-10 place-items-center rounded-2xl border border-[#cfe6f8] bg-[#eaf6ff] text-[#1b97dd]">
+            <Milestone size={20} strokeWidth={2.4} />
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-5 py-1.5 text-sm font-extrabold text-[#1b97dd]">
+          <div className="rounded-full border border-[#8fd0f8] bg-[#d9f0ff] px-4 py-1 text-sm font-extrabold text-[#1b97dd]">
             Stage {Math.min(currentIndex + 1, stages.length)} of {stages.length}
           </div>
-          <div className="rounded-full border border-[#d3d7dd] bg-white px-5 py-1.5 text-sm font-extrabold text-slate-600">{progressPct}% complete</div>
-          <div className="rounded-full border border-[#bde59f] bg-[#eefadb] px-5 py-1.5 text-sm font-extrabold text-[#3f7f13]">
+          <div className="rounded-full border border-[#d3d7dd] bg-white px-4 py-1 text-sm font-extrabold text-slate-600">{progressPct}% complete</div>
+          <div className="rounded-full border border-[#bde59f] bg-[#eefadb] px-4 py-1 text-sm font-extrabold text-[#3f7f13]">
             XP {earnedRequiredXp}/{totalRequiredXp}
           </div>
         </div>
       </div>
 
-      <div className="relative mb-6 px-2">
+      <div className="relative mb-4 px-2">
         <div className="absolute left-2 right-2 top-5 h-[4px] rounded-full bg-[#d4dce6]" />
         <div className="absolute left-2 top-5 h-[4px] rounded-full bg-[#25a8ef] transition-all" style={{ width: `${activeLinePct}%` }} />
 
@@ -191,7 +298,7 @@ export function StageProgressSection({ setupData, plan }) {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <article className="rounded-3xl border border-[#d4d9df] bg-white p-4 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
+        <article className="rounded-3xl border border-[#d4d9df] bg-white p-3.5 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
               {currentStage?.label?.toUpperCase()}
@@ -199,25 +306,35 @@ export function StageProgressSection({ setupData, plan }) {
             <button
               type="button"
               onClick={() => setShowSteps((prev) => !prev)}
-              className="rounded-full border border-[#d3d7dd] bg-white px-2.5 py-1 text-xs font-extrabold text-slate-600"
+              className="rounded-full border border-[#d3d7dd] bg-white px-3 py-1 text-xs font-extrabold text-slate-600"
             >
               {showSteps ? '▾' : '▸'}
             </button>
           </div>
           <div className="mt-3 space-y-2">
-            {visibleSteps.map((step, idx) => {
-              const stepKey = `${currentStage.id}:${idx}`;
-              const isDone = idx < currentStageCompletedCount;
+            {visibleSteps.map(({ step, index }) => {
+              const stepKey = `${currentStage.id}:${index}`;
+              const isDone = Boolean(completedStepKeys[stepKey]);
               return (
                 <StepRow
                   key={stepKey}
-                  active={selectedItem.type === 'step' && idx === selectedStepIndex}
+                  active={selectedItem.type === 'step' && index === selectedStepIndex}
                   done={isDone}
-                  label={`Step ${idx + 1}: ${step}`}
-                  xp={currentStage.stepXp[idx] || 0}
+                  label={`Step ${index + 1}: ${step}`}
+                  xp={currentStage.stepXp[index] || 0}
                   onToggle={() => {
-                    setSelectedItem({ type: 'step', index: idx });
-                    setCompletedStepKeys((prev) => ({ ...prev, [stepKey]: !prev[stepKey] }));
+                    setSelectedItem({ type: 'step', index });
+                    setCompletedStepKeys((prev) => {
+                      const next = { ...prev, [stepKey]: !prev[stepKey] };
+                      // Track manual toggles so the auto-checker never reverts them
+                      if (next[stepKey]) {
+                        manualStepKeysRef.current = { ...manualStepKeysRef.current, [stepKey]: true };
+                      } else {
+                        const { [stepKey]: _, ...rest } = manualStepKeysRef.current;
+                        manualStepKeysRef.current = rest;
+                      }
+                      return next;
+                    });
                   }}
                 />
               );
@@ -261,9 +378,9 @@ export function StageProgressSection({ setupData, plan }) {
           ) : null}
         </article>
 
-        <article className="rounded-3xl border border-[#d4d9df] bg-white p-4 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#ecf8ff] text-3xl">
+        <article className="rounded-3xl border border-[#d4d9df] bg-white p-3.5 shadow-[0_3px_0_rgba(148,163,184,0.16)]">
+          <div className="mb-2 flex items-center gap-3">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#ecf8ff] text-2xl">
               {currentStage?.graphic || '🎯'}
             </div>
             <div>
@@ -276,7 +393,7 @@ export function StageProgressSection({ setupData, plan }) {
             </div>
           </div>
 
-          <div className="space-y-3 text-sm">
+          <div className="space-y-2 text-sm">
             <p className="font-bold text-slate-800">{selectedTitle}</p>
             <p className="font-semibold text-slate-600">{selectedDescription}</p>
             {selectedItem.type === 'bonus' ? (
@@ -285,6 +402,7 @@ export function StageProgressSection({ setupData, plan }) {
           </div>
         </article>
       </div>
+
     </section>
   );
 }

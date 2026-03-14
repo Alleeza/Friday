@@ -1,4 +1,5 @@
 const PROJECT_STATE_ENDPOINT = '/api/project-state';
+const PUBLISHED_PROJECT_ENDPOINT = '/api/published-project';
 const LOCAL_STORAGE_KEY = 'friday-codequest-project-state';
 
 function canUseLocalStorage() {
@@ -53,4 +54,30 @@ export async function saveProjectState(project) {
   } catch {
     return writeLocalProjectState(project);
   }
+}
+
+export async function publishSavedProject() {
+  const response = await fetch(PUBLISHED_PROJECT_ENDPOINT, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || `Publish failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return payload.publication || null;
+}
+
+export async function loadPublishedProject(shareId) {
+  const response = await fetch(`${PUBLISHED_PROJECT_ENDPOINT}/${encodeURIComponent(shareId)}`);
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || `Load failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return payload.publication || null;
 }

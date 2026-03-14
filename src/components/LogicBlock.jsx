@@ -95,7 +95,7 @@ export default function LogicBlock({
     events: 'border-[#9f2556] bg-[#c12f69]',
     control: 'border-[#d39704] bg-[#f2b705]',
     sound: 'border-[#4d9518] bg-[#67b51f]',
-    variables: 'border-[#e07f00] bg-[#f59d1a]',
+    variables: 'border-[#7c3aed] bg-[#8b5cf6]',
   };
 
   const leftPill = {
@@ -108,7 +108,7 @@ export default function LogicBlock({
     events: 'bg-[#ff86b4]',
     control: 'bg-[#ffe28a]',
     sound: 'bg-[#aeea74]',
-    variables: 'bg-[#ffd39a]',
+    variables: 'bg-[#ddd6fe]',
   }[tone];
 
   return (

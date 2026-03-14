@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Play, RotateCcw, Save, Shapes, Square, Trash2, Undo2, X } from 'lucide-react';
 import { backdropAssets, sandboxAssets } from '../data/sandboxAssets';
+import { soundFileByName } from '../data/soundLibrary';
 
 function getVisualAsset(asset, runtimeSnapshot) {
   if (!runtimeSnapshot?.assetsByKey?.[asset.key]) return asset;
@@ -64,6 +65,10 @@ function clampBackdropState(backdropState, canvasRect) {
   };
 }
 
+function resolveSoundSource(soundName) {
+  return soundFileByName[soundName] || soundFileByName[String(soundName || '').replace(/\s+/g, '')] || null;
+}
+
 export default function GamePreviewCanvas({
   mode = 'edit',
   runtimeSnapshot,
@@ -100,6 +105,10 @@ export default function GamePreviewCanvas({
   const resizedDuringDragRef = useRef(false);
   const wheelResizeSnapshotRef = useRef(null);
   const wheelResizeTimeoutRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const audioBuffersRef = useRef({});
+  const audioBufferPromisesRef = useRef({});
+  const lastPlayedSoundRef = useRef('');
   const backdropMoveStartRef = useRef(null);
   const backdropMovedDuringDragRef = useRef(false);
   const backdropResizeStartRef = useRef(null);
@@ -168,6 +177,52 @@ export default function GamePreviewCanvas({
     ? backdropAssets.find((asset) => asset.id === backdropState.id) || null
     : null;
 
+  const ensureAudioReady = () => {
+    if (typeof window === 'undefined') return null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
+    if (audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume().catch(() => {});
+    }
+    return audioContextRef.current;
+  };
+
+  const loadSoundBuffer = async (soundName) => {
+    const sourceUrl = resolveSoundSource(soundName);
+    const audioContext = ensureAudioReady();
+    if (!sourceUrl || !audioContext) return null;
+    if (audioBuffersRef.current[soundName]) return audioBuffersRef.current[soundName];
+    if (!audioBufferPromisesRef.current[soundName]) {
+      audioBufferPromisesRef.current[soundName] = fetch(sourceUrl)
+        .then((response) => response.arrayBuffer())
+        .then((buffer) => audioContext.decodeAudioData(buffer.slice(0)))
+        .then((decoded) => {
+          audioBuffersRef.current[soundName] = decoded;
+          return decoded;
+        })
+        .catch(() => null)
+        .finally(() => {
+          delete audioBufferPromisesRef.current[soundName];
+        });
+    }
+    return audioBufferPromisesRef.current[soundName];
+  };
+
+  const playSoundEffect = async (soundName) => {
+    const audioContext = ensureAudioReady();
+    if (!audioContext) return;
+    const buffer = await loadSoundBuffer(soundName);
+    if (!buffer) return;
+    const source = audioContext.createBufferSource();
+    const gain = audioContext.createGain();
+    gain.gain.value = 0.6;
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(audioContext.destination);
+    source.start();
+  };
+
   const updateSelection = (nextKey) => {
     setSelectedPlacedAssetKey(nextKey);
     onSelectedInstanceChange?.(nextKey);
@@ -188,7 +243,26 @@ export default function GamePreviewCanvas({
     if (wheelResizeTimeoutRef.current) {
       clearTimeout(wheelResizeTimeoutRef.current);
     }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+    }
   }, []);
+
+  useEffect(() => {
+    const soundKeys = Object.entries(runtimeSnapshot?.assetsByKey || {})
+      .filter(([, asset]) => Boolean(asset.lastSound))
+      .map(([key, asset]) => `${key}:${asset.lastSound}:${asset.soundTick || 0}`)
+      .join('|');
+
+    if (!soundKeys || soundKeys === lastPlayedSoundRef.current) return;
+    lastPlayedSoundRef.current = soundKeys;
+
+    Object.values(runtimeSnapshot?.assetsByKey || {}).forEach((asset) => {
+      if (asset.lastSound) {
+        playSoundEffect(asset.lastSound);
+      }
+    });
+  }, [runtimeSnapshot]);
 
   useEffect(() => {
     if (!isEditMode || !trayOpen) return undefined;
@@ -682,7 +756,10 @@ export default function GamePreviewCanvas({
             {resolvedPublishLabel}
           </button>
         ) : null}
-        {isPlayMode ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={onPlay} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
+        {isPlayMode ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={() => {
+          ensureAudioReady();
+          onPlay?.();
+        }} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
       </div>
 
       {isPlayMode ? <div className="absolute left-4 top-4 z-10 rounded-2xl border border-[#d3dae3] bg-white/90 px-4 py-2 text-sm font-extrabold text-slate-700 shadow">Timer: {Math.ceil(runtimeSnapshot?.variables?.time ?? 0)}s | Score: {Math.round(runtimeSnapshot?.variables?.score ?? 0)}</div> : null}
@@ -706,6 +783,14 @@ export default function GamePreviewCanvas({
             onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)}
             onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}
           >
+            {asset.speechText ? (
+              <div className="pointer-events-none absolute -top-10 left-1/2 z-30 w-max max-w-[220px] -translate-x-1/2">
+                <div className="relative rounded-[22px] border-2 border-[#d8dfeb] bg-white px-5 py-3 text-center text-[17px] font-black leading-tight text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.14)]">
+                  {asset.speechText}
+                  <div className="absolute left-1/2 top-full h-4 w-4 -translate-x-1/2 -translate-y-[55%] rotate-45 border-b-2 border-r-2 border-[#d8dfeb] bg-white" />
+                </div>
+              </div>
+            ) : null}
             {isSelected && showSelectionChrome ? (
               <>
                 <div className="absolute inset-0 border-[3px] border-[#19a2ff]" />

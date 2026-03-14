@@ -25,6 +25,7 @@ export default function GamePreviewCanvas({
   onStop,
   onSpriteClick,
   currentXp = 100,
+  suppressSelectionChrome = false,
 }) {
   const canvasRef = useRef(null);
   const moveStartSnapshotRef = useRef(null);
@@ -191,6 +192,7 @@ export default function GamePreviewCanvas({
   };
 
   const visibleAssets = placedAssets.map((asset) => getVisualAsset(asset, runtimeSnapshot));
+  const showSelectionChrome = mode === 'edit' && !suppressSelectionChrome;
 
   return (
     <section ref={canvasRef} className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]" onClick={(e) => {
@@ -215,13 +217,13 @@ export default function GamePreviewCanvas({
             updateSelection(asset.key);
             if (mode === 'play') onSpriteClick?.(asset.key);
           }} onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)} onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}>
-            {isSelected && mode === 'edit' ? <><div className="absolute inset-0 border-[3px] border-[#19a2ff]" /><div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /></> : null}
+            {isSelected && showSelectionChrome ? <><div className="absolute inset-0 border-[3px] border-[#19a2ff]" /><div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /><div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset)} /></> : null}
             <div className="grid h-full w-full place-items-center bg-transparent leading-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
             {asset.costume && asset.costume !== 'default' ? <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-slate-600 shadow">{asset.costume}</div> : null}
           </div>
         );
       })}
-      {selectedPlacedAsset ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
+      {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
       <button onClick={() => mode === 'edit' && setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button>
       {trayOpen && mode === 'edit' ? <div className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]"><p className="mb-3 text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p><div className="grid grid-cols-3 gap-3 md:grid-cols-6">{trayAssets.map((asset) => <div key={asset.id} draggable={(asset.unlockXp || 0) <= currentXp} onDragStart={(e) => onAssetDragStart(e, asset)} className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`} title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}><div className="text-3xl">{asset.emoji}</div><div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div></div>)}</div></div> : null}
     </section>

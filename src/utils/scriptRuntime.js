@@ -6,17 +6,9 @@ const STAGE_BOUNDS = {
   maxY: 560,
 };
 
-function evaluateCondition(condition, variables) {
-  switch ((condition || '').toLowerCase()) {
-    case 'score < 10':
-      return (variables.score || 0) < 10;
-    case 'is alive':
-      return Boolean(variables.isAlive);
-    case 'time > 0':
-      return (variables.time || 0) > 0;
-    default:
-      return false;
-  }
+function clampPosition(asset) {
+  asset.x = Math.max(STAGE_BOUNDS.minX, Math.min(STAGE_BOUNDS.maxX, asset.x));
+  asset.y = Math.max(STAGE_BOUNDS.minY, Math.min(STAGE_BOUNDS.maxY, asset.y));
 }
 
 function createAssetState(instance) {
@@ -29,17 +21,12 @@ function createAssetState(instance) {
     y: instance.y,
     scale: instance.scale || 1,
     rotation: instance.rotation || 0,
-    rotationStyle: 'dont rotate',
+    rotationStyle: 'all around',
     costume: 'default',
     costumeIndex: 0,
     lastSound: null,
     facing: 1,
   };
-}
-
-function clampPosition(asset) {
-  asset.x = Math.max(STAGE_BOUNDS.minX, Math.min(STAGE_BOUNDS.maxX, asset.x));
-  asset.y = Math.max(STAGE_BOUNDS.minY, Math.min(STAGE_BOUNDS.maxY, asset.y));
 }
 
 function cloneSnapshot(state) {
@@ -52,6 +39,102 @@ function cloneSnapshot(state) {
   };
 }
 
+function readComparableValue(raw, variables) {
+  const token = String(raw ?? '').trim();
+  const lowered = token.toLowerCase();
+  if (lowered === 'score') return variables.score || 0;
+  if (lowered === 'time') return variables.time || 0;
+  if (lowered === 'alive' || lowered === 'is alive') return Boolean(variables.isAlive);
+  if (lowered === 'true') return true
+  if (lowered === 'false') return false
+  const numeric = Number.parseFloat(token);
+  return Number.isFinite(numeric) ? numeric : token;
+}
+
+function resolveAssetKey(ref, asset, state) {
+  if (!ref) return null;
+  if (ref === 'Self') return asset?.key || null;
+  if (state.assetsByKey[ref]) return ref;
+  const lowered = String(ref).toLowerCase();
+  const matched = Object.values(state.assetsByKey).find((candidate) => {
+    const label = `${candidate.emoji} ${candidate.label}`.toLowerCase();
+    return label === lowered || candidate.label.toLowerCase() === lowered;
+  });
+  return matched?.key || null;
+}
+
+function areAssetsTouching(leftAsset, rightAsset) {
+  if (!leftAsset || !rightAsset || leftAsset.key === rightAsset.key) return false;
+  const leftRadius = 34 * (leftAsset.scale || 1);
+  const rightRadius = 34 * (rightAsset.scale || 1);
+  const dx = leftAsset.x - rightAsset.x;
+  const dy = leftAsset.y - rightAsset.y;
+  return Math.hypot(dx, dy) <= leftRadius + rightRadius;
+}
+
+function evaluatePredicate(predicate, asset, state) {
+  if (!predicate) return false;
+  switch (predicate.kind) {
+    case 'collision': {
+      const leftKey = resolveAssetKey(predicate.left, asset, state);
+      const rightKey = resolveAssetKey(predicate.right, asset, state);
+      const leftAsset = leftKey ? state.assetsByKey[leftKey] : null;
+      const rightAsset = rightKey ? state.assetsByKey[rightKey] : null;
+      const touching = areAssetsTouching(leftAsset, rightAsset);
+      if (predicate.operator === 'bumps' || predicate.operator === 'touching') return touching;
+      if (predicate.operator === 'notTouching') return !touching;
+      return false;
+    }
+    case 'comparison': {
+      const left = readComparableValue(predicate.left, state.variables);
+      const right = readComparableValue(predicate.right, state.variables);
+      switch (predicate.operator) {
+        case 'eq': return left === right;
+        case 'neq': return left !== right;
+        case 'lt': return Number(left) < Number(right);
+        case 'gt': return Number(left) > Number(right);
+        case 'lte': return Number(left) <= Number(right);
+        case 'gte': return Number(left) >= Number(right);
+        case 'matches': return String(left) === String(right);
+        default: return false;
+      }
+    }
+    case 'logic': {
+      const left = readComparableValue(predicate.left, state.variables);
+      const right = readComparableValue(predicate.right, state.variables);
+      if (predicate.operator === 'and') return Boolean(left) && Boolean(right);
+      if (predicate.operator === 'or') return Boolean(left) || Boolean(right);
+      return false;
+    }
+    case 'not':
+      return !Boolean(readComparableValue(predicate.value, state.variables));
+    case 'flipped':
+      return (asset?.facing || 1) < 0;
+    default:
+      return false;
+  }
+}
+
+function evaluateCondition(condition, asset, state) {
+  if (typeof condition === 'string') {
+    switch (condition.toLowerCase()) {
+      case 'score < 10':
+        return (state.variables.score || 0) < 10;
+      case 'score >= 10':
+        return (state.variables.score || 0) >= 10;
+      case 'is alive':
+        return Boolean(state.variables.isAlive);
+      case 'time > 0':
+        return (state.variables.time || 0) > 0;
+      case 'time <= 0':
+        return (state.variables.time || 0) <= 0;
+      default:
+        return false;
+    }
+  }
+  return evaluatePredicate(condition, asset, state);
+}
+
 export function createScriptRuntime({ instances, programsByKey }) {
   const state = {
     assetsByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, createAssetState(instance)])),
@@ -60,6 +143,8 @@ export function createScriptRuntime({ instances, programsByKey }) {
     variables: { score: 0, time: 30, isAlive: true },
     logs: [],
     timerEventSent: false,
+    scoreEventSent: false,
+    touchingByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, false])),
   };
 
   const log = (message) => {
@@ -94,6 +179,18 @@ export function createScriptRuntime({ instances, programsByKey }) {
         asset.facing = instruction.amount >= 0 ? 1 : -1;
         clampPosition(asset);
         break;
+      case 'changeY':
+        asset.y += instruction.amount;
+        clampPosition(asset);
+        break;
+      case 'goTo':
+        asset.x = instruction.x;
+        asset.y = instruction.y;
+        clampPosition(asset);
+        break;
+      case 'pointDirection':
+        asset.rotation = instruction.degrees;
+        break;
       case 'switchCostume':
         asset.costume = instruction.costume;
         break;
@@ -104,6 +201,26 @@ export function createScriptRuntime({ instances, programsByKey }) {
       case 'playSound':
         asset.lastSound = instruction.sound;
         log(`${asset.label} plays ${instruction.sound}`);
+        break;
+      case 'say':
+        log(`${asset.label} says "${instruction.text}"`);
+        break;
+      case 'changeScore':
+        state.variables.score += instruction.amount;
+        break;
+      case 'setScore':
+        state.variables.score = instruction.value;
+        break;
+      case 'changeTime':
+        state.variables.time = Math.max(0, state.variables.time + instruction.amount);
+        break;
+      case 'setTime':
+        state.variables.time = Math.max(0, instruction.value);
+        break;
+      case 'setAlive':
+        state.variables.isAlive = Boolean(instruction.value);
+        break;
+      case 'noop':
         break;
       default:
         break;
@@ -122,11 +239,16 @@ export function createScriptRuntime({ instances, programsByKey }) {
       if (frame.index >= frame.instructions.length) {
         if (frame.loopType === 'forever') {
           frame.index = 0;
-          return true;
+          continue;
         }
-        if (frame.loopType === 'while' && evaluateCondition(frame.condition, state.variables)) {
+        if (frame.loopType === 'while' && evaluateCondition(frame.condition, asset, state)) {
           frame.index = 0;
-          return true;
+          continue;
+        }
+        if (frame.loopType === 'repeat' && frame.remaining > 1) {
+          frame.remaining -= 1;
+          frame.index = 0;
+          continue;
         }
         task.frames.pop();
         continue;
@@ -140,16 +262,29 @@ export function createScriptRuntime({ instances, programsByKey }) {
         task.waitRemainingMs = instruction.durationMs;
         return true;
       }
+      if (instruction.type === 'waitUntil') {
+        if (!evaluateCondition(instruction.condition, asset, state)) {
+          frame.index -= 1;
+          return true;
+        }
+        continue;
+      }
       if (instruction.type === 'forever') {
         task.frames.push({ instructions: instruction.body, index: 0, loopType: 'forever' });
         continue;
       }
+      if (instruction.type === 'repeat') {
+        if ((instruction.times || 0) <= 0) continue;
+        task.frames.push({ instructions: instruction.body, index: 0, loopType: 'repeat', remaining: instruction.times });
+        continue;
+      }
       if (instruction.type === 'while') {
-        if (!evaluateCondition(instruction.condition, state.variables)) continue;
+        if (!evaluateCondition(instruction.condition, asset, state)) continue;
         task.frames.push({ instructions: instruction.body, index: 0, loopType: 'while', condition: instruction.condition });
         continue;
       }
       applyAction(instruction, asset);
+      return true;
     }
 
     return task.frames.length > 0 || task.waitRemainingMs > 0;
@@ -157,7 +292,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
 
   return {
     dispatch(eventType, payload = {}) {
-      if (eventType === 'sprite clicked' && payload.instanceKey) {
+      if ((eventType === 'sprite clicked' || eventType === 'object is tapped' || eventType === 'bumps' || eventType === 'is touching' || eventType === 'is not touching (pro)') && payload.instanceKey) {
         const instructions = state.programsByKey[payload.instanceKey]?.events?.[eventType];
         enqueueInstructions(payload.instanceKey, eventType, instructions);
         return;
@@ -172,6 +307,23 @@ export function createScriptRuntime({ instances, programsByKey }) {
         state.timerEventSent = true;
         this.dispatch('timer reaches 0');
       }
+      if (!state.scoreEventSent && state.variables.score >= 10) {
+        state.scoreEventSent = true;
+        this.dispatch('score reaches 10');
+      }
+      Object.keys(state.assetsByKey).forEach((instanceKey) => {
+        const asset = state.assetsByKey[instanceKey];
+        const isTouchingAny = Object.values(state.assetsByKey).some((otherAsset) => areAssetsTouching(asset, otherAsset));
+        const wasTouching = Boolean(state.touchingByKey[instanceKey]);
+        if (isTouchingAny && !wasTouching) {
+          this.dispatch('bumps', { instanceKey });
+          this.dispatch('is touching', { instanceKey });
+        }
+        if (!isTouchingAny && wasTouching) {
+          this.dispatch('is not touching (pro)', { instanceKey });
+        }
+        state.touchingByKey[instanceKey] = isTouchingAny;
+      });
       Object.entries(state.taskQueuesByKey).forEach(([instanceKey, tasks]) => {
         const asset = state.assetsByKey[instanceKey];
         state.taskQueuesByKey[instanceKey] = tasks.filter((task) => stepTask(task, asset, deltaMs));

@@ -2,7 +2,6 @@ const EVENT_LABELS = new Set([
   'game starts',
   'sprite clicked',
   'object is tapped',
-  'key pressed',
   'key is pressed',
   'timer reaches 0',
   'score reaches 10',
@@ -113,6 +112,7 @@ function compileInstruction(block, errors, path) {
   if (actionLabel === 'move forward') return { type: 'moveForward', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'turn degrees') return { type: 'turn', degrees: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'set rotation style') return { type: 'setRotationStyle', style: readTokenValue(block.parts?.[1]).toLowerCase() || 'dont rotate' };
+  if (actionLabel === 'flip') return { type: 'flip' };
   if (actionLabel === 'change x by') return { type: 'changeX', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'change y by') return { type: 'changeY', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'go to x') return { type: 'goTo', x: readNumber(block.parts?.[1], 0), y: readNumber(block.parts?.[3], 0) };

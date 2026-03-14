@@ -161,10 +161,12 @@ export function createScriptRuntime({ instances, programsByKey }) {
     if (!asset) return;
     switch (instruction.type) {
       case 'moveForward': {
+        const directionMultiplier = asset.rotationStyle === 'left-right' ? (asset.facing || 1) : 1;
+        const amount = instruction.amount * directionMultiplier;
         const radians = (asset.rotation * Math.PI) / 180;
-        asset.x += Math.cos(radians) * instruction.amount;
-        asset.y += Math.sin(radians) * instruction.amount;
-        asset.facing = instruction.amount >= 0 ? 1 : -1;
+        asset.x += Math.cos(radians) * amount;
+        asset.y += Math.sin(radians) * amount;
+        asset.facing = amount >= 0 ? 1 : -1;
         clampPosition(asset);
         break;
       }
@@ -173,6 +175,10 @@ export function createScriptRuntime({ instances, programsByKey }) {
         break;
       case 'setRotationStyle':
         asset.rotationStyle = instruction.style;
+        break;
+      case 'flip':
+        asset.rotationStyle = 'left-right';
+        asset.facing = (asset.facing || 1) * -1;
         break;
       case 'changeX':
         asset.x += instruction.amount;

@@ -10,7 +10,6 @@ const eventOptions = [
   'game starts',
   'sprite clicked',
   'object is tapped',
-  'key pressed',
   'key is pressed',
   'timer reaches 0',
   'score reaches 10',
@@ -43,6 +42,7 @@ const palette = {
     { id: 'move-forward', tone: 'movement', parts: ['Move Forward', { label: '12' }] },
     { id: 'turn', tone: 'movement', parts: ['Turn degrees', { label: '15' }] },
     { id: 'set-rotation', tone: 'movement', parts: ['Set rotation style', { type: 'dropdown', value: 'dont rotate', options: ['dont rotate', 'left-right', 'all around'] }] },
+    { id: 'flip', tone: 'movement', parts: ['Flip'] },
     { id: 'change-x', tone: 'movement', parts: ['Change X by', { label: '6' }] },
     { id: 'change-y', tone: 'movement', parts: ['Change Y by', { label: '6' }] },
     { id: 'go-to', tone: 'movement', parts: ['Go to X', { label: '320' }, 'Y', { label: '220' }] },
@@ -151,7 +151,6 @@ export default function SandboxBuilderPage() {
   useEffect(() => {
     if (mode !== 'play') return undefined;
     const onKeyDown = () => {
-      runtimeRef.current?.dispatch('key pressed');
       runtimeRef.current?.dispatch('key is pressed');
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };

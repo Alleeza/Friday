@@ -227,15 +227,15 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
 
 function BuilderTopNav({ onCreateNewGame }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3.5 lg:px-6">
+    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1920px] items-center justify-between px-4 py-2.5 lg:px-6">
         <div className="flex items-center gap-3">
           <img
             src={questyImage}
             alt="Questy avatar"
-            className="h-12 w-auto rounded-xl object-contain"
+            className="h-10 w-auto rounded-xl object-contain"
           />
-          <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
+          <span className="font-display text-[22px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -244,9 +244,9 @@ function BuilderTopNav({ onCreateNewGame }) {
           <button
             type="button"
             onClick={onCreateNewGame}
-            className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2.5 text-[14px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex"
+            className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2 text-[13px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex"
           >
-            <span className="text-[18px] leading-none">+</span>
+            <span className="text-[16px] leading-none">+</span>
             Create New Game
           </button>
         </div>
@@ -1520,64 +1520,64 @@ export default function SandboxBuilderPage({
         />
       ) : null}
       <section>
-        <div className="flex w-full" style={{ height: '720px' }}>
+        <div className="flex w-full gap-0" style={{ height: '720px' }}>
           <MissionPanel />
-          <div ref={canvasContainerRef} className={`relative flex-1 h-full flex flex-col ${isFullscreen ? 'bg-[#1a1a2e]' : ''}`}>
-          {/* CanvasHeader — Fullscreen + Action Buttons */}
-          <div className={`flex items-center justify-between px-3 py-1.5 rounded-t-[20px] ${isFullscreen ? 'bg-[#1a1a2e]/90 backdrop-blur-md' : 'bg-slate-100/80 border border-b-0 border-slate-200/60'}`}>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-white/80 hover:text-slate-800 transition"
-                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-              >
-                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                {isFullscreen ? 'Exit' : 'Fullscreen'}
-              </button>
+          <div ref={canvasContainerRef} className={`relative flex-1 h-full flex flex-col min-w-0 ${isFullscreen ? 'bg-[#1e1e2e]' : ''}`}>
+            {/* Canvas Header — controls above canvas */}
+            <div className={`flex items-center justify-between px-3 py-2 shrink-0 ${isFullscreen ? 'bg-[#1e1e2e]/90 backdrop-blur-md border-b border-white/10' : 'bg-white border-b border-slate-200'}`}>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-bold transition ${isFullscreen ? 'text-white/80 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                >
+                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  {isFullscreen ? 'Exit' : 'Fullscreen'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onSaveProject}
+                  disabled={saveState === 'saving'}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-[12px] font-bold text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
+                >
+                  <Save size={13} />
+                  {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+                </button>
+                {hasSavedProject && (
+                  <button
+                    type="button"
+                    onClick={onPublishProject}
+                    disabled={publishState === 'publishing'}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-[12px] font-bold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
+                  >
+                    <Shapes size={13} />
+                    {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                  </button>
+                )}
+                {mode === 'play' ? (
+                  <button
+                    type="button"
+                    onClick={stopRuntime}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-1.5 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(220,38,38,0.4)] hover:bg-red-600 transition"
+                  >
+                    <Square size={13} /> Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRuntime}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#1cb0f6] px-4 py-1.5 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(14,138,199,0.5)] hover:bg-[#19a0e0] transition"
+                  >
+                    <Play size={13} /> Play
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onSaveProject}
-                disabled={saveState === 'saving'}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition disabled:opacity-50"
-              >
-                <Save size={13} />
-                {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
-              </button>
-              {hasSavedProject && (
-                <button
-                  type="button"
-                  onClick={onPublishProject}
-                  disabled={publishState === 'publishing'}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-bold text-emerald-700 shadow-sm hover:bg-emerald-100 transition disabled:opacity-50"
-                >
-                  <Shapes size={13} />
-                  {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
-                </button>
-              )}
-              {mode === 'play' ? (
-                <button
-                  type="button"
-                  onClick={stopRuntime}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-500 px-3.5 py-1.5 text-[12px] font-bold text-white shadow-sm hover:bg-red-600 transition"
-                >
-                  <Square size={13} /> Stop
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={startRuntime}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3.5 py-1.5 text-[12px] font-bold text-white shadow-sm hover:bg-blue-600 transition"
-                >
-                  <Play size={13} /> Play
-                </button>
-              )}
-            </div>
-          </div>
-          {/* CanvasArea */}
-          <div className="relative flex-1 min-h-0">
+            {/* Canvas Area */}
+            <div className="relative flex-1 min-h-0">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}

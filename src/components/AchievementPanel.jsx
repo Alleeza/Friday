@@ -7,33 +7,67 @@ export default function AchievementPanel() {
   const { userProgress } = useGamification();
 
   return (
-    <div className="flex w-[320px] flex-col overflow-y-auto border-l border-slate-200 bg-slate-50 relative shadow-inner drop-shadow-sm h-full font-sans">
-      <div className="sticky top-0 bg-slate-50 border-b border-slate-200 p-5 flex items-center justify-between z-10">
-        <div className="flex items-center gap-2">
-          <div className="bg-purple-100/80 p-2 rounded-lg text-purple-600">
-             <Trophy className="w-5 h-5" />
-          </div>
-          <h2 className="text-[18px] font-bold text-slate-800 tracking-tight">Achievements</h2>
+    <div className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-white h-full">
+      {/* Header */}
+      <div className="sticky top-0 bg-white z-10 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+        <div className="bg-yellow-100 p-1.5 rounded-lg text-yellow-600">
+          <Trophy className="w-4 h-4" />
         </div>
+        <h2 className="text-[16px] font-extrabold text-slate-800">Achievements</h2>
       </div>
-      
-      <div className="p-5 flex flex-col gap-4">
+
+      {/* Achievement Cards */}
+      <div className="p-3 flex flex-col gap-2.5">
         {achievementsData.map(ach => {
           const isUnlocked = userProgress.achievements.includes(ach.id);
-          
+
           return (
-            <div key={ach.id} className={`flex gap-4 p-4 rounded-2xl border ${isUnlocked ? 'bg-gradient-to-br from-purple-50 to-white border-purple-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-70 grayscale-[0.5]'} transition-all`}>
-              <div className="shrink-0 relative">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${isUnlocked ? 'bg-yellow-100 border-yellow-400 text-yellow-600' : 'bg-slate-200 border-slate-300 text-slate-400'}`}>
-                  {isUnlocked ? <Trophy className="w-6 h-6 fill-current" /> : <Lock className="w-5 h-5" />}
+            <div
+              key={ach.id}
+              className={`flex gap-3 p-3 rounded-xl border transition-all ${
+                isUnlocked
+                  ? 'bg-gradient-to-br from-yellow-50/80 to-white border-yellow-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                  : 'bg-slate-50/50 border-slate-100 opacity-60'
+              }`}
+            >
+              {/* Badge Icon */}
+              <div className="shrink-0">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                  isUnlocked
+                    ? 'bg-yellow-100 border-yellow-400 text-yellow-600'
+                    : 'bg-slate-100 border-slate-200 text-slate-400'
+                }`}>
+                  {isUnlocked
+                    ? <Trophy className="w-5 h-5" />
+                    : <Lock className="w-4 h-4" />
+                  }
                 </div>
               </div>
-              <div className="flex flex-col gap-1 w-full mt-0.5">
-                <div className="flex items-start justify-between">
-                  <span className={`text-[15px] font-bold ${isUnlocked ? 'text-purple-900' : 'text-slate-600'} leading-tight`}>{ach.name}</span>
-                  <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${isUnlocked ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-200 text-slate-500'}`}>+{ach.reward_xp} XP</span>
+
+              {/* Content */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-1">
+                  <span className={`text-[13px] font-bold leading-tight ${
+                    isUnlocked ? 'text-slate-800' : 'text-slate-500'
+                  }`}>
+                    {ach.name}
+                  </span>
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+                    isUnlocked
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    +{ach.reward_xp} XP
+                  </span>
                 </div>
-                <p className="text-[13px] text-slate-500 font-medium leading-snug">{ach.description}</p>
+                <p className={`text-[11px] font-medium leading-snug ${
+                  isUnlocked ? 'text-slate-500' : 'text-slate-400'
+                }`}>
+                  {ach.description}
+                </p>
+                {isUnlocked && (
+                  <span className="text-[10px] font-bold text-green-600 mt-0.5">✓ Unlocked</span>
+                )}
               </div>
             </div>
           );

@@ -74,6 +74,7 @@ export default function SandboxBuilderPage({
   saveState = 'idle',
   projectPlan = null,
 }) {
+  const lastPublishedProjectRef = useRef('');
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -172,7 +173,19 @@ export default function SandboxBuilderPage({
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const paletteBlocks = useMemo(() => palette[selectedCategory] || [], [selectedCategory]);
+  useEffect(() => {
+    const nextProjectState = {
+      setupData: initialSetupData,
+      scene: normalizeSceneState(persistedSceneState),
+      scriptsByInstanceKey: normalizeScriptsByInstance(scriptsByInstanceKey),
+    };
+    const snapshot = JSON.stringify(nextProjectState);
+    if (snapshot === lastPublishedProjectRef.current) return;
+    lastPublishedProjectRef.current = snapshot;
+    onProjectStateChange?.(nextProjectState);
+  }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
+
+  const paletteBlocks = useMemo(() => BLOCK_PALETTE[selectedCategory] || [], [selectedCategory]);
   const selectedScriptBlocks = scriptsByInstanceKey[editorInstanceKey] || [];
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
@@ -759,7 +772,7 @@ export default function SandboxBuilderPage({
             runtimeSnapshot={runtimeSnapshot}
             initialSceneState={persistedSceneState}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
+            onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
               setSceneInstances(instances);
               if (sceneState) setPersistedSceneState(sceneState);
               setFocusedInstanceKey(nextKey || null);

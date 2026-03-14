@@ -1,6 +1,29 @@
+import net from 'node:net';
 import { spawn } from 'node:child_process';
 
 const isWindows = process.platform === 'win32';
+const apiPort = Number(process.env.PORT || 3001);
+const children = [];
+let shuttingDown = false;
+
+function isPortInUse(port) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ port, host: '127.0.0.1' });
+
+    socket.once('connect', () => {
+      socket.end();
+      resolve(true);
+    });
+
+    socket.once('error', (error) => {
+      if (error.code === 'ECONNREFUSED') {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
+  });
+}
 
 function startProcess(name, command) {
   const child = spawn(command, {
@@ -24,11 +47,9 @@ function startProcess(name, command) {
     process.exit(code ?? 0);
   });
 
+  children.push(child);
   return child;
 }
-
-const children = [];
-let shuttingDown = false;
 
 function stopAll() {
   children.forEach((child) => {
@@ -38,8 +59,17 @@ function stopAll() {
   });
 }
 
-children.push(startProcess('api', isWindows ? 'node server\\index.js' : 'node server/index.js'));
-children.push(startProcess('vite', isWindows ? 'npm.cmd run dev:vite' : 'npm run dev:vite'));
+async function main() {
+  const portInUse = await isPortInUse(apiPort);
+
+  if (portInUse) {
+    process.stdout.write(`[api] Reusing existing backend on http://localhost:${apiPort}\n`);
+  } else {
+    startProcess('api', isWindows ? 'node server\\index.js' : 'node server/index.js');
+  }
+
+  startProcess('vite', isWindows ? 'npm.cmd run dev:vite' : 'npm run dev:vite');
+}
 
 process.on('SIGINT', () => {
   if (shuttingDown) return;
@@ -53,4 +83,9 @@ process.on('SIGTERM', () => {
   shuttingDown = true;
   stopAll();
   process.exit(0);
+});
+
+main().catch((error) => {
+  process.stderr.write(`${error.message}\n`);
+  process.exit(1);
 });

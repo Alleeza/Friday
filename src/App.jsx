@@ -3,6 +3,7 @@ import { getFallbackPlan } from './ai/planning/fallbackPlans';
 import { loadProjectState, saveProjectState } from './api/projectState';
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
+import ProjectRoadmapPage from './components/ProjectRoadmapPage';
 import { createBunnyCarrotExampleProject } from './data/exampleProjects';
 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
@@ -46,13 +47,18 @@ function deriveProjectPlan(setupData) {
   return setupData.plan || getFallbackPlan(setupData.idea || '', 0);
 }
 
+function getScreenForSetupData(setupData) {
+  return deriveProjectPlan(setupData) ? 'roadmap' : 'builder';
+}
+
 export default function App() {
   const lastSavedSnapshotRef = useRef('');
   const [isLoading, setIsLoading] = useState(true);
   const [projectState, setProjectState] = useState(emptyProjectState);
   const [projectPlan, setProjectPlan] = useState(null);
   const [storageError, setStorageError] = useState('');
-  const [shouldResumeBuilder, setShouldResumeBuilder] = useState(false);
+  const [resumeToken, setResumeToken] = useState(false);
+  const [activeScreen, setActiveScreen] = useState('setup');
   const [saveState, setSaveState] = useState('idle');
 
   useEffect(() => {
@@ -74,7 +80,9 @@ export default function App() {
       })
       .finally(() => {
         if (!cancelled) {
-          setShouldResumeBuilder(readResumeBuilderFlag());
+          const nextResumeToken = readResumeBuilderFlag();
+          setResumeToken(nextResumeToken);
+          setActiveScreen(nextResumeToken ? 'builder' : 'setup');
           setIsLoading(false);
         }
       });
@@ -91,17 +99,28 @@ export default function App() {
     }
   }, [isLoading, projectState]);
 
-  const hasSetupData = useMemo(() => Boolean(projectState.setupData), [projectState.setupData]);
-  const hasSavedBuilderState = useMemo(() => {
+  const hasPersistedProject = useMemo(() => {
     const placedAssets = projectState.scene?.placedAssets || [];
     const scriptsByInstanceKey = projectState.scriptsByInstanceKey || {};
-    return placedAssets.length > 0 || Object.keys(scriptsByInstanceKey).length > 0 || Boolean(projectState.scene?.backdropState);
+    return Boolean(projectState.setupData)
+      || placedAssets.length > 0
+      || Object.keys(scriptsByInstanceKey).length > 0
+      || Boolean(projectState.scene?.backdropState);
   }, [projectState]);
-  const shouldOpenBuilder = shouldResumeBuilder || hasSetupData || hasSavedBuilderState;
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!hasPersistedProject && resumeToken) {
+      writeResumeBuilderFlag(false);
+      setResumeToken(false);
+      setActiveScreen('setup');
+    }
+  }, [hasPersistedProject, isLoading, resumeToken]);
 
   const handleSetupComplete = useCallback((nextSetupData) => {
     writeResumeBuilderFlag(true);
-    setShouldResumeBuilder(true);
+    setResumeToken(true);
+    setActiveScreen(getScreenForSetupData(nextSetupData));
     setProjectState((current) => ({ ...current, setupData: nextSetupData }));
     setProjectPlan(deriveProjectPlan(nextSetupData));
     setSaveState('idle');
@@ -114,7 +133,8 @@ export default function App() {
   const handleProjectStateChange = useCallback((nextProjectState) => {
     const normalized = normalizeProjectState(nextProjectState);
     writeResumeBuilderFlag(true);
-    setShouldResumeBuilder(true);
+    setResumeToken(true);
+    setActiveScreen('builder');
     setProjectState(normalized);
     setProjectPlan(deriveProjectPlan(normalized.setupData));
   }, []);
@@ -146,7 +166,25 @@ export default function App() {
     );
   }
 
-  if (!shouldOpenBuilder) {
+  if (activeScreen !== 'builder') {
+    if (activeScreen === 'roadmap' && projectPlan) {
+      return (
+        <>
+          {storageError ? (
+            <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-[#ffd7dc] bg-[#fff4f5] px-4 py-2 text-sm font-bold text-rose-600 shadow">
+              Storage offline: {storageError}
+            </div>
+          ) : null}
+          <ProjectRoadmapPage
+            setupData={projectState.setupData}
+            plan={projectPlan}
+            onStartBuilder={() => setActiveScreen('builder')}
+            onBack={() => setActiveScreen('setup')}
+          />
+        </>
+      );
+    }
+
     return (
       <>
         {storageError ? (

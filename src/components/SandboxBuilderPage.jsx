@@ -269,6 +269,7 @@ export default function SandboxBuilderPage({
   onPublishProject,
   saveState = 'idle',
   publishState = 'idle',
+  hasSavedProject = false,
   projectPlan = null,
   onCreateNewGame,
 }) {
@@ -1457,7 +1458,7 @@ export default function SandboxBuilderPage({
             saveState={saveState}
             onPublish={onPublishProject}
             publishState={publishState}
-            showPublishButton
+            showPublishButton={hasSavedProject}
             publishLabel="Share"
             suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {

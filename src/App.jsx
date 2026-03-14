@@ -70,6 +70,7 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState('setup');
   const [saveState, setSaveState] = useState('idle');
   const [publishState, setPublishState] = useState('idle');
+  const [hasSavedProject, setHasSavedProject] = useState(false);
 
   useEffect(() => () => {
     if (publishTimeoutRef.current) window.clearTimeout(publishTimeoutRef.current);
@@ -90,6 +91,7 @@ export default function App() {
         setProjectPlan(deriveProjectPlan(normalized.setupData));
         lastSavedSnapshotRef.current = JSON.stringify(normalized);
         setSaveState(savedProject ? 'saved' : 'idle');
+        setHasSavedProject(Boolean(savedProject));
         setStorageError('');
       })
       .catch((error) => {
@@ -157,6 +159,7 @@ export default function App() {
     lastSavedSnapshotRef.current = JSON.stringify(emptyProjectState);
     setSaveState('idle');
     setPublishState('idle');
+    setHasSavedProject(false);
     setStorageError('');
     setActiveScreen('setup');
   }, []);
@@ -170,25 +173,32 @@ export default function App() {
     setProjectPlan(deriveProjectPlan(normalized.setupData));
   }, []);
 
-  const handleSaveProject = useCallback(async () => {
+  const saveCurrentProject = useCallback(async () => {
     setSaveState('saving');
+    const savedProject = await saveProjectState(projectState);
+    const normalized = normalizeProjectState(savedProject || projectState);
+    setProjectState(normalized);
+    setProjectPlan(deriveProjectPlan(normalized.setupData));
+    lastSavedSnapshotRef.current = JSON.stringify(normalized);
+    setStorageError('');
+    setSaveState('saved');
+    setHasSavedProject(true);
+    return normalized;
+  }, [projectState]);
+
+  const handleSaveProject = useCallback(async () => {
     try {
-      const savedProject = await saveProjectState(projectState);
-      const normalized = normalizeProjectState(savedProject || projectState);
-      setProjectState(normalized);
-      setProjectPlan(deriveProjectPlan(normalized.setupData));
-      lastSavedSnapshotRef.current = JSON.stringify(normalized);
-      setStorageError('');
-      setSaveState('saved');
+      await saveCurrentProject();
     } catch (error) {
       setStorageError(error.message || 'Unable to save project data.');
       setSaveState('error');
     }
-  }, [projectState]);
+  }, [saveCurrentProject]);
 
   const handlePublishProject = useCallback(async () => {
     setPublishState('publishing');
     try {
+      await saveCurrentProject();
       const publication = await publishSavedProject();
       const shareUrl = new URL(publication.sharePath, window.location.origin).toString();
 
@@ -202,9 +212,10 @@ export default function App() {
       setPublishState('published');
     } catch (error) {
       setStorageError(error.message || 'Unable to create a share link.');
+      setSaveState('error');
       setPublishState('error');
     }
-  }, []);
+  }, [saveCurrentProject]);
 
   if (isLoading) {
     return (
@@ -245,6 +256,7 @@ export default function App() {
         onPublishProject={handlePublishProject}
         saveState={saveState}
         publishState={publishState}
+        hasSavedProject={hasSavedProject}
         projectPlan={projectPlan}
         onCreateNewGame={handleCreateNewGame}
       />

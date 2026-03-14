@@ -722,7 +722,7 @@ export default function GamePreviewCanvas({
       })}
 
       {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
-      {showTrayToggle && isEditMode ? <button ref={trayToggleRef} onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
+      {showTrayToggle && isEditMode && !draggingPlacedAssetKey ? <button ref={trayToggleRef} onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
 
       {trayOpen && isEditMode ? (
         <div ref={trayRef} className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]">
@@ -775,16 +775,16 @@ export default function GamePreviewCanvas({
       ) : null}
 
       {isEditMode && draggingPlacedAssetKey ? (
-        <div ref={trashZoneRef} className="absolute left-4 top-24 z-30">
+        <div ref={trashZoneRef} className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2">
           <div
-            className={`grid h-20 w-20 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+            className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
               trashHover
                 ? 'scale-110 border-rose-700 bg-rose-600 text-white'
                 : 'border-rose-200 bg-white/95 text-rose-500'
             }`}
             aria-label="Delete dragged asset"
           >
-            <Trash2 size={34} strokeWidth={2.6} />
+            <Trash2 size={28} strokeWidth={2.6} />
           </div>
         </div>
       ) : null}

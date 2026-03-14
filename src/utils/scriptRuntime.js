@@ -292,7 +292,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
 
   return {
     dispatch(eventType, payload = {}) {
-      if ((eventType === 'sprite clicked' || eventType === 'object is tapped' || eventType === 'bumps' || eventType === 'is touching' || eventType === 'is not touching (pro)') && payload.instanceKey) {
+      if ((eventType === 'sprite clicked' || eventType === 'object is tapped' || eventType === 'bumps' || eventType === 'is touching' || eventType === 'is not touching') && payload.instanceKey) {
         const instructions = state.programsByKey[payload.instanceKey]?.events?.[eventType];
         enqueueInstructions(payload.instanceKey, eventType, instructions);
         return;
@@ -320,7 +320,7 @@ export function createScriptRuntime({ instances, programsByKey }) {
           this.dispatch('is touching', { instanceKey });
         }
         if (!isTouchingAny && wasTouching) {
-          this.dispatch('is not touching (pro)', { instanceKey });
+          this.dispatch('is not touching', { instanceKey });
         }
         state.touchingByKey[instanceKey] = isTouchingAny;
       });

@@ -25,10 +25,10 @@ const eventOptions = [
 const collisionEventOptions = new Set(['bumps']);
 const hiddenPaletteCategories = new Set(['collisions', 'conditionals', 'conditions']);
 const keyPressOptions = [
-  { value: 'arrowup', label: 'Top Arrow' },
-  { value: 'arrowdown', label: 'Down Arrow' },
-  { value: 'arrowleft', label: 'Left Arrow' },
-  { value: 'arrowright', label: 'Right Arrow' },
+  { value: 'w', label: 'W' },
+  { value: 'a', label: 'A' },
+  { value: 's', label: 'S' },
+  { value: 'd', label: 'D' },
   { value: 'space', label: 'Space' },
   { value: 'c', label: 'C' },
 ];

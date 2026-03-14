@@ -222,13 +222,55 @@ For each step, provide a parallel "stepChecks" array (same length as "steps"). E
 - Good: "What loop keeps the Bunny moving the whole time?" with [{"type":"scriptOnAssetContains","asset":"bunny","blocks":["Forever","Move Forward"]}]
 - Good: "Change the movement number so it feels faster or slower" with [{"type":"blockValueOnAsset","asset":"bunny","block":"Move Forward","partIndex":1,"op":"!=","value":"12"}]
 - Good: "Place at least 3 Rocks on the canvas to build your obstacle field" with [{"type":"assetCount","asset":"rock","min":3}]
+- Good: "What event should make the Carrot react when the Bunny arrives?" with [{"type":"eventIs","asset":"carrot","event":"bumps"}]
+- Good: "Add an action so the Carrot does something when it is bumped" with [{"type":"minBlockCount","asset":"carrot","min":1}]
+
+## Example: Good Plan for "bunny explores forest and finds carrots"
+Stage 1 — "Build your forest world":
+  Steps: place bunny, place trees (×2+), place carrots (×2+)
+  Checks: hasAsset bunny, assetCount tree min:2, assetCount carrot min:2
+Stage 2 — "Bring your bunny explorer to life":
+  Steps: set bunny event to game starts, add Forever+Move Forward+Turn degrees
+  Checks: eventIs bunny game starts, scriptOnAssetContains bunny [Forever,Move Forward,Turn degrees]
+Stage 3 — "Make carrots react when found":
+  Steps: set carrot event to bumps, add a reaction (Play sound or Say)
+  Checks: eventIs carrot bumps, minBlockCount carrot min:1
+Notice how the carrots are NOT left with empty scripts — they react when the bunny reaches them. This is what makes it a GAME.
+
+## Game Design Patterns — CRITICAL
+A plan must result in a PLAYABLE GAME, not just objects sitting on a canvas. Every plan should include at least one interaction loop. Use these patterns:
+
+### Collection pattern (for "collect", "find", "gather", "get" ideas):
+- The PLAYER moves (Forever + Move Forward, or key-press movement)
+- Each COLLECTIBLE has a "bumps" event with a reaction script (e.g. Play sound, Change score by, Say)
+- This means the collectible MUST have: eventIs bumps + at least one action block
+- Without a reaction on the collectible, there is no game — just a character moving past inert objects
+
+### Exploration pattern (for "explore", "discover", "wander" ideas):
+- The PLAYER moves automatically (Forever + Move Forward + Turn degrees) OR via key presses
+- SCENERY objects should have at least one interesting behavior (e.g. a tree that says something when bumped, or clouds that drift)
+- Include at least one object with a "bumps" event so exploration has a payoff
+
+### Navigation/maze pattern (for "maze", "navigate", "reach", "path" ideas):
+- The PLAYER moves via key presses (event: key is pressed)
+- OBSTACLES are placed to create a path
+- A GOAL object reacts when reached (bumps event + reaction)
+
+### Dodge/survival pattern (for "dodge", "avoid", "survive" ideas):
+- The PLAYER moves via key presses
+- HAZARDS move automatically (Forever + Move Forward)
+- Collision between player and hazard triggers a consequence (bumps event + Set alive to false or Say)
+
+### KEY RULE: If the student's idea mentions collecting, finding, or reaching objects, those objects MUST have a "bumps" event with at least one reaction block. A plan where collectibles have empty scripts is ALWAYS wrong.
 
 ## Brittle Patterns To Avoid
 - Avoid steps that mention an observable event choice but use []
 - Avoid using event names as if they were regular action blocks in hasBlockOnAsset
 - Avoid subjective steps like "leave enough space", "make it look right", or "tune it until it feels good"
 - Avoid plans that require a specific mechanic when a broader observable behavior would be more robust
-- Avoid telling the student to add unsupported systems like enemies with health, jumping, inventory, or locks`;
+- Avoid telling the student to add unsupported systems like enemies with health, jumping, inventory, or locks
+- Avoid plans where collectible or goal objects have no script — every interactive object needs at least a bumps event and one action block
+- Avoid plans where only the player has a script — if the idea mentions other objects, they should DO something`;
 }
 
 // ---------------------------------------------------------------------------

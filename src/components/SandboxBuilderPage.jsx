@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDown, ChevronUp, Flame, Pencil, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pencil, Save, Shapes, Trash2, X, Play, Square } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
@@ -268,6 +268,24 @@ export default function SandboxBuilderPage({
   onCreateNewGame,
 }) {
   const { processEvent } = useGamification();
+  const canvasContainerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!canvasContainerRef.current) return;
+    if (!document.fullscreenElement) {
+      canvasContainerRef.current.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -1504,7 +1522,62 @@ export default function SandboxBuilderPage({
       <section>
         <div className="flex w-full" style={{ height: '720px' }}>
           <MissionPanel />
-          <div className="relative flex-1 h-full">
+          <div ref={canvasContainerRef} className={`relative flex-1 h-full flex flex-col ${isFullscreen ? 'bg-[#1a1a2e]' : ''}`}>
+          {/* CanvasHeader — Fullscreen + Action Buttons */}
+          <div className={`flex items-center justify-between px-3 py-1.5 rounded-t-[20px] ${isFullscreen ? 'bg-[#1a1a2e]/90 backdrop-blur-md' : 'bg-slate-100/80 border border-b-0 border-slate-200/60'}`}>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-white/80 hover:text-slate-800 transition"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                {isFullscreen ? 'Exit' : 'Fullscreen'}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onSaveProject}
+                disabled={saveState === 'saving'}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition disabled:opacity-50"
+              >
+                <Save size={13} />
+                {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+              </button>
+              {hasSavedProject && (
+                <button
+                  type="button"
+                  onClick={onPublishProject}
+                  disabled={publishState === 'publishing'}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-bold text-emerald-700 shadow-sm hover:bg-emerald-100 transition disabled:opacity-50"
+                >
+                  <Shapes size={13} />
+                  {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                </button>
+              )}
+              {mode === 'play' ? (
+                <button
+                  type="button"
+                  onClick={stopRuntime}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-500 px-3.5 py-1.5 text-[12px] font-bold text-white shadow-sm hover:bg-red-600 transition"
+                >
+                  <Square size={13} /> Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startRuntime}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3.5 py-1.5 text-[12px] font-bold text-white shadow-sm hover:bg-blue-600 transition"
+                >
+                  <Play size={13} /> Play
+                </button>
+              )}
+            </div>
+          </div>
+          {/* CanvasArea */}
+          <div className="relative flex-1 min-h-0">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
@@ -1520,7 +1593,9 @@ export default function SandboxBuilderPage({
             saveState={saveState}
             onPublish={onPublishProject}
             publishState={publishState}
-            showPublishButton={hasSavedProject}
+            showPublishButton={false}
+            showSaveButton={false}
+            showEditToolbar={true}
             publishLabel="Share"
             suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {
@@ -1783,6 +1858,7 @@ export default function SandboxBuilderPage({
               </div>
             </div>
           ) : null}
+          </div>
           </div>
           <AchievementPanel />
         </div>

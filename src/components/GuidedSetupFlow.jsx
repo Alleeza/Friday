@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
 import { usePlanSession } from '../hooks/usePlanSession.js';
 import PlanReview from './PlanReview.jsx';
+import questyImage from '../imgages/profile.png';
+import questyHeroImage from '../imgages/Gemini_Generated_Image_x6h2zlx6h2zlx6h2.png';
 import {
   getDefaultModelForProvider,
   getDefaultProviderName,
@@ -29,6 +31,11 @@ const DIFFICULTIES = [
   { id: 'hard', label: 'Hard', desc: 'Punishing, high stakes' },
 ];
 
+const questyWaveAnimation = {
+  animation: 'questy-wave 2.6s ease-in-out infinite',
+  transformOrigin: '72% 48%',
+};
+
 /* ─── Shared Nav ─── */
 function TopNav({ step }) {
   return (
@@ -36,10 +43,12 @@ function TopNav({ step }) {
       <div className="mx-auto flex max-w-[1140px] items-center justify-between px-6 py-3.5 lg:px-10">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#58cc02] shadow-[0_2px_0_#46a302]">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-display text-[22px] leading-none text-slate-800">CodeQuest</span>
+          <img
+            src={questyImage}
+            alt="Questy avatar"
+            className="h-12 w-auto rounded-xl object-contain mix-blend-multiply"
+          />
+          <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
         </div>
 
         {/* Right side — progress indicators */}
@@ -60,7 +69,8 @@ function TopNav({ step }) {
 
           {/* CTA */}
           {step !== 'idea' && (
-            <button className="hidden rounded-xl bg-[#58cc02] px-4 py-2 text-[13px] font-bold text-white shadow-[0_2px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:block">
+            <button className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2.5 text-[14px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex">
+              <span className="text-[18px] leading-none">+</span>
               Create New Game
             </button>
           )}
@@ -168,100 +178,125 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample }) {
           STEP 1 — HERO IDEA INPUT
       ═══════════════════════════════════════════ */}
       {step === 'idea' && (
-        <main className="h-[calc(100vh-57px)] overflow-hidden">
-          <div className="mx-auto flex h-full max-w-[1140px] items-center px-6 lg:px-10">
+        <main className="min-h-[calc(100vh-57px)] overflow-hidden">
+          <div className="mx-auto flex h-full max-w-[1140px] items-center justify-center px-6 py-8 lg:px-10">
             <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-              {/* Hero container */}
-              <div className="relative overflow-hidden rounded-3xl border border-[#e0e6d8] bg-gradient-to-br from-[#fbfff6] via-white to-[#f6fbf0] p-8 shadow-[0_12px_48px_-12px_rgba(0,0,0,0.06)] md:p-10 lg:p-14">
-
-                {/* Decorative blobs */}
-                <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#58cc02]/[0.05] blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-[#1cb0f6]/[0.04] blur-3xl" />
-
-                {/* Label */}
-                <div className="relative mb-5">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d6eec2] bg-white px-4 py-1.5 text-[12px] font-bold uppercase tracking-[0.12em] text-[#4a8c12]">
-                    <Sparkles className="h-3 w-3" />
-                    Start New Project
-                  </span>
-                </div>
-
-                {/* Headline — single line */}
-                <h1 className="relative whitespace-nowrap font-display text-[2.5rem] leading-none text-slate-900 lg:text-[3rem]">
-                  What game do you want to build?
-                </h1>
-
-                {/* Supporting text */}
-                <p className="relative mt-3 max-w-[600px] text-base leading-relaxed text-slate-500">
-                  Describe your idea and our AI will generate a playable starting point.
-                </p>
-
-                {/* Input area */}
-                <form ref={formRef} onSubmit={handleInitialSubmit} className="relative mt-8">
-                  <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-                    <label htmlFor="idea-input" className="flex items-center gap-2 border-b border-slate-100 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                      <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
-                      Game Idea
-                    </label>
-                    <textarea
-                      id="idea-input"
-                      autoFocus
-                      value={idea}
-                      onChange={(e) => setIdea(e.target.value)}
-                      placeholder="I want to make a game where a bunny collects carrots and avoids rocks."
-                      rows={3}
-                      className="w-full resize-none bg-transparent px-6 py-4 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-300 focus:outline-none"
+              <div className="p-2 md:p-4">
+                <div className="mx-auto flex max-w-[1040px] flex-col items-center text-center">
+                  <style>{`
+                    @keyframes questy-wave {
+                      0%, 100% { transform: rotate(0deg) translateY(0); }
+                      15% { transform: rotate(5deg) translateY(-1px); }
+                      30% { transform: rotate(-4deg) translateY(0); }
+                      45% { transform: rotate(6deg) translateY(-2px); }
+                      60% { transform: rotate(-3deg) translateY(0); }
+                      75% { transform: rotate(3deg) translateY(-1px); }
+                    }
+                  `}</style>
+                  <div className="mb-5">
+                    <img
+                      src={questyHeroImage}
+                      alt="Questy avatar"
+                      className="h-48 w-auto object-contain mix-blend-multiply sm:h-56"
+                      style={questyWaveAnimation}
                     />
                   </div>
 
-                  {/* Tip + CTA */}
-                  <div className="mt-5 flex items-center justify-between gap-4">
-                    <p className="text-[13px] font-medium text-slate-400">
-                      {idea.length > 0
-                        ? idea.length < 25
-                          ? 'Keep going — mention your player, goal, and obstacles.'
-                          : '✓ Looks like a solid idea'
-                        : (
-                          <span>
-                            <span className="text-slate-500">Tip:</span> mention your player, goal, and obstacles.
-                          </span>
-                        )}
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <kbd className="hidden rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-400 shadow-[0_1px_0_rgba(0,0,0,0.06)] sm:inline-block">⌘ Enter</kbd>
-                      <button
-                        type="submit"
-                        disabled={!idea.trim()}
-                        className="flex items-center gap-2.5 rounded-2xl bg-[#58cc02] px-8 py-3 text-[15px] font-bold text-white shadow-[0_4px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-[0_2px_0_#46a302] disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
-                      >
-                        Create Plan & Start
-                        <ArrowRight className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                </form>
+                  <h1 className="whitespace-nowrap font-display text-[1.95rem] font-bold leading-[0.96] text-slate-900 sm:text-[2.35rem] lg:text-[3.15rem]">
+                    What game do you want to build?
+                  </h1>
 
-                <div className="relative mt-6 rounded-3xl border border-[#d8e7c6] bg-white/90 p-5 shadow-[0_10px_28px_-16px_rgba(88,204,2,0.45)]">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58cc02]">Offline Example</p>
-                      <h2 className="mt-1 font-display text-2xl leading-none text-slate-900">Bunny Chases Carrot</h2>
-                      <p className="mt-2 max-w-[560px] text-sm font-medium leading-6 text-slate-500">
-                        Open an offline starter plan for building a Bunny-and-Carrot game from scratch. It works even if the AI API is unavailable.
-                      </p>
+                  <form ref={formRef} onSubmit={handleInitialSubmit} className="mt-6 w-full">
+                    <div className="overflow-hidden rounded-[28px] border-2 border-[#d7e3f0] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] shadow-[0_10px_0_rgba(15,23,42,0.04)]">
+                      <label htmlFor="idea-input" className="flex items-center gap-2 border-b border-[#edf1f7] px-6 py-4 text-left text-[13px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">
+                        <Lightbulb className="h-4 w-4 text-amber-400" />
+                        Game Idea
+                      </label>
+                      <textarea
+                        id="idea-input"
+                        autoFocus
+                        value={idea}
+                        onChange={(e) => setIdea(e.target.value)}
+                        placeholder="Describe your game idea. Example: a bunny collects carrots, avoids rocks, and reaches the finish line."
+                        rows={3}
+                        className="w-full resize-none bg-transparent px-6 py-4 text-[18px] leading-8 text-slate-800 placeholder:text-slate-300 focus:outline-none"
+                      />
+                      <div className="flex flex-col gap-4 border-t border-[#edf1f7] px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="rounded-2xl border border-[#d8e9f7] bg-[#f8fcff] px-4 py-3 text-left text-[14px] font-semibold text-slate-500 shadow-[0_2px_0_rgba(28,176,246,0.08)]">
+                          {idea.length > 0
+                            ? idea.length < 25
+                              ? 'Keep going: include your character, goal, and one obstacle.'
+                              : 'Nice. That idea has enough detail for a strong setup plan.'
+                            : 'Tip: mention your player, goal, and obstacles for the best result.'}
+                        </div>
+
+                        <div className="flex items-center gap-3 self-end">
+                          <kbd className="hidden rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-400 shadow-[0_2px_0_rgba(15,23,42,0.05)] sm:inline-block">
+                            ⌘ Enter
+                          </kbd>
+                          <button
+                            type="submit"
+                            disabled={!idea.trim()}
+                            className="inline-flex items-center gap-2.5 rounded-[20px] bg-[#58cc02] px-8 py-4 text-[16px] font-extrabold text-white shadow-[0_5px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-[0_3px_0_#46a302] disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none"
+                          >
+                            Create Plan & Start
+                            <ArrowRight className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <button
-                        type="button"
-                        onClick={() => onLaunchExample?.()}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-[#b7d89c] bg-[#f4fce8] px-5 py-3 text-[14px] font-bold text-[#3f7f10] shadow-[0_3px_0_rgba(88,204,2,0.15)] transition-all hover:brightness-95 active:translate-y-[1px]"
-                      >
+                  </form>
+
+                  <button
+                    type="button"
+                    onClick={() => onLaunchExample?.()}
+                    className="mt-6 w-full rounded-[30px] border-2 border-[#d7ecc2] bg-white/95 p-5 text-left shadow-[0_10px_28px_-16px_rgba(88,204,2,0.4)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-18px_rgba(88,204,2,0.45)]"
+                  >
+                    <div className="flex flex-col gap-5">
+                      <div className="flex items-start gap-4">
+                        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#cfe8b7] bg-[#e8f7d3] text-[30px] shadow-[0_4px_0_rgba(88,204,2,0.14)]">
+                          <span aria-hidden="true">🐰</span>
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#58cc02]">Offline Example</p>
+                          <h2 className="mt-2 font-display text-[2rem] font-bold leading-none tracking-[-0.02em] text-slate-900">Bunny Chases Carrot</h2>
+                          <p className="mt-3 max-w-[720px] text-base font-medium leading-7 text-slate-500">
+                            Try a simple bunny game starter with goals, obstacles, and starter blocks.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="overflow-hidden rounded-[24px] border border-[#e5edf5] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] shadow-[inset_0_-2px_0_rgba(148,163,184,0.08)]">
+                        <div className="border-b border-[#edf2f7] px-4 py-3">
+                          <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">Preview</p>
+                        </div>
+                        <div className="grid gap-4 p-4 md:grid-cols-[1.1fr_0.9fr]">
+                          <div className="rounded-[20px] border border-[#d8e9f7] bg-[#f8fcff] p-4">
+                            <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">How You Play</p>
+                            <div className="mt-3 space-y-2 text-sm font-bold text-slate-600">
+                              <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">1. Move the bunny around</div>
+                              <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">2. Grab the carrot</div>
+                              <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">3. Avoid the rocks</div>
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#dceac8] bg-[#f4fce8] p-4">
+                            <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#4a8c12]">Starter Assets</p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-sm font-bold text-[#3f7f10]">
+                              <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🐰 Bunny</span>
+                              <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🥕 Carrot</span>
+                              <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🪨 Rock</span>
+                              <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🏁 Goal</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 text-[15px] font-extrabold text-[#3f7f10]">
                         Open Example Game
                         <ArrowRight className="h-4 w-4" />
-                      </button>
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>
@@ -361,7 +396,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample }) {
 
             {/* Page title */}
             <div className="mb-12">
-              <h1 className="font-display text-[2.5rem] leading-tight text-slate-900">
+              <h1 className="font-display text-[2.5rem] font-bold leading-tight text-slate-900">
                 More Details
               </h1>
               <p className="mt-3 max-w-2xl text-lg leading-relaxed text-slate-500">

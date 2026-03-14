@@ -126,6 +126,8 @@ function compileInstruction(block, errors, path) {
   if (actionLabel === 'next costume') return { type: 'nextCostume' };
   if (actionLabel === 'play sound') return { type: 'playSound', sound: readTokenValue(block.parts?.[1]) || 'sound' };
   if (actionLabel === 'say') return { type: 'say', text: readTokenValue(block.parts?.[1]) || 'Hi!' };
+  if (actionLabel === 'hide object') return { type: 'setVisibility', invisibility: 100 };
+  if (actionLabel === 'show object') return { type: 'setVisibility', invisibility: 0 };
   if (actionLabel === 'change score by') return { type: 'changeScore', amount: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'set score to') return { type: 'setScore', value: readNumber(block.parts?.[1], 0) };
   if (actionLabel === 'change timer by') return { type: 'changeTime', amount: readNumber(block.parts?.[1], 0) };

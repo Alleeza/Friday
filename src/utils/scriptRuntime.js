@@ -20,6 +20,33 @@ function clampPosition(asset, stageSize) {
   asset.y = Math.max(frameHalf, Math.min(Math.max(frameHalf, height - frameHalf), asset.y));
 }
 
+function clampPositionWithHit(asset, stageSize) {
+  const { width, height } = normalizeStageSize(stageSize);
+  const frameHalf = 90 * (asset?.scale || 1);
+  const nextX = Math.max(frameHalf, Math.min(Math.max(frameHalf, width - frameHalf), asset.x));
+  const nextY = Math.max(frameHalf, Math.min(Math.max(frameHalf, height - frameHalf), asset.y));
+  const hitX = nextX !== asset.x;
+  const hitY = nextY !== asset.y;
+  asset.x = nextX;
+  asset.y = nextY;
+  return { hitX, hitY };
+}
+
+function getDirectionVector(directionDegrees) {
+  // Match Scratch-style directions: 90 = right, 0 = up, -90 = left, 180 = down.
+  const radians = ((90 - directionDegrees) * Math.PI) / 180;
+  return {
+    x: Math.cos(radians),
+    y: -Math.sin(radians),
+  };
+}
+
+function getHorizontalDirection(asset) {
+  if (asset.rotationStyle === 'left-right') return asset.facing || 1;
+  const direction = getDirectionVector(asset.rotation || 0);
+  return direction.x >= 0 ? 1 : -1;
+}
+
 function createAssetState(instance) {
   return {
     key: instance.key,
@@ -210,14 +237,15 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
     if (!asset) return;
     switch (instruction.type) {
       case 'moveForward': {
-        const directionMultiplier = asset.rotationStyle === 'left-right' ? (asset.facing || 1) : 1;
-        const amount = instruction.amount * directionMultiplier;
-        const radians = (asset.rotation * Math.PI) / 180;
-        asset.x += Math.cos(radians) * amount;
-        asset.y += Math.sin(radians) * amount;
+        const amount = instruction.amount * getHorizontalDirection(asset);
+        asset.x += amount;
         asset.facing = amount >= 0 ? 1 : -1;
         asset.lastSpeed = Math.abs(amount);
-        clampPosition(asset, state.stageSize);
+        const { hitX } = clampPositionWithHit(asset, state.stageSize);
+        if (hitX) {
+          asset.rotationStyle = 'left-right';
+          asset.facing *= -1;
+        }
         break;
       }
       case 'turn':
@@ -263,6 +291,9 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
         break;
       case 'say':
         log(`${asset.label} says "${instruction.text}"`);
+        break;
+      case 'setVisibility':
+        asset.invisibility = Math.max(0, Math.min(100, instruction.invisibility ?? 0));
         break;
       case 'changeScore':
         state.variables.score += instruction.amount;

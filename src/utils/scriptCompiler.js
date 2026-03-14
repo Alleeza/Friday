@@ -29,6 +29,10 @@ function readBlockLabel(block) {
     .trim();
 }
 
+function isEventBlock(block) {
+  return normalizeSymbol(readTokenValue(block?.parts?.[0])) === 'when';
+}
+
 function normalizeSymbol(symbol) {
   return (symbol || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -135,26 +139,45 @@ function compileInstruction(block, errors, path) {
 
 function compileScript(blocks) {
   const errors = [];
-  const eventBlock = Array.isArray(blocks)
-    ? blocks.find((block) => readTokenValue(block.parts?.[0]).toLowerCase() === 'when')
-    : null;
+  const eventBlocks = Array.isArray(blocks) ? blocks.filter((block) => isEventBlock(block)) : [];
 
-  if (!eventBlock) {
+  if (!eventBlocks.length) {
     return { program: null, errors: ['Missing a "When ..." event block at the top of the script.'] };
   }
+  const sections = [];
+  let currentSection = null;
+  let blockCounter = 0;
 
-  const eventName = readTokenValue(eventBlock.parts?.[1]).toLowerCase();
-  if (!EVENT_LABELS.has(eventName)) errors.push(`Unsupported event "${eventName || 'unknown'}".`);
+  (blocks || []).forEach((block) => {
+    if (isEventBlock(block)) {
+      currentSection = {
+        eventName: normalizeSymbol(readTokenValue(block.parts?.[1])),
+        instructions: [],
+      };
+      sections.push(currentSection);
+      return;
+    }
 
-  const instructions = (blocks || [])
-    .filter((block) => block.id !== eventBlock.id)
-    .map((block, idx) => compileInstruction(block, errors, `Block ${idx + 1}`))
-    .filter(Boolean);
+    blockCounter += 1;
+    if (!currentSection) {
+      errors.push(`Block ${blockCounter}: Add a "When ..." event before "${readBlockLabel(block)}".`);
+      return;
+    }
 
-  if (!instructions.length) errors.push('Add at least one action or loop after the event block.');
+    const instruction = compileInstruction(block, errors, `Block ${blockCounter}`);
+    if (instruction) currentSection.instructions.push(instruction);
+  });
+
+  const events = {};
+  sections.forEach((section) => {
+    if (!EVENT_LABELS.has(section.eventName)) errors.push(`Unsupported event "${section.eventName || 'unknown'}".`);
+    if (!section.instructions.length) errors.push(`Add at least one action or loop after "When ${section.eventName}".`);
+    if (!events[section.eventName]) events[section.eventName] = [];
+    events[section.eventName].push(...section.instructions);
+  });
 
   return {
-    program: errors.length ? null : { events: { [eventName]: instructions } },
+    program: errors.length ? null : { events },
     errors,
   };
 }

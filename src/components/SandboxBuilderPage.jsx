@@ -19,6 +19,10 @@ const eventOptions = [
   'is touching',
   'is not touching',
 ];
+const eventDropdownOptions = [
+  { value: '', label: 'add event' },
+  ...eventOptions.map((eventName) => ({ value: eventName, label: eventName })),
+];
 const defaultEvent = 'game starts';
 
 const palette = {
@@ -72,7 +76,28 @@ const palette = {
 };
 
 function createSeedScript(eventName = defaultEvent) {
-  return [{ id: 'event-start', type: 'block', parts: ['When', eventName], tone: 'events' }];
+  return [createEventBlock(eventName)];
+}
+
+function createEventToken(eventName = '') {
+  return {
+    type: 'dropdown',
+    value: eventName,
+    options: eventDropdownOptions,
+  };
+}
+
+function createEventBlock(eventName = defaultEvent) {
+  return {
+    id: `event-start-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type: 'block',
+    parts: ['When', createEventToken(eventName)],
+    tone: 'events',
+  };
+}
+
+function isEventBlock(block) {
+  return String(block?.parts?.[0] || '').toLowerCase() === 'when';
 }
 
 function blockText(parts = []) {
@@ -84,6 +109,11 @@ function blockText(parts = []) {
     }
     return part.label || part.value || 'value';
   }).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function getEventValue(block) {
+  const token = block?.parts?.[1];
+  return typeof token === 'string' ? token : token?.value || '';
 }
 
 function cloneScripts(scriptsByInstanceKey) {
@@ -126,6 +156,8 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const [historyStack, setHistoryStack] = useState([]);
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
+  const [pendingEventValue, setPendingEventValue] = useState('');
+  const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
   const [messages, setMessages] = useState([
     { role: 'ai', text: 'Build one object at a time. Each placed object gets its own script.' },
@@ -189,7 +221,26 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const selectedErrors = compileErrorsByInstance[editorInstanceKey] || [];
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
   const selectedInstance = sceneInstances.find((instance) => instance.key === editorInstanceKey) || null;
-  const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || defaultEvent;
+  const eventSections = useMemo(() => {
+    const sections = [];
+    let currentSection = null;
+    selectedScriptBlocks.forEach((block) => {
+      if (isEventBlock(block)) {
+        currentSection = { eventBlock: block, blocks: [] };
+        sections.push(currentSection);
+        return;
+      }
+      if (!currentSection) {
+        currentSection = { eventBlock: createEventBlock(defaultEvent), blocks: [] };
+        sections.push(currentSection);
+      }
+      currentSection.blocks.push(block);
+    });
+    return sections;
+  }, [selectedScriptBlocks]);
+  const primaryEventBlock = eventSections[0]?.eventBlock || null;
+  const activeEventSection = eventSections.find((section) => section.eventBlock.id === activeEventBlockId) || eventSections[0] || null;
+  const selectedEvent = getEventValue(activeEventSection?.eventBlock || primaryEventBlock);
   const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
   const assetOptions = useMemo(() => {
     const dynamic = sceneInstances.map((instance) => ({
@@ -208,15 +259,28 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   };
 
   const hydrateParts = (parts = []) => parts.map((part) => hydratePart(part));
+
+  useEffect(() => {
+    if (!eventSections.length) {
+      setActiveEventBlockId(null);
+      return;
+    }
+    if (!activeEventBlockId || !eventSections.some((section) => section.eventBlock.id === activeEventBlockId)) {
+      setActiveEventBlockId(eventSections[0].eventBlock.id);
+    }
+  }, [activeEventBlockId, eventSections]);
+
   const selectInstance = (instanceKey, openEditor = false) => {
     setFocusedInstanceKey(instanceKey || null);
     if (mode === 'play') return;
     if (openEditor) {
       setEditorInstanceKey(instanceKey || null);
       setEditorStage('event');
+      setActiveEventBlockId(null);
     } else if (!instanceKey) {
       setEditorInstanceKey(null);
       setEditorStage('event');
+      setActiveEventBlockId(null);
     }
   };
 
@@ -224,6 +288,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     setFocusedInstanceKey(null);
     setEditorInstanceKey(null);
     setEditorStage('event');
+    setActiveEventBlockId(null);
   };
 
   useEffect(() => {
@@ -263,12 +328,20 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
   const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
 
-  const addTopLevel = (template) => {
+  const addTopLevel = (template, targetEventBlockId = null) => {
     if (!editorInstanceKey || mode === 'play') return;
+    if (isEventBlock(template)) return;
     pushHistorySnapshot();
     const instance = makeBlockFromTemplate(template);
     const text = blockText(template.parts);
-    updateSelectedScript((blocks) => [...blocks, instance]);
+    updateSelectedScript((blocks) => {
+      const eventBlockId = targetEventBlockId || activeEventBlockId || primaryEventBlock?.id;
+      if (!eventBlockId) return [...blocks, instance];
+      const insertIndex = getSectionEndIndex(blocks, eventBlockId);
+      const next = [...blocks];
+      next.splice(insertIndex, 0, instance);
+      return next;
+    });
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
     pushAiMessage(`Added "${text}" to ${selectedLabel}.`);
@@ -333,11 +406,44 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     }));
   };
 
-  const handleEventChange = (nextEvent) => {
+  const handleEventChange = (nextEvent, targetEventBlockId = null) => {
     if (!editorInstanceKey || mode === 'play') return;
     pushHistorySnapshot();
-    updateSelectedScript((blocks) => blocks.map((block) => block.id === 'event-start' ? { ...block, parts: ['When', nextEvent] } : block));
-    setSelectedBlock(`When ${nextEvent}`);
+    let updated = false;
+    updateSelectedScript((blocks) => blocks.map((block) => {
+      if (!isEventBlock(block)) return block;
+      if (targetEventBlockId ? block.id !== targetEventBlockId : block.id !== activeEventBlockId || updated) return block;
+      updated = true;
+      return { ...block, parts: ['When', createEventToken(nextEvent)] };
+    }));
+    setSelectedBlock(`When ${nextEvent || 'add event'}`);
+  };
+
+  const getSectionEndIndex = (blocks, eventBlockId) => {
+    const startIndex = blocks.findIndex((block) => block.id === eventBlockId);
+    if (startIndex === -1) return blocks.length;
+    for (let index = startIndex + 1; index < blocks.length; index += 1) {
+      if (isEventBlock(blocks[index])) return index;
+    }
+    return blocks.length;
+  };
+
+  const appendEventBlock = (eventName = '') => {
+    if (!editorInstanceKey || mode === 'play') return;
+    pushHistorySnapshot();
+    const nextEventBlock = createEventBlock(eventName);
+    updateSelectedScript((blocks) => [...blocks, nextEventBlock]);
+    setActiveEventBlockId(nextEventBlock.id);
+    setSelectedBlock(`When ${eventName || 'add event'}`);
+    setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+    setEditorStage('expanded');
+  };
+
+  const handleAppendEventSelection = (nextEvent) => {
+    setPendingEventValue(nextEvent);
+    if (!nextEvent) return;
+    appendEventBlock(nextEvent);
+    setPendingEventValue('');
   };
 
   const removeTopLevelBlock = (blockId) => {
@@ -457,7 +563,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     pushHistorySnapshot();
     updateSelectedScript((blocks) => {
       const { nextBlocks, movedBlock } = extractDraggedBlock(blocks, payload);
-      if (!movedBlock) return blocks;
+      if (!movedBlock || isEventBlock(movedBlock)) return blocks;
       const insertIndex = targetIndex == null ? nextBlocks.length : Math.max(0, Math.min(targetIndex, nextBlocks.length));
       const updated = [...nextBlocks];
       updated.splice(insertIndex, 0, movedBlock);
@@ -726,7 +832,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
         onDragOver={(e) => {
           if (mode === 'play') return;
           const parsed = parseScriptDragPayload(e);
-          if (!parsed || block.id === 'event-start') return;
+          if (!parsed || isEventBlock(block)) return;
           e.preventDefault();
           if (trashActive) setTrashActive(false);
           setDragOverTopBlockId(block.id);
@@ -735,7 +841,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
         onDrop={(e) => {
           if (mode === 'play') return;
           const parsed = parseScriptDragPayload(e);
-          if (!parsed || block.id === 'event-start') return;
+          if (!parsed || isEventBlock(block)) return;
           e.preventDefault();
           const targetIndex = selectedScriptBlocks.findIndex((candidate) => candidate.id === block.id);
           if (targetIndex !== -1) insertDraggedTopLevelAt(parsed, targetIndex);
@@ -750,15 +856,164 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           assetOptions={assetOptions}
           editable={mode !== 'play'}
           onPartChange={(idx, value) => updateTopLevelPart(block.id, idx, value)}
-          selected={block.id !== 'event-start' && selectedBlock === blockText(block.parts)}
+          selected={!isEventBlock(block) && selectedBlock === blockText(block.parts)}
           onClick={() => setSelectedBlock(blockText(block.parts))}
-          draggable={mode !== 'play' && block.id !== 'event-start'}
-          onDragStart={block.id === 'event-start' ? undefined : (e) => handleScriptBlockDragStart(e, { kind: 'script-block', scope: 'top', id: block.id })}
-          onDragEnd={block.id === 'event-start' ? undefined : handleScriptBlockDragEnd}
+          draggable={mode !== 'play' && !isEventBlock(block)}
+          onDragStart={!isEventBlock(block) ? (e) => handleScriptBlockDragStart(e, { kind: 'script-block', scope: 'top', id: block.id }) : undefined}
+          onDragEnd={!isEventBlock(block) ? handleScriptBlockDragEnd : undefined}
         />
       </div>
     );
   };
+
+  const renderSectionBody = (eventBlockId, sectionBlocks, stretch = false) => {
+    const visibleBlocks = sectionBlocks.filter((block) => !isEventBlock(block));
+
+    return (
+      <div
+        className={`flex flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${
+          stretch ? 'h-full min-h-full' : 'min-h-[220px]'
+        } ${dragOverTopBlockId === `section-end:${eventBlockId}` ? 'bg-sky-100/70' : 'bg-slate-50/65'}`}
+        onDragOver={(e) => {
+          if (mode === 'play') return;
+          const template = parseDragTemplate(e);
+          const parsed = parseScriptDragPayload(e);
+          if (!template && !parsed) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (trashActive) setTrashActive(false);
+          setDragOverTopBlockId(`section-end:${eventBlockId}`);
+        }}
+        onDragLeave={() => dragOverTopBlockId === `section-end:${eventBlockId}` && setDragOverTopBlockId(null)}
+        onDrop={(e) => {
+          if (mode === 'play') return;
+          e.preventDefault();
+          e.stopPropagation();
+          const template = parseDragTemplate(e);
+          const parsed = parseScriptDragPayload(e);
+          if (template) addTopLevel(template, eventBlockId);
+          else if (parsed) insertDraggedTopLevelAt(parsed, getSectionEndIndex(selectedScriptBlocks, eventBlockId));
+          setDragOverTopBlockId(null);
+        }}
+      >
+        {visibleBlocks.length ? (
+          <div className="min-h-0 space-y-1">
+            {visibleBlocks.map((block) => (
+              <div key={block.id} className="space-y-0">
+                {renderScriptBlock(block)}
+                <div
+                  className={`h-1.5 rounded-full border-2 border-dashed transition ${
+                    dragOverTopBlockId === `${block.id}:after`
+                      ? 'border-sky-300 bg-sky-100/80'
+                      : 'border-transparent'
+                  }`}
+                  onDragOver={(e) => {
+                    if (mode === 'play') return;
+                    const parsed = parseScriptDragPayload(e);
+                    if (!parsed || parsed.id === block.id) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (trashActive) setTrashActive(false);
+                    setDragOverTopBlockId(`${block.id}:after`);
+                  }}
+                  onDragLeave={() => dragOverTopBlockId === `${block.id}:after` && setDragOverTopBlockId(null)}
+                  onDrop={(e) => {
+                    if (mode === 'play') return;
+                    const parsed = parseScriptDragPayload(e);
+                    if (!parsed || parsed.id === block.id) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const absoluteIndex = selectedScriptBlocks.findIndex((candidate) => candidate.id === block.id);
+                    insertDraggedTopLevelAt(parsed, absoluteIndex + 1);
+                    setDragOverTopBlockId(null);
+                  }}
+                />
+              </div>
+            ))}
+            <div className="h-0.5" />
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-slate-400">
+              <div className="grid h-16 w-16 place-items-center rounded-full border border-[#d8e9f8] bg-white/80 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                <span className="text-4xl font-semibold leading-none text-slate-300">+</span>
+              </div>
+              <p className="text-sm font-bold tracking-[0.02em] text-slate-400">Drop a block into this script area</p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderEventSelectorPill = ({ eventBlock }, active = false) => {
+    const eventValue = getEventValue(eventBlock);
+    return (
+      <div
+        key={eventBlock.id}
+        className={`flex min-h-[64px] items-center gap-3 rounded-[20px] border-b-4 border-[#b72d63] bg-[#d22d72] px-4 text-white shadow-[0_10px_0_rgba(135,27,72,0.22)] transition ${
+          active ? 'ring-4 ring-[#f6bfd1]/70' : ''
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveEventBlockId(eventBlock.id)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
+          <div className="relative min-w-0 flex-1 max-w-[280px]">
+            <select
+              value={eventValue}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                setActiveEventBlockId(eventBlock.id);
+                handleEventChange(e.target.value, eventBlock.id);
+              }}
+              className="h-11 w-full appearance-none rounded-full border-2 border-white/85 bg-white pl-4 pr-11 text-[17px] font-extrabold text-slate-800 outline-none"
+            >
+              {eventOptions.map((eventName) => (
+                <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
+                  {eventName}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[18px] leading-none text-slate-500">▾</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveEventBlockId(eventBlock.id);
+            setEditorStage('expanded');
+          }}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#d22d72] shadow-[0_4px_0_rgba(135,27,72,0.18)]"
+          aria-label={`Open ${eventValue || 'new'} event`}
+        >
+          <Pencil size={18} strokeWidth={3} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderAddEventPill = () => (
+    <div className="flex min-h-[64px] items-center gap-3 rounded-[20px] border-b-4 border-[#d06f8f] bg-[#ea8ead] px-4 text-white shadow-[0_10px_0_rgba(208,111,143,0.22)]">
+      <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
+      <div className="relative min-w-[220px] max-w-[240px]">
+        <select
+          value={pendingEventValue}
+          onChange={(e) => handleAppendEventSelection(e.target.value)}
+          className="h-9 w-full appearance-none rounded-full border-2 border-white/80 bg-white pl-4 pr-10 text-[17px] font-extrabold text-slate-700 outline-none"
+        >
+          {eventDropdownOptions.map((eventOption) => (
+            <option key={`event-pill-${eventOption.value || 'empty'}`} value={eventOption.value}>
+              {eventOption.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[18px] leading-none text-slate-500">▾</span>
+      </div>
+    </div>
+  );
 
   return (
     <main className="w-full space-y-4 px-4 py-4 lg:px-6">
@@ -788,33 +1043,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           />
 
           {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
-            <div
-              ref={quickEditorRef}
-              className="absolute z-30 inline-flex max-w-[360px] items-center gap-2 rounded-[22px] border-b-4 border-[#b72d63] bg-[#d22d72] pl-4 pr-4 py-2.5 text-white shadow-[0_8px_18px_rgba(183,45,99,0.26)]"
-              style={quickEditorPosition}
-            >
-              <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
-              <select
-                value={selectedEvent}
-                onChange={(e) => handleEventChange(e.target.value)}
-                className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
-              >
-                {eventOptions.map((eventName) => (
-                  <option key={eventName} value={eventName}>
-                    {eventName}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setEditorStage('expanded')}
-                className="grid h-10 w-10 place-items-center rounded-[18px] bg-white/22 shadow-[inset_0_-2px_0_rgba(255,255,255,0.08)]"
-                aria-label="Open block editor"
-              >
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-[#d22d72]">
-                  <Pencil size={18} strokeWidth={3} />
-                </span>
-              </button>
+            <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
+              {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
+              {renderAddEventPill()}
             </div>
           ) : null}
 
@@ -830,18 +1061,21 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                   </div>
                   <div className="flex h-14 min-w-0 flex-1 items-center gap-3 rounded-[24px] border border-[#e5e7eb] bg-[#fffef9] px-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
                     <span className="text-[20px] font-black leading-none tracking-[-0.01em] text-slate-800">When</span>
-                    <select
-                      value={selectedEvent}
-                      onChange={(e) => handleEventChange(e.target.value)}
-                      disabled={!editorInstanceKey || mode === 'play'}
-                      className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
-                    >
-                      {eventOptions.map((eventName) => (
-                        <option key={eventName} value={eventName} className="bg-white text-slate-800">
-                          {eventName}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative min-w-[220px] max-w-[260px]">
+                      <select
+                        value={selectedEvent}
+                        onChange={(e) => handleEventChange(e.target.value, activeEventSection?.eventBlock.id)}
+                        disabled={!activeEventSection || mode === 'play'}
+                        className="h-9 w-full appearance-none rounded-full border-2 border-white/80 bg-[#d22d72] pl-4 pr-10 text-[17px] font-extrabold text-white outline-none disabled:opacity-40"
+                      >
+                        {eventOptions.map((eventName) => (
+                          <option key={eventName} value={eventName} className="bg-white text-slate-800">
+                            {eventName}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[18px] leading-none text-white/90">▾</span>
+                    </div>
                   </div>
                   <div className="ml-auto flex items-center gap-3">
                     <button
@@ -932,97 +1166,13 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                       <div className="mb-4 px-1">
                         <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Script</p>
                       </div>
-                      <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-hidden">
-                        {selectedScriptBlocks.filter((block) => block.id === 'event-start').map((block) => (
-                          <div key={block.id}>{renderScriptBlock(block)}</div>
-                        ))}
-                        <div
-                          className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${dragOverTopBlockId === 'script-end' ? 'bg-sky-100/70' : 'bg-slate-50/65'}`}
-                          onDragOver={(e) => {
-                            if (mode === 'play') return;
-                            const parsed = parseScriptDragPayload(e);
-                            if (!parsed) return;
-                            e.preventDefault();
-                            if (trashActive) setTrashActive(false);
-                            setDragOverTopBlockId('script-end');
-                          }}
-                          onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
-                          onDrop={(e) => {
-                            if (mode === 'play') return;
-                            const parsed = parseScriptDragPayload(e);
-                            if (!parsed) return;
-                            e.preventDefault();
-                            insertDraggedTopLevelAt(parsed);
-                            setDragOverTopBlockId(null);
-                          }}
-                        >
-                          {selectedScriptBlocks.filter((block) => block.id !== 'event-start').length ? (
-                            <div className="min-h-0 space-y-1">
-                              {selectedScriptBlocks.filter((block) => block.id !== 'event-start').map((block, index, blocks) => (
-                                <div key={block.id} className="space-y-0">
-                                  {renderScriptBlock(block)}
-                                  <div
-                                    className={`h-1.5 rounded-full border-2 border-dashed transition ${
-                                      dragOverTopBlockId === `${block.id}:after`
-                                        ? 'border-sky-300 bg-sky-100/80'
-                                        : 'border-transparent'
-                                    }`}
-                                    onDragOver={(e) => {
-                                      if (mode === 'play') return;
-                                      const parsed = parseScriptDragPayload(e);
-                                      if (!parsed || parsed.id === block.id) return;
-                                      e.preventDefault();
-                                      if (trashActive) setTrashActive(false);
-                                      setDragOverTopBlockId(`${block.id}:after`);
-                                    }}
-                                    onDragLeave={() => dragOverTopBlockId === `${block.id}:after` && setDragOverTopBlockId(null)}
-                                    onDrop={(e) => {
-                                      if (mode === 'play') return;
-                                      const parsed = parseScriptDragPayload(e);
-                                      if (!parsed || parsed.id === block.id) return;
-                                      e.preventDefault();
-                                      insertDraggedTopLevelAt(parsed, index + 1);
-                                      setDragOverTopBlockId(null);
-                                    }}
-                                  />
-                                </div>
-                              ))}
-                              <div
-                                className={`h-2 rounded-full border-2 border-dashed transition ${
-                                  dragOverTopBlockId === 'script-end'
-                                    ? 'border-sky-300 bg-sky-100/80'
-                                    : 'border-transparent'
-                                }`}
-                                onDragOver={(e) => {
-                                  if (mode === 'play') return;
-                                  const parsed = parseScriptDragPayload(e);
-                                  if (!parsed) return;
-                                  e.preventDefault();
-                                  if (trashActive) setTrashActive(false);
-                                  setDragOverTopBlockId('script-end');
-                                }}
-                                onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
-                                onDrop={(e) => {
-                                  if (mode === 'play') return;
-                                  const parsed = parseScriptDragPayload(e);
-                                  if (!parsed) return;
-                                  e.preventDefault();
-                                  insertDraggedTopLevelAt(parsed);
-                                  setDragOverTopBlockId(null);
-                                }}
-                              />
-                              <div className="h-0.5" />
-                            </div>
-                          ) : (
-                            <div className="flex flex-1 items-center justify-center">
-                              <div className="flex flex-col items-center gap-3 text-slate-400">
-                                <div className="grid h-16 w-16 place-items-center rounded-full border border-[#d8e9f8] bg-white/80 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
-                                  <span className="text-4xl font-semibold leading-none text-slate-300">+</span>
-                                </div>
-                                <p className="text-sm font-bold tracking-[0.02em] text-slate-400">Drop a block into this script area</p>
-                              </div>
-                            </div>
-                          )}
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                          <div className="flex min-h-full flex-col">
+                            {activeEventSection
+                              ? renderSectionBody(activeEventSection.eventBlock.id, activeEventSection.blocks, true)
+                              : null}
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -225,14 +225,18 @@ function BuilderTopNav({ onCreateNewGame }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3.5 lg:px-6">
-        <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onCreateNewGame}
+          className="flex items-center gap-3 rounded-2xl transition hover:opacity-85"
+        >
           <img
             src={questyImage}
             alt="Questy avatar"
             className="h-12 w-auto rounded-xl object-contain"
           />
           <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
-        </div>
+        </button>
 
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
@@ -1309,7 +1313,7 @@ export default function SandboxBuilderPage({
     return (
       <div
         key={eventBlock.id}
-        className={`inline-flex max-w-[500px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-4 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
+        className={`inline-flex w-fit max-w-[540px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-5 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
           active ? 'ring-4 ring-[#f6bfd1]/70' : ''
         }`}
         draggable={mode !== 'play'}
@@ -1346,7 +1350,7 @@ export default function SandboxBuilderPage({
                   setActiveEventBlockId(eventBlock.id);
                   handleEventChange(e.target.value, eventBlock.id);
                 }}
-                className="h-10 w-[88px] min-w-0 appearance-none bg-transparent px-3 text-center text-[16px] font-black text-white outline-none"
+                className="h-10 w-[98px] min-w-0 appearance-none bg-transparent px-3 text-center text-[16px] font-black text-white outline-none"
               >
                 {eventOptions.map((eventName) => (
                   <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
@@ -1361,7 +1365,7 @@ export default function SandboxBuilderPage({
                   setActiveEventBlockId(eventBlock.id);
                   handleEventRightChange(e.target.value, eventBlock.id);
                 }}
-                className="h-10 w-[126px] min-w-0 rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
+                className="h-10 w-[136px] min-w-0 rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
               >
                 {collisionTargetOptions.map((option) => (
                   <option key={`${eventBlock.id}-right-${option.value}`} value={option.value}>
@@ -1462,7 +1466,7 @@ export default function SandboxBuilderPage({
   };
 
   const renderAddEventPill = () => (
-    <div className="flex min-h-[64px] items-center gap-3 rounded-[20px] border-b-4 border-[#d06f8f] bg-[#ea8ead] px-4 text-white shadow-[0_10px_0_rgba(208,111,143,0.22)]">
+    <div className="flex w-fit min-h-[64px] items-center gap-3 rounded-[20px] border-b-4 border-[#d06f8f] bg-[#ea8ead] px-4 text-white shadow-[0_10px_0_rgba(208,111,143,0.22)]">
       <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
       <div className="relative min-w-[220px] max-w-[240px]">
         <select
@@ -1518,6 +1522,10 @@ export default function SandboxBuilderPage({
               if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
             }}
           />
+
+          {draggingScriptBlock && mode !== 'play' ? (
+            <div className="pointer-events-none absolute inset-0 z-20 bg-slate-950/18 transition-opacity duration-150" />
+          ) : null}
 
           {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
             <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>

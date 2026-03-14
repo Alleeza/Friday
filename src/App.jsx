@@ -9,7 +9,7 @@ import {
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
 import SharedGamePage from './components/SharedGamePage';
-import { createBunnyCarrotExampleProject } from './data/exampleProjects';
+import { createBunnyCarrotExampleProject, createCrossyRoadExampleProject } from './data/exampleProjects';
 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
 const emptyProjectState = {
@@ -155,8 +155,11 @@ export default function App() {
     setSaveState('idle');
   }, []);
 
-  const handleLaunchExample = useCallback(() => {
-    handleSetupComplete(createBunnyCarrotExampleProject());
+  const handleLaunchExample = useCallback((exampleId = 'bunny') => {
+    const project = exampleId === 'crossy'
+      ? createCrossyRoadExampleProject()
+      : createBunnyCarrotExampleProject();
+    handleSetupComplete(project);
   }, [handleSetupComplete]);
 
   const handleCreateNewGame = useCallback(() => {
@@ -245,7 +248,7 @@ export default function App() {
             Storage offline: {storageError}
           </div>
         ) : null}
-        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} />
+        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} onGoHome={handleCreateNewGame} />
       </>
     );
   }

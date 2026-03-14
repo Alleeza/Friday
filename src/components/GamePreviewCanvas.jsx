@@ -64,6 +64,7 @@ export default function GamePreviewCanvas({
   runtimeSnapshot,
   initialSceneState,
   availableSpriteAssets = sandboxAssets,
+  prioritySpriteAssetIds = [],
   selectedInstanceKey,
   onSceneChange,
   onSelectedInstanceChange,
@@ -112,11 +113,48 @@ export default function GamePreviewCanvas({
   const [trashHover, setTrashHover] = useState(false);
   const isEditMode = mode === 'edit';
   const isPlayMode = mode === 'play';
+  const prioritySpriteAssetIdSet = useMemo(
+    () => new Set(prioritySpriteAssetIds),
+    [prioritySpriteAssetIds]
+  );
 
   const trayAssets = useMemo(
     () => (trayTab === 'backdrops' ? backdropAssets : availableSpriteAssets),
     [availableSpriteAssets, trayTab]
   );
+  const spriteAssetSections = useMemo(() => {
+    const neededAssets = [];
+    const extraAssets = [];
+
+    availableSpriteAssets.forEach((asset) => {
+      if (prioritySpriteAssetIdSet.has(asset.id)) {
+        neededAssets.push(asset);
+        return;
+      }
+      extraAssets.push(asset);
+    });
+
+    if (!neededAssets.length) {
+      return [{
+        id: 'all-assets',
+        title: 'Emoji Assets',
+        assets: availableSpriteAssets,
+      }];
+    }
+
+    return [
+      {
+        id: 'needed-assets',
+        title: 'Needed For This Project',
+        assets: neededAssets,
+      },
+      {
+        id: 'extra-assets',
+        title: 'Extra Emoji Assets',
+        assets: extraAssets,
+      },
+    ].filter((section) => section.assets.length);
+  }, [availableSpriteAssets, prioritySpriteAssetIdSet]);
   const selectedPlacedAsset = placedAssets.find((asset) => asset.key === selectedPlacedAssetKey) || null;
   const selectedBackdrop = backdropState
     ? backdropAssets.find((asset) => asset.id === backdropState.id) || null
@@ -197,6 +235,19 @@ export default function GamePreviewCanvas({
     }, canvasRef.current?.getBoundingClientRect()));
     updateSelection(null);
   };
+
+  const renderSpriteAssetCard = (asset) => (
+    <div
+      key={asset.id}
+      draggable={(asset.unlockXp || 0) <= currentXp}
+      onDragStart={(e) => onAssetDragStart(e, asset, 'sprite')}
+      className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`}
+      title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}
+    >
+      <div className="text-3xl">{asset.emoji}</div>
+      <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
+    </div>
+  );
 
   const onCanvasDrop = (e) => {
     if (!isEditMode) return;
@@ -669,12 +720,21 @@ export default function GamePreviewCanvas({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
-              {trayAssets.map((asset) => (
-                <div key={asset.id} draggable={(asset.unlockXp || 0) <= currentXp} onDragStart={(e) => onAssetDragStart(e, asset, 'sprite')} className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`} title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}>
-                  <div className="text-3xl">{asset.emoji}</div>
-                  <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
-                </div>
+            <div className="max-h-[360px] space-y-5 overflow-y-auto pr-1">
+              {spriteAssetSections.map((section) => (
+                <section key={section.id} className="rounded-[28px] border border-[#e2e8f0] bg-[#f8fafc] p-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#64748b]">{section.title}</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold uppercase tracking-[0.08em] text-[#0d76ab] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
+                      {section.assets.length} assets
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
+                    {section.assets.map(renderSpriteAssetCard)}
+                  </div>
+                </section>
               ))}
             </div>
           )}

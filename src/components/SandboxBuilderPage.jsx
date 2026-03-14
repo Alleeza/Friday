@@ -133,6 +133,21 @@ function cloneScripts(scriptsByInstanceKey) {
   return JSON.parse(JSON.stringify(scriptsByInstanceKey));
 }
 
+function readBuilderDragPayload(dataTransfer) {
+  if (!dataTransfer) return null;
+  const types = ['application/json', 'text/plain'];
+  for (const type of types) {
+    try {
+      const raw = dataTransfer.getData(type);
+      if (!raw) continue;
+      return JSON.parse(raw);
+    } catch {
+      // Ignore malformed payloads and keep checking fallbacks.
+    }
+  }
+  return null;
+}
+
 function getInstanceDisplayLabel(instances, instanceKey) {
   const instance = instances.find((item) => item.key === instanceKey);
   if (!instance) return 'Select an object';
@@ -147,28 +162,56 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
   return `For "${selectedBlock}", think event -> loop -> action.`;
 }
 
-export default function SandboxBuilderPage({ initialSetupData = null, projectPlan = null }) {
+function normalizeSceneState(scene) {
+  return {
+    placedAssets: Array.isArray(scene?.placedAssets) ? scene.placedAssets.map((asset) => ({ ...asset })) : [],
+    selectedPlacedAssetKey: scene?.selectedPlacedAssetKey || null,
+    backdropState: scene?.backdropState ? { ...scene.backdropState } : null,
+  };
+}
+
+function normalizeScriptsByInstance(scriptsByInstanceKey) {
+  if (!scriptsByInstanceKey || typeof scriptsByInstanceKey !== 'object') return {};
+  return cloneScripts(scriptsByInstanceKey);
+}
+
+export default function SandboxBuilderPage({
+  initialSetupData = null,
+  initialProjectState = null,
+  onProjectStateChange,
+  onSaveProject,
+  saveState = 'idle',
+  projectPlan = null,
+}) {
+  const lastPublishedProjectRef = useRef('');
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
   const quickEditorRef = useRef(null);
   const initialSceneInstances = useMemo(
-    () => cloneValue(initialSetupData?.initialScene, []),
-    [initialSetupData]
+    () => {
+      const persistedScene = normalizeSceneState(initialProjectState?.scene).placedAssets;
+      return persistedScene.length ? persistedScene : cloneValue(initialSetupData?.initialScene, []);
+    },
+    [initialProjectState, initialSetupData]
   );
+  const [persistedSceneState, setPersistedSceneState] = useState(() => normalizeSceneState(initialProjectState?.scene));
   const [sceneInstances, setSceneInstances] = useState(() => initialSceneInstances);
-  const [focusedInstanceKey, setFocusedInstanceKey] = useState(null);
+  const [focusedInstanceKey, setFocusedInstanceKey] = useState(() => initialProjectState?.scene?.selectedPlacedAssetKey || null);
   const [editorInstanceKey, setEditorInstanceKey] = useState(null);
   const [editorStage, setEditorStage] = useState('event');
-  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => cloneValue(initialSetupData?.initialScripts, {}));
+  const [scriptsByInstanceKey, setScriptsByInstanceKey] = useState(() => {
+    const persistedScripts = normalizeScriptsByInstance(initialProjectState?.scriptsByInstanceKey);
+    return Object.keys(persistedScripts).length ? persistedScripts : cloneValue(initialSetupData?.initialScripts, {});
+  });
   const [selectedBlock, setSelectedBlock] = useState(`When ${DEFAULT_EVENT}`);
   const [selectedCategory, setSelectedCategory] = useState('Movement');
   const [dragOverLoopId, setDragOverLoopId] = useState(null);
   const [dragOverTopBlockId, setDragOverTopBlockId] = useState(null);
   const [dragOverChildKey, setDragOverChildKey] = useState(null);
   const [draggingScriptBlock, setDraggingScriptBlock] = useState(null);
-  const [draggingPaletteBlock, setDraggingPaletteBlock] = useState(false);
+  const [draggingPaletteTemplate, setDraggingPaletteTemplate] = useState(null);
   const [trashActive, setTrashActive] = useState(false);
   const [historyStack, setHistoryStack] = useState([]);
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
@@ -242,11 +285,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
   }, []);
+
   useEffect(() => {
     if (mode === 'play') return undefined;
     const clearDragUi = () => {
       setDraggingScriptBlock(null);
-      setDraggingPaletteBlock(false);
+      setDraggingPaletteTemplate(null);
       setTrashActive(false);
       setDragOverTopBlockId(null);
       setDragOverChildKey(null);
@@ -263,6 +307,19 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     () => Object.keys(BLOCK_PALETTE).filter((category) => !hiddenPaletteCategories.has(String(category).toLowerCase())),
     [],
   );
+
+  useEffect(() => {
+    const nextProjectState = {
+      setupData: initialSetupData,
+      scene: normalizeSceneState(persistedSceneState),
+      scriptsByInstanceKey: normalizeScriptsByInstance(scriptsByInstanceKey),
+    };
+    const snapshot = JSON.stringify(nextProjectState);
+    if (snapshot === lastPublishedProjectRef.current) return;
+    lastPublishedProjectRef.current = snapshot;
+    onProjectStateChange?.(nextProjectState);
+  }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
+
   const paletteBlocks = useMemo(() => {
     if (availableCategoryNames.includes(selectedCategory)) return BLOCK_PALETTE[selectedCategory] || [];
     return BLOCK_PALETTE[availableCategoryNames[0]] || [];
@@ -274,6 +331,8 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   const selectedEventRaw = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1];
   const selectedEvent = readTokenValue(selectedEventRaw) || defaultEvent;
   const isOverValidScriptDropTarget = Boolean(dragOverTopBlockId || dragOverLoopId || dragOverChildKey);
+  const isDraggingPaletteBlock = Boolean(draggingPaletteTemplate);
+  const isDraggingScriptBlock = Boolean(draggingScriptBlock);
   const assetOptions = useMemo(() => {
     const dynamic = sceneInstances.map((instance) => ({
       value: instance.key,
@@ -396,7 +455,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
   const handleDragStart = (e, template) => {
     flushSync(() => {
-      setDraggingPaletteBlock(true);
+      setDraggingPaletteTemplate(template);
       setTrashActive(false);
     });
     const payload = JSON.stringify({ kind: 'palette-template', template });
@@ -406,26 +465,18 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
   };
 
   const handlePaletteDragEnd = () => {
-    setDraggingPaletteBlock(false);
+    setDraggingPaletteTemplate(null);
     setTrashActive(false);
   };
 
   const parseDragTemplate = (e) => {
-    try {
-      const parsed = JSON.parse(e.dataTransfer.getData('application/json'));
-      return parsed?.kind === 'palette-template' ? parsed.template : null;
-    } catch {
-      return null;
-    }
+    const parsed = readBuilderDragPayload(e.dataTransfer);
+    return parsed?.kind === 'palette-template' ? parsed.template : null;
   };
 
   const parseScriptDragPayload = (e) => {
-    try {
-      const parsed = JSON.parse(e.dataTransfer.getData('application/json'));
-      return parsed?.kind === 'script-block' ? parsed : null;
-    } catch {
-      return null;
-    }
+    const parsed = readBuilderDragPayload(e.dataTransfer);
+    return parsed?.kind === 'script-block' ? parsed : null;
   };
 
   const updateTopLevelPart = (blockId, partIdx, nextValue) => {
@@ -552,7 +603,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
   const handleScriptBlockDragEnd = () => {
     setDraggingScriptBlock(null);
-    setDraggingPaletteBlock(false);
+    setDraggingPaletteTemplate(null);
     setTrashActive(false);
     setDragOverTopBlockId(null);
     setDragOverChildKey(null);
@@ -668,15 +719,14 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
     e.preventDefault();
     setTrashActive(false);
     try {
-      const raw = e.dataTransfer.getData('application/json');
-      const parsed = raw ? JSON.parse(raw) : null;
+      const parsed = readBuilderDragPayload(e.dataTransfer);
       if (parsed?.kind === 'script-block') removeDraggedScriptBlock(parsed);
       else if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
     } catch {
       if (draggingScriptBlock) removeDraggedScriptBlock(draggingScriptBlock);
     } finally {
       setDraggingScriptBlock(null);
-      setDraggingPaletteBlock(false);
+      setDraggingPaletteTemplate(null);
     }
   };
 
@@ -747,9 +797,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           key={block.id}
           className={`rounded-[22px] border-b-4 border-[#d39704] bg-[#f2b705] p-3 text-white transition ${dragOverTopBlockId === block.id ? 'ring-2 ring-sky-300' : ''}`}
           onDragOver={(e) => {
-            if (mode === 'play') return;
-            const parsed = parseScriptDragPayload(e);
-            if (!parsed) return;
+            if (mode === 'play' || !isDraggingScriptBlock) return;
             e.preventDefault();
             if (trashActive) setTrashActive(false);
             setDragOverTopBlockId(block.id);
@@ -757,7 +805,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           onDragLeave={() => dragOverTopBlockId === block.id && setDragOverTopBlockId(null)}
           onDrop={(e) => {
             if (mode === 'play') return;
-            const parsed = parseScriptDragPayload(e);
+            const parsed = draggingScriptBlock || parseScriptDragPayload(e);
             if (!parsed) return;
             e.preventDefault();
             const targetIndex = selectedScriptBlocks.findIndex((candidate) => candidate.id === block.id);
@@ -779,9 +827,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
             onDragEnd={handleScriptBlockDragEnd}
           />
           <div
-            className={`mt-1 rounded-[20px] border-2 border-dashed px-3 py-1 transition-all ${dragOverLoopId === block.id ? 'min-h-16 border-white bg-white/30' : 'min-h-8 border-white/55 bg-white/10'}`}
+            className={`mt-1 rounded-[20px] border-2 border-dashed px-3 py-1 transition-all duration-300 ease-out ${dragOverLoopId === block.id ? 'min-h-16 border-white bg-white/30 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)]' : 'min-h-8 border-white/55 bg-white/10'}`}
             onDragOver={(e) => {
-              if (mode === 'play') return;
+              if (mode === 'play' || (!isDraggingPaletteBlock && !isDraggingScriptBlock)) return;
               e.preventDefault();
               e.stopPropagation();
               if (trashActive) setTrashActive(false);
@@ -792,9 +840,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
               if (mode === 'play') return;
               e.preventDefault();
               e.stopPropagation();
-              const template = parseDragTemplate(e);
+              const template = draggingPaletteTemplate || parseDragTemplate(e);
               if (template) addInsideLoop(block.id, template);
-              const parsed = parseScriptDragPayload(e);
+              const parsed = draggingScriptBlock || parseScriptDragPayload(e);
               if (parsed) insertDraggedChildAt(parsed, block.id);
               setDragOverLoopId(null);
             }}
@@ -805,9 +853,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                   <div
                     className={`h-3 rounded-full border-2 border-dashed transition ${dragOverChildKey === `${block.id}:${child.id}:before` ? 'border-white bg-white/30' : 'border-transparent'}`}
                     onDragOver={(e) => {
-                      if (mode === 'play') return;
-                      const parsed = parseScriptDragPayload(e);
-                      if (!parsed) return;
+                      if (mode === 'play' || !isDraggingScriptBlock) return;
                       e.preventDefault();
                       e.stopPropagation();
                       if (trashActive) setTrashActive(false);
@@ -816,7 +862,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}:before` && setDragOverChildKey(null)}
                     onDrop={(e) => {
                       if (mode === 'play') return;
-                      const parsed = parseScriptDragPayload(e);
+                      const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                       if (!parsed) return;
                       e.preventDefault();
                       e.stopPropagation();
@@ -827,9 +873,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                   <div
                     className={`rounded-[20px] transition ${dragOverChildKey === `${block.id}:${child.id}` ? 'ring-2 ring-white/80' : ''}`}
                     onDragOver={(e) => {
-                      if (mode === 'play') return;
-                      const parsed = parseScriptDragPayload(e);
-                      if (!parsed || parsed.scope !== 'child') return;
+                      if (mode === 'play' || draggingScriptBlock?.scope !== 'child') return;
                       e.preventDefault();
                       e.stopPropagation();
                       if (trashActive) setTrashActive(false);
@@ -838,7 +882,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                     onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}` && setDragOverChildKey(null)}
                     onDrop={(e) => {
                       if (mode === 'play') return;
-                      const parsed = parseScriptDragPayload(e);
+                      const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                       if (!parsed || parsed.scope !== 'child') return;
                       e.preventDefault();
                       e.stopPropagation();
@@ -865,9 +909,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
               <div
                 className={`h-3 rounded-full border-2 border-dashed transition ${dragOverChildKey === `${block.id}:end` ? 'border-white bg-white/30' : 'border-transparent'}`}
                 onDragOver={(e) => {
-                  if (mode === 'play') return;
-                  const parsed = parseScriptDragPayload(e);
-                  if (!parsed) return;
+                  if (mode === 'play' || !isDraggingScriptBlock) return;
                   e.preventDefault();
                   e.stopPropagation();
                   if (trashActive) setTrashActive(false);
@@ -876,7 +918,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                 onDragLeave={() => dragOverChildKey === `${block.id}:end` && setDragOverChildKey(null)}
                 onDrop={(e) => {
                   if (mode === 'play') return;
-                  const parsed = parseScriptDragPayload(e);
+                  const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                   if (!parsed) return;
                   e.preventDefault();
                   e.stopPropagation();
@@ -895,9 +937,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
         key={block.id}
         className={`rounded-[20px] transition ${dragOverTopBlockId === block.id ? 'ring-2 ring-sky-300' : ''}`}
         onDragOver={(e) => {
-          if (mode === 'play') return;
-          const parsed = parseScriptDragPayload(e);
-          if (!parsed || block.id === 'event-start') return;
+          if (mode === 'play' || block.id === 'event-start' || !isDraggingScriptBlock) return;
           e.preventDefault();
           if (trashActive) setTrashActive(false);
           setDragOverTopBlockId(block.id);
@@ -905,7 +945,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
         onDragLeave={() => dragOverTopBlockId === block.id && setDragOverTopBlockId(null)}
         onDrop={(e) => {
           if (mode === 'play') return;
-          const parsed = parseScriptDragPayload(e);
+          const parsed = draggingScriptBlock || parseScriptDragPayload(e);
           if (!parsed || block.id === 'event-start') return;
           e.preventDefault();
           const targetIndex = selectedScriptBlocks.findIndex((candidate) => candidate.id === block.id);
@@ -946,11 +986,12 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
+            initialSceneState={persistedSceneState}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            initialPlacedAssets={initialSceneInstances}
-            onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
+            onSceneChange={({ instances, selectedInstanceKey: nextKey, sceneState }) => {
               setSceneInstances(instances);
-              if (nextKey) setFocusedInstanceKey(nextKey);
+              if (sceneState) setPersistedSceneState(sceneState);
+              setFocusedInstanceKey(nextKey || null);
               if (editorInstanceKey && !instances.some((instance) => instance.key === editorInstanceKey)) {
                 setEditorInstanceKey(null);
               }
@@ -958,6 +999,8 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
             onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
             onPlay={startRuntime}
             onStop={stopRuntime}
+            onSave={onSaveProject}
+            saveState={saveState}
             suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {
               runtimeRef.current?.dispatch('object is tapped', { instanceKey });
@@ -1283,21 +1326,18 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
 
                   <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
                     <div
-                      className={`relative flex min-h-0 flex-1 flex-col rounded-[32px] bg-white transition ${['script-canvas', 'script-end', 'script-body'].includes(dragOverTopBlockId) ? 'bg-slate-50 ring-2 ring-sky-200/80' : ''}`}
+                      className={`relative flex min-h-0 flex-1 flex-col rounded-[32px] bg-white transition-all duration-300 ease-out ${['script-canvas', 'script-end', 'script-body'].includes(dragOverTopBlockId) ? 'bg-slate-50 ring-2 ring-sky-200/80 shadow-[0_16px_40px_rgba(56,189,248,0.12)]' : ''}`}
                       onDragOver={(e) => {
-                        if (mode === 'play') return;
-                        const template = parseDragTemplate(e);
-                        const parsed = parseScriptDragPayload(e);
-                        if (!template && !parsed) return;
+                        if (mode === 'play' || (!isDraggingPaletteBlock && !isDraggingScriptBlock)) return;
                         e.preventDefault();
                         if (trashActive) setTrashActive(false);
-                        if (parsed) setDragOverTopBlockId('script-canvas');
+                        if (isDraggingScriptBlock) setDragOverTopBlockId('script-canvas');
                       }}
                       onDragLeave={() => dragOverTopBlockId === 'script-canvas' && setDragOverTopBlockId(null)}
                       onDrop={(e) => {
                         if (mode === 'play') return;
-                        const template = parseDragTemplate(e);
-                        const parsed = parseScriptDragPayload(e);
+                        const template = draggingPaletteTemplate || parseDragTemplate(e);
+                        const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                         if (template) addTopLevel(template);
                         else if (parsed) insertDraggedTopLevelAt(parsed);
                         setDragOverTopBlockId(null);
@@ -1308,11 +1348,9 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-hidden">
                         <div
-                          className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${dragOverTopBlockId === 'script-end' ? 'bg-sky-100/70' : 'bg-slate-50/65'}`}
+                          className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 bg-slate-50/65 p-2 transition-all duration-300 ease-out ${dragOverTopBlockId === 'script-end' ? 'border-sky-300 bg-sky-100/70 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.35)]' : ''}`}
                           onDragOver={(e) => {
-                            if (mode === 'play') return;
-                            const parsed = parseScriptDragPayload(e);
-                            if (!parsed) return;
+                            if (mode === 'play' || !isDraggingScriptBlock) return;
                             e.preventDefault();
                             if (trashActive) setTrashActive(false);
                             setDragOverTopBlockId('script-end');
@@ -1320,7 +1358,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                           onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
                           onDrop={(e) => {
                             if (mode === 'play') return;
-                            const parsed = parseScriptDragPayload(e);
+                            const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                             if (!parsed) return;
                             e.preventDefault();
                             insertDraggedTopLevelAt(parsed);
@@ -1339,9 +1377,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                                         : 'border-transparent'
                                     }`}
                                     onDragOver={(e) => {
-                                      if (mode === 'play') return;
-                                      const parsed = parseScriptDragPayload(e);
-                                      if (!parsed || parsed.id === block.id) return;
+                                      if (mode === 'play' || !draggingScriptBlock || draggingScriptBlock.id === block.id) return;
                                       e.preventDefault();
                                       if (trashActive) setTrashActive(false);
                                       setDragOverTopBlockId(`${block.id}:after`);
@@ -1349,7 +1385,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                                     onDragLeave={() => dragOverTopBlockId === `${block.id}:after` && setDragOverTopBlockId(null)}
                                     onDrop={(e) => {
                                       if (mode === 'play') return;
-                                      const parsed = parseScriptDragPayload(e);
+                                      const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                                       if (!parsed || parsed.id === block.id) return;
                                       e.preventDefault();
                                       insertDraggedTopLevelAt(parsed, index + 1);
@@ -1365,9 +1401,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                                     : 'border-transparent'
                                 }`}
                                 onDragOver={(e) => {
-                                  if (mode === 'play') return;
-                                  const parsed = parseScriptDragPayload(e);
-                                  if (!parsed) return;
+                                  if (mode === 'play' || !isDraggingScriptBlock) return;
                                   e.preventDefault();
                                   if (trashActive) setTrashActive(false);
                                   setDragOverTopBlockId('script-end');
@@ -1375,7 +1409,7 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
                                 onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
                                 onDrop={(e) => {
                                   if (mode === 'play') return;
-                                  const parsed = parseScriptDragPayload(e);
+                                  const parsed = draggingScriptBlock || parseScriptDragPayload(e);
                                   if (!parsed) return;
                                   e.preventDefault();
                                   insertDraggedTopLevelAt(parsed);
@@ -1434,17 +1468,6 @@ export default function SandboxBuilderPage({ initialSetupData = null, projectPla
           />
         </div>
       </section>
-      {draggingPaletteBlock && mode !== 'play' ? (
-        <div className="pointer-events-none fixed inset-0 z-[80]">
-          <div
-            className={`absolute inset-0 transition ${
-              draggingPaletteBlock
-                ? 'bg-slate-950/70'
-                : 'bg-transparent'
-            }`}
-          />
-        </div>
-      ) : null}
     </main>
   );
 }

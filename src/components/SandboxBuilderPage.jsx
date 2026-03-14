@@ -6,25 +6,66 @@ import LogicBlock from './LogicBlock';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 
-const eventOptions = ['game starts', 'sprite clicked', 'key pressed', 'timer reaches 0', 'score reaches 10'];
-const defaultEvent = eventOptions[0];
+const eventOptions = [
+  'game starts',
+  'sprite clicked',
+  'object is tapped',
+  'key pressed',
+  'key is pressed',
+  'timer reaches 0',
+  'score reaches 10',
+  'bumps',
+  'is touching',
+  'is not touching (pro)',
+];
+const defaultEvent = 'game starts';
 
 const palette = {
+  Collisions: [
+    { id: 'bumps', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'bumps', { type: 'asset', value: 'Self' }] },
+    { id: 'touching', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is touching', { type: 'asset', value: 'Self' }] },
+    { id: 'not-touching-pro', tone: 'collision', parts: [{ type: 'asset', value: 'Self' }, 'is not touching', { type: 'asset', value: 'Self' }, '(PRO)'] },
+  ],
+  Conditionals: [
+    { id: 'cond-eq', tone: 'condition', parts: [{ label: 'A' }, '=', { label: 'B' }] },
+    { id: 'cond-neq', tone: 'condition', parts: [{ label: 'A' }, '≠', { label: 'B' }] },
+    { id: 'cond-lt', tone: 'condition', parts: [{ label: 'A' }, '<', { label: 'B' }] },
+    { id: 'cond-gt', tone: 'condition', parts: [{ label: 'A' }, '>', { label: 'B' }] },
+    { id: 'cond-lte', tone: 'condition', parts: [{ label: 'A' }, '≤', { label: 'B' }] },
+    { id: 'cond-gte', tone: 'condition', parts: [{ label: 'A' }, '≥', { label: 'B' }] },
+    { id: 'cond-and', tone: 'condition', parts: [{ label: 'A' }, 'and', { label: 'B' }] },
+    { id: 'cond-or', tone: 'condition', parts: [{ label: 'A' }, 'or', { label: 'B' }] },
+    { id: 'cond-not', tone: 'condition', parts: ['not', { label: 'A' }] },
+    { id: 'cond-flipped', tone: 'condition', parts: ['flipped'] },
+    { id: 'cond-matches', tone: 'condition', parts: [{ label: 'A' }, 'matches', { label: 'B' }] },
+  ],
   Movement: [
     { id: 'move-forward', tone: 'movement', parts: ['Move Forward', { label: '12' }] },
     { id: 'turn', tone: 'movement', parts: ['Turn degrees', { label: '15' }] },
     { id: 'set-rotation', tone: 'movement', parts: ['Set rotation style', { type: 'dropdown', value: 'dont rotate', options: ['dont rotate', 'left-right', 'all around'] }] },
     { id: 'change-x', tone: 'movement', parts: ['Change X by', { label: '6' }] },
+    { id: 'change-y', tone: 'movement', parts: ['Change Y by', { label: '6' }] },
+    { id: 'go-to', tone: 'movement', parts: ['Go to X', { label: '320' }, 'Y', { label: '220' }] },
+    { id: 'point-direction', tone: 'movement', parts: ['Point in direction', { label: '90' }] },
   ],
   'Looks & Sounds': [
     { id: 'switch-costume', tone: 'looks', parts: ['Switch costume to', { type: 'dropdown', value: 'bunny jump', options: ['bunny jump', 'tree glow', 'crab legs'] }] },
     { id: 'next-costume', tone: 'sound', parts: ['Next costume'] },
     { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
+    { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
   ],
   Control: [
     { id: 'forever', tone: 'control', type: 'loop', parts: ['Forever'] },
-    { id: 'while', tone: 'control', type: 'loop', parts: ['While', { type: 'dropdown', value: 'time > 0', options: ['score < 10', 'is alive', 'time > 0'] }] },
+    { id: 'repeat', tone: 'control', type: 'loop', parts: ['Repeat', { label: '5' }, 'times'] },
+    { id: 'while', tone: 'control', type: 'loop', parts: ['While', { type: 'dropdown', value: 'time > 0', options: ['score < 10', 'score >= 10', 'is alive', 'time > 0', 'time <= 0'] }] },
     { id: 'wait', tone: 'control', parts: ['Wait', { label: '1' }, 'seconds'] },
+  ],
+  Variables: [
+    { id: 'change-score', tone: 'variables', parts: ['Change score by', { label: '1' }] },
+    { id: 'set-score', tone: 'variables', parts: ['Set score to', { label: '0' }] },
+    { id: 'change-time', tone: 'variables', parts: ['Change timer by', { label: '2' }] },
+    { id: 'set-time', tone: 'variables', parts: ['Set timer to', { label: '30' }] },
+    { id: 'set-alive', tone: 'variables', parts: ['Set alive to', { type: 'dropdown', value: 'true', options: ['true', 'false'] }] },
   ],
 };
 
@@ -33,7 +74,14 @@ function createSeedScript(eventName = defaultEvent) {
 }
 
 function blockText(parts = []) {
-  return parts.map((part) => typeof part === 'string' ? part : part.label || part.value || 'value').join(' ').replace(/\s+/g, ' ').trim();
+  return parts.map((part) => {
+    if (typeof part === 'string') return part;
+    if (part.type === 'asset') {
+      const matched = (part.options || []).find((option) => option.value === part.value);
+      return matched?.label || part.value || 'object';
+    }
+    return part.label || part.value || 'value';
+  }).join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function cloneScripts(scriptsByInstanceKey) {
@@ -104,6 +152,7 @@ export default function SandboxBuilderPage() {
     if (mode !== 'play') return undefined;
     const onKeyDown = () => {
       runtimeRef.current?.dispatch('key pressed');
+      runtimeRef.current?.dispatch('key is pressed');
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };
     window.addEventListener('keydown', onKeyDown);
@@ -120,6 +169,23 @@ export default function SandboxBuilderPage() {
   const selectedLabel = getInstanceDisplayLabel(sceneInstances, editorInstanceKey);
   const selectedInstance = sceneInstances.find((instance) => instance.key === editorInstanceKey) || null;
   const selectedEvent = selectedScriptBlocks.find((block) => block.id === 'event-start')?.parts?.[1] || defaultEvent;
+  const assetOptions = useMemo(() => {
+    const dynamic = sceneInstances.map((instance) => ({
+      value: instance.key,
+      label: `${instance.emoji} ${getInstanceDisplayLabel(sceneInstances, instance.key)}`,
+    }));
+    return [{ value: 'Self', label: '🙂 Self' }, ...dynamic];
+  }, [sceneInstances]);
+
+  const hydratePart = (part) => {
+    if (typeof part === 'string') return part;
+    if (part.type !== 'asset') return part;
+    const fallback = assetOptions[0]?.value || 'Self';
+    const nextValue = assetOptions.some((option) => option.value === part.value) ? part.value : fallback;
+    return { ...part, value: nextValue, options: assetOptions };
+  };
+
+  const hydrateParts = (parts = []) => parts.map((part) => hydratePart(part));
   const selectInstance = (instanceKey, openEditor = false) => {
     setFocusedInstanceKey(instanceKey || null);
     if (mode === 'play') return;
@@ -157,8 +223,8 @@ export default function SandboxBuilderPage() {
   };
 
   const makeBlockFromTemplate = (template) => template.type === 'loop'
-    ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: template.parts, tone: template.tone, children: [] }
-    : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: template.parts, tone: template.tone };
+    ? { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'loop', parts: hydrateParts(template.parts), tone: template.tone, children: [] }
+    : { id: `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type: 'block', parts: hydrateParts(template.parts), tone: template.tone };
 
   const pushAiMessage = (text) => setMessages((prev) => [...prev, { role: 'ai', text }]);
 
@@ -185,7 +251,9 @@ export default function SandboxBuilderPage() {
   };
 
   const handleDragStart = (e, template) => {
-    e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'palette-template', template }));
+    const payload = JSON.stringify({ kind: 'palette-template', template });
+    e.dataTransfer.setData('application/json', payload);
+    e.dataTransfer.setData('text/plain', payload);
     e.dataTransfer.effectAllowed = 'copy';
   };
 
@@ -210,14 +278,14 @@ export default function SandboxBuilderPage() {
   const updateTopLevelPart = (blockId, partIdx, nextValue) => {
     updateSelectedScript((blocks) => blocks.map((block) => {
       if (block.id !== blockId) return block;
-      return { ...block, parts: block.parts.map((part, idx) => idx !== partIdx || typeof part === 'string' ? part : part.type === 'dropdown' ? { ...part, value: nextValue } : { ...part, label: nextValue }) };
+      return { ...block, parts: block.parts.map((part, idx) => idx !== partIdx || typeof part === 'string' ? part : part.type === 'dropdown' || part.type === 'asset' ? { ...part, value: nextValue } : { ...part, label: nextValue }) };
     }));
   };
 
   const updateNestedPart = (loopId, childId, partIdx, nextValue) => {
     updateSelectedScript((blocks) => blocks.map((block) => {
       if (block.id !== loopId || block.type !== 'loop') return block;
-      return { ...block, children: block.children.map((child) => child.id !== childId ? child : { ...child, parts: child.parts.map((part, idx) => idx !== partIdx || typeof part === 'string' ? part : part.type === 'dropdown' ? { ...part, value: nextValue } : { ...part, label: nextValue }) }) };
+      return { ...block, children: block.children.map((child) => child.id !== childId ? child : { ...child, parts: child.parts.map((part, idx) => idx !== partIdx || typeof part === 'string' ? part : part.type === 'dropdown' || part.type === 'asset' ? { ...part, value: nextValue } : { ...part, label: nextValue }) }) };
     }));
   };
 
@@ -253,7 +321,9 @@ export default function SandboxBuilderPage() {
   const handleScriptBlockDragStart = (e, payload) => {
     setDraggingScriptBlock(payload);
     setTrashActive(false);
-    e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'script-block', ...payload }));
+    const dragPayload = JSON.stringify({ kind: 'script-block', ...payload });
+    e.dataTransfer.setData('application/json', dragPayload);
+    e.dataTransfer.setData('text/plain', dragPayload);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -301,6 +371,64 @@ export default function SandboxBuilderPage() {
         if (toIdx === -1) return block;
         const nextChildren = [...block.children];
         nextChildren.splice(toIdx, 0, movedChild);
+        return { ...block, children: nextChildren };
+      });
+    });
+  };
+
+  const extractDraggedBlock = (blocks, payload) => {
+    if (!payload) return { nextBlocks: blocks, movedBlock: null };
+    if (payload.scope === 'top') {
+      const fromIdx = blocks.findIndex((block) => block.id === payload.id);
+      if (fromIdx === -1) return { nextBlocks: blocks, movedBlock: null };
+      const nextBlocks = [...blocks];
+      const [movedBlock] = nextBlocks.splice(fromIdx, 1);
+      return { nextBlocks, movedBlock };
+    }
+    if (payload.scope === 'child') {
+      let movedBlock = null;
+      const nextBlocks = blocks.map((block) => {
+        if (block.type !== 'loop' || block.id !== payload.loopId) return block;
+        return {
+          ...block,
+          children: block.children.filter((child) => {
+            if (child.id === payload.id) {
+              movedBlock = child;
+              return false;
+            }
+            return true;
+          }),
+        };
+      });
+      return { nextBlocks, movedBlock };
+    }
+    return { nextBlocks: blocks, movedBlock: null };
+  };
+
+  const insertDraggedTopLevelAt = (payload, targetIndex = null) => {
+    if (!payload) return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => {
+      const { nextBlocks, movedBlock } = extractDraggedBlock(blocks, payload);
+      if (!movedBlock) return blocks;
+      const insertIndex = targetIndex == null ? nextBlocks.length : Math.max(0, Math.min(targetIndex, nextBlocks.length));
+      const updated = [...nextBlocks];
+      updated.splice(insertIndex, 0, movedBlock);
+      return updated;
+    });
+  };
+
+  const insertDraggedChildAt = (payload, targetLoopId, targetIndex = null) => {
+    if (!payload || !targetLoopId) return;
+    pushHistorySnapshot();
+    updateSelectedScript((blocks) => {
+      const { nextBlocks, movedBlock } = extractDraggedBlock(blocks, payload);
+      if (!movedBlock) return blocks;
+      return nextBlocks.map((block) => {
+        if (block.type !== 'loop' || block.id !== targetLoopId) return block;
+        const insertIndex = targetIndex == null ? block.children.length : Math.max(0, Math.min(targetIndex, block.children.length));
+        const nextChildren = [...block.children];
+        nextChildren.splice(insertIndex, 0, movedBlock);
         return { ...block, children: nextChildren };
       });
     });
@@ -360,7 +488,7 @@ export default function SandboxBuilderPage() {
     setRuntimeSnapshot(runtime.getSnapshot());
     setMode('play');
     lastSnapshotPublishRef.current = 0;
-    pushAiMessage("Play started. The sandbox is now following each object's script.");
+    pushAiMessage("Play started. Your objects are running their scripts now.");
     const loop = (timestamp) => {
       if (!runtimeRef.current) return;
       const delta = lastTickRef.current ? Math.min(timestamp - lastTickRef.current, 50) : 16;
@@ -383,8 +511,8 @@ export default function SandboxBuilderPage() {
 
   const quickEditorPosition = selectedInstance
     ? {
-        left: `${Math.min(Math.max((selectedInstance.x || 0) + 135, 250), 820)}px`,
-        top: `${Math.min(Math.max((selectedInstance.y || 0) - 36, 96), 560)}px`,
+        left: `${Math.min(Math.max((selectedInstance.x || 0) + 96, 36), 620)}px`,
+        top: `${Math.min(Math.max((selectedInstance.y || 0) - 28, 88), 500)}px`,
       }
     : null;
 
@@ -397,7 +525,7 @@ export default function SandboxBuilderPage() {
           onDragOver={(e) => {
             if (mode === 'play') return;
             const parsed = parseScriptDragPayload(e);
-            if (!parsed || parsed.scope !== 'top') return;
+            if (!parsed) return;
             e.preventDefault();
             setDragOverTopBlockId(block.id);
           }}
@@ -405,16 +533,18 @@ export default function SandboxBuilderPage() {
           onDrop={(e) => {
             if (mode === 'play') return;
             const parsed = parseScriptDragPayload(e);
-            if (!parsed || parsed.scope !== 'top') return;
+            if (!parsed) return;
             e.preventDefault();
-            moveTopLevelBlockBefore(parsed.id, block.id);
+            const targetIndex = selectedScriptBlocks.findIndex((candidate) => candidate.id === block.id);
+            if (targetIndex !== -1) insertDraggedTopLevelAt(parsed, targetIndex);
             setDragOverTopBlockId(null);
           }}
         >
           <LogicBlock
-            parts={block.parts}
+            parts={hydrateParts(block.parts)}
             tone="control"
             compact
+            assetOptions={assetOptions}
             editable={mode !== 'play'}
             onPartChange={(idx, value) => updateTopLevelPart(block.id, idx, value)}
             selected={selectedBlock === blockText(block.parts)}
@@ -424,7 +554,7 @@ export default function SandboxBuilderPage() {
             onDragEnd={handleScriptBlockDragEnd}
           />
           <div
-            className={`mt-3 rounded-[20px] border-2 border-dashed p-3 transition-all ${dragOverLoopId === block.id ? 'min-h-28 border-white bg-white/35' : 'min-h-16 border-white/65 bg-white/15'}`}
+            className={`mt-1 rounded-[20px] border-2 border-dashed px-3 py-1 transition-all ${dragOverLoopId === block.id ? 'min-h-16 border-white bg-white/30' : 'min-h-8 border-white/55 bg-white/10'}`}
             onDragOver={(e) => {
               if (mode === 'play') return;
               e.preventDefault();
@@ -438,47 +568,93 @@ export default function SandboxBuilderPage() {
               e.stopPropagation();
               const template = parseDragTemplate(e);
               if (template) addInsideLoop(block.id, template);
+              const parsed = parseScriptDragPayload(e);
+              if (parsed) insertDraggedChildAt(parsed, block.id);
               setDragOverLoopId(null);
             }}
           >
-            <div className="space-y-2">
-              {block.children.map((child) => (
-                <div
-                  key={child.id}
-                  className={`rounded-[20px] transition ${dragOverChildKey === `${block.id}:${child.id}` ? 'ring-2 ring-white/80' : ''}`}
-                  onDragOver={(e) => {
-                    if (mode === 'play') return;
-                    const parsed = parseScriptDragPayload(e);
-                    if (!parsed || parsed.scope !== 'child') return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setDragOverChildKey(`${block.id}:${child.id}`);
-                  }}
-                  onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}` && setDragOverChildKey(null)}
-                  onDrop={(e) => {
-                    if (mode === 'play') return;
-                    const parsed = parseScriptDragPayload(e);
-                    if (!parsed || parsed.scope !== 'child') return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    moveNestedBlockBefore(parsed.loopId, parsed.id, block.id, child.id);
-                    setDragOverChildKey(null);
-                  }}
-                >
-                  <LogicBlock
-                    parts={child.parts}
-                    tone={child.tone}
-                    compact
-                    editable={mode !== 'play'}
-                    onPartChange={(idx, value) => updateNestedPart(block.id, child.id, idx, value)}
-                    selected={selectedBlock === blockText(child.parts)}
-                    onClick={() => setSelectedBlock(blockText(child.parts))}
-                    draggable={mode !== 'play'}
-                    onDragStart={(e) => handleScriptBlockDragStart(e, { kind: 'script-block', scope: 'child', loopId: block.id, id: child.id })}
-                    onDragEnd={handleScriptBlockDragEnd}
+            <div className="space-y-0.5">
+              {block.children.map((child, childIdx) => (
+                <div key={child.id} className="space-y-0.5">
+                  <div
+                    className={`h-3 rounded-full border-2 border-dashed transition ${dragOverChildKey === `${block.id}:${child.id}:before` ? 'border-white bg-white/30' : 'border-transparent'}`}
+                    onDragOver={(e) => {
+                      if (mode === 'play') return;
+                      const parsed = parseScriptDragPayload(e);
+                      if (!parsed) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragOverChildKey(`${block.id}:${child.id}:before`);
+                    }}
+                    onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}:before` && setDragOverChildKey(null)}
+                    onDrop={(e) => {
+                      if (mode === 'play') return;
+                      const parsed = parseScriptDragPayload(e);
+                      if (!parsed) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      insertDraggedChildAt(parsed, block.id, childIdx);
+                      setDragOverChildKey(null);
+                    }}
                   />
+                  <div
+                    className={`rounded-[20px] transition ${dragOverChildKey === `${block.id}:${child.id}` ? 'ring-2 ring-white/80' : ''}`}
+                    onDragOver={(e) => {
+                      if (mode === 'play') return;
+                      const parsed = parseScriptDragPayload(e);
+                      if (!parsed || parsed.scope !== 'child') return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragOverChildKey(`${block.id}:${child.id}`);
+                    }}
+                    onDragLeave={() => dragOverChildKey === `${block.id}:${child.id}` && setDragOverChildKey(null)}
+                    onDrop={(e) => {
+                      if (mode === 'play') return;
+                      const parsed = parseScriptDragPayload(e);
+                      if (!parsed || parsed.scope !== 'child') return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      moveNestedBlockBefore(parsed.loopId, parsed.id, block.id, child.id);
+                      setDragOverChildKey(null);
+                    }}
+                  >
+                    <LogicBlock
+                      parts={hydrateParts(child.parts)}
+                      tone={child.tone}
+                      compact
+                      assetOptions={assetOptions}
+                      editable={mode !== 'play'}
+                      onPartChange={(idx, value) => updateNestedPart(block.id, child.id, idx, value)}
+                      selected={selectedBlock === blockText(child.parts)}
+                      onClick={() => setSelectedBlock(blockText(child.parts))}
+                      draggable={mode !== 'play'}
+                      onDragStart={(e) => handleScriptBlockDragStart(e, { kind: 'script-block', scope: 'child', loopId: block.id, id: child.id })}
+                      onDragEnd={handleScriptBlockDragEnd}
+                    />
+                  </div>
                 </div>
               ))}
+              <div
+                className={`h-3 rounded-full border-2 border-dashed transition ${dragOverChildKey === `${block.id}:end` ? 'border-white bg-white/30' : 'border-transparent'}`}
+                onDragOver={(e) => {
+                  if (mode === 'play') return;
+                  const parsed = parseScriptDragPayload(e);
+                  if (!parsed) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOverChildKey(`${block.id}:end`);
+                }}
+                onDragLeave={() => dragOverChildKey === `${block.id}:end` && setDragOverChildKey(null)}
+                onDrop={(e) => {
+                  if (mode === 'play') return;
+                  const parsed = parseScriptDragPayload(e);
+                  if (!parsed) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  insertDraggedChildAt(parsed, block.id);
+                  setDragOverChildKey(null);
+                }}
+              />
             </div>
           </div>
         </div>
@@ -492,7 +668,7 @@ export default function SandboxBuilderPage() {
         onDragOver={(e) => {
           if (mode === 'play') return;
           const parsed = parseScriptDragPayload(e);
-          if (!parsed || parsed.scope !== 'top' || block.id === 'event-start') return;
+          if (!parsed || block.id === 'event-start') return;
           e.preventDefault();
           setDragOverTopBlockId(block.id);
         }}
@@ -500,19 +676,22 @@ export default function SandboxBuilderPage() {
         onDrop={(e) => {
           if (mode === 'play') return;
           const parsed = parseScriptDragPayload(e);
-          if (!parsed || parsed.scope !== 'top' || block.id === 'event-start') return;
+          if (!parsed || block.id === 'event-start') return;
           e.preventDefault();
-          moveTopLevelBlockBefore(parsed.id, block.id);
+          const targetIndex = selectedScriptBlocks.findIndex((candidate) => candidate.id === block.id);
+          if (targetIndex !== -1) insertDraggedTopLevelAt(parsed, targetIndex);
           setDragOverTopBlockId(null);
         }}
       >
         <LogicBlock
-          parts={block.parts}
+          parts={hydrateParts(block.parts)}
           tone={block.tone}
           compact
+          className="min-h-[64px]"
+          assetOptions={assetOptions}
           editable={mode !== 'play'}
           onPartChange={(idx, value) => updateTopLevelPart(block.id, idx, value)}
-          selected={selectedBlock === blockText(block.parts)}
+          selected={block.id !== 'event-start' && selectedBlock === blockText(block.parts)}
           onClick={() => setSelectedBlock(blockText(block.parts))}
           draggable={mode !== 'play' && block.id !== 'event-start'}
           onDragStart={block.id === 'event-start' ? undefined : (e) => handleScriptBlockDragStart(e, { kind: 'script-block', scope: 'top', id: block.id })}
@@ -540,7 +719,7 @@ export default function SandboxBuilderPage() {
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
-            selectedInstanceKey={focusedInstanceKey}
+            selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
             onSceneChange={({ instances, selectedInstanceKey: nextKey }) => {
               setSceneInstances(instances);
               if (nextKey) setFocusedInstanceKey(nextKey);
@@ -551,8 +730,10 @@ export default function SandboxBuilderPage() {
             onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
             onPlay={startRuntime}
             onStop={stopRuntime}
+            suppressSelectionChrome={editorStage === 'expanded'}
             onSpriteClick={(instanceKey) => {
               runtimeRef.current?.dispatch('sprite clicked', { instanceKey });
+              runtimeRef.current?.dispatch('object is tapped', { instanceKey });
               if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
             }}
           />
@@ -560,7 +741,7 @@ export default function SandboxBuilderPage() {
           {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
             <div className="absolute inset-0 z-30" onClick={closeEditor}>
               <div
-                className="absolute flex items-center gap-2 rounded-[22px] border-b-4 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 py-2.5 text-white shadow-[0_8px_18px_rgba(183,45,99,0.26)]"
+                className="absolute inline-flex max-w-[360px] items-center gap-2 rounded-[22px] border-b-4 border-[#b72d63] bg-[#d22d72] pl-4 pr-4 py-2.5 text-white shadow-[0_8px_18px_rgba(183,45,99,0.26)]"
                 style={quickEditorPosition}
                 onClick={(event) => event.stopPropagation()}
               >
@@ -568,7 +749,7 @@ export default function SandboxBuilderPage() {
                 <select
                   value={selectedEvent}
                   onChange={(e) => handleEventChange(e.target.value)}
-                  className="rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
+                  className="min-w-0 max-w-[190px] rounded-full border-2 border-white/80 bg-white px-4 py-1.5 text-[16px] font-extrabold text-slate-800 outline-none"
                 >
                   {eventOptions.map((eventName) => (
                     <option key={eventName} value={eventName}>
@@ -592,23 +773,21 @@ export default function SandboxBuilderPage() {
 
           {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
             <div className="pointer-events-none absolute inset-0 z-30 p-6">
-              <div className="pointer-events-auto absolute left-6 right-6 top-5 flex flex-col gap-4">
+              <div className="pointer-events-auto absolute inset-x-6 top-5 bottom-6 flex flex-col gap-4">
                 <div className="flex items-center gap-4 rounded-[30px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
-                  <div className="flex items-center gap-3 rounded-[22px] border border-[#e5e7eb] bg-white px-4 py-2 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
-                    <div className="flex items-center gap-3 rounded-[16px] border border-[#d3dae3] bg-[#eef3f8] px-4 py-2">
-                      <div className="text-[24px] leading-none">{selectedInstance?.emoji}</div>
-                      <div className="text-[20px] font-extrabold leading-none text-slate-700">
-                        {selectedLabel}
-                      </div>
+                  <div className="flex h-14 items-center gap-3 rounded-[16px] border border-[#d3dae3] bg-[#eef3f8] px-4">
+                    <div className="text-[24px] leading-none">{selectedInstance?.emoji}</div>
+                    <div className="text-[20px] font-extrabold leading-none text-slate-700">
+                      {selectedLabel}
                     </div>
                   </div>
-                  <div className="flex min-w-0 flex-1 items-center gap-3 rounded-[24px] border border-[#e5e7eb] bg-[#fffef9] px-5 py-3 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                  <div className="flex h-14 min-w-0 flex-1 items-center gap-3 rounded-[24px] border border-[#e5e7eb] bg-[#fffef9] px-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
                     <span className="text-[20px] font-black leading-none tracking-[-0.01em] text-slate-800">When</span>
                     <select
                       value={selectedEvent}
                       onChange={(e) => handleEventChange(e.target.value)}
                       disabled={!editorInstanceKey || mode === 'play'}
-                      className="rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-6 py-2 text-[18px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
+                      className="h-9 rounded-full border-2 border-[#b72d63] bg-[#d22d72] pl-4 pr-5 text-[17px] font-extrabold text-white shadow-[0_4px_0_rgba(135,27,72,0.45)] outline-none disabled:opacity-40"
                     >
                       {eventOptions.map((eventName) => (
                         <option key={eventName} value={eventName} className="bg-white text-slate-800">
@@ -637,10 +816,10 @@ export default function SandboxBuilderPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                  <div className="rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
-                    <div className="mb-4">
-                      <label htmlFor="block-category" className="mb-2 block text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</label>
+                <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
+                    <div className="mb-4 px-1">
+                      <label htmlFor="block-category" className="mb-3 block text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</label>
                       <select
                         id="block-category"
                         value={selectedCategory}
@@ -654,13 +833,14 @@ export default function SandboxBuilderPage() {
                         ))}
                       </select>
                     </div>
-                    <div className="max-h-[430px] space-y-3 overflow-y-auto pr-1">
+                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                       {paletteBlocks.map((block) => (
                         <LogicBlock
                           key={block.id}
-                          parts={block.parts}
+                          parts={hydrateParts(block.parts)}
                           tone={block.tone}
                           compact
+                          assetOptions={assetOptions}
                           draggable={mode !== 'play'}
                           onDragStart={(e) => handleDragStart(e, block)}
                           onClick={() => addTopLevel(block)}
@@ -679,22 +859,111 @@ export default function SandboxBuilderPage() {
                     ) : null}
                   </div>
 
-                  <div className="rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
+                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
                     <div
-                      className="h-full bg-white"
-                      onDragOver={(e) => mode !== 'play' && e.preventDefault()}
+                      className={`relative flex min-h-0 flex-1 flex-col rounded-[32px] bg-white transition ${['script-canvas', 'script-end', 'script-body'].includes(dragOverTopBlockId) ? 'bg-slate-50 ring-2 ring-sky-200/80' : ''}`}
+                      onDragOver={(e) => {
+                        if (mode === 'play') return;
+                        const template = parseDragTemplate(e);
+                        const parsed = parseScriptDragPayload(e);
+                        if (!template && !parsed) return;
+                        e.preventDefault();
+                        if (parsed) setDragOverTopBlockId('script-canvas');
+                      }}
+                      onDragLeave={() => dragOverTopBlockId === 'script-canvas' && setDragOverTopBlockId(null)}
                       onDrop={(e) => {
                         if (mode === 'play') return;
                         const template = parseDragTemplate(e);
+                        const parsed = parseScriptDragPayload(e);
                         if (template) addTopLevel(template);
+                        else if (parsed) insertDraggedTopLevelAt(parsed);
+                        setDragOverTopBlockId(null);
                       }}
                     >
-                      <div className="mb-3 flex items-center justify-between px-1">
+                      <div className="mb-4 flex items-center justify-between px-1">
                         <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Script</p>
                         <p className="text-[14px] font-bold text-slate-400">Drag blocks or tap to add</p>
                       </div>
-                      <div className="min-h-[390px] space-y-3 px-1">
-                        {selectedScriptBlocks.map(renderScriptBlock)}
+                      <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-hidden">
+                        {selectedScriptBlocks.filter((block) => block.id === 'event-start').map((block) => (
+                          <div key={block.id}>{renderScriptBlock(block)}</div>
+                        ))}
+                        <div
+                          className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[26px] border-2 border-dashed border-sky-100 p-2 transition ${dragOverTopBlockId === 'script-end' ? 'bg-sky-100/70' : ''}`}
+                          onDragOver={(e) => {
+                            if (mode === 'play') return;
+                            const parsed = parseScriptDragPayload(e);
+                            if (!parsed) return;
+                            e.preventDefault();
+                            setDragOverTopBlockId('script-end');
+                          }}
+                          onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
+                          onDrop={(e) => {
+                            if (mode === 'play') return;
+                            const parsed = parseScriptDragPayload(e);
+                            if (!parsed) return;
+                            e.preventDefault();
+                            insertDraggedTopLevelAt(parsed);
+                            setDragOverTopBlockId(null);
+                          }}
+                        >
+                          {selectedScriptBlocks.filter((block) => block.id !== 'event-start').length ? (
+                            <div className="min-h-0 space-y-1">
+                              {selectedScriptBlocks.filter((block) => block.id !== 'event-start').map((block, index, blocks) => (
+                                <div key={block.id} className="space-y-0">
+                                  {renderScriptBlock(block)}
+                                  <div
+                                    className={`h-1.5 rounded-full border-2 border-dashed transition ${
+                                      dragOverTopBlockId === `${block.id}:after`
+                                        ? 'border-sky-300 bg-sky-100/80'
+                                        : 'border-transparent'
+                                    }`}
+                                    onDragOver={(e) => {
+                                      if (mode === 'play') return;
+                                      const parsed = parseScriptDragPayload(e);
+                                      if (!parsed || parsed.id === block.id) return;
+                                      e.preventDefault();
+                                      setDragOverTopBlockId(`${block.id}:after`);
+                                    }}
+                                    onDragLeave={() => dragOverTopBlockId === `${block.id}:after` && setDragOverTopBlockId(null)}
+                                    onDrop={(e) => {
+                                      if (mode === 'play') return;
+                                      const parsed = parseScriptDragPayload(e);
+                                      if (!parsed || parsed.id === block.id) return;
+                                      e.preventDefault();
+                                      insertDraggedTopLevelAt(parsed, index + 1);
+                                      setDragOverTopBlockId(null);
+                                    }}
+                                  />
+                                </div>
+                              ))}
+                              <div
+                                className={`h-2 rounded-full border-2 border-dashed transition ${
+                                  dragOverTopBlockId === 'script-end'
+                                    ? 'border-sky-300 bg-sky-100/80'
+                                    : 'border-transparent'
+                                }`}
+                                onDragOver={(e) => {
+                                  if (mode === 'play') return;
+                                  const parsed = parseScriptDragPayload(e);
+                                  if (!parsed) return;
+                                  e.preventDefault();
+                                  setDragOverTopBlockId('script-end');
+                                }}
+                                onDragLeave={() => dragOverTopBlockId === 'script-end' && setDragOverTopBlockId(null)}
+                                onDrop={(e) => {
+                                  if (mode === 'play') return;
+                                  const parsed = parseScriptDragPayload(e);
+                                  if (!parsed) return;
+                                  e.preventDefault();
+                                  insertDraggedTopLevelAt(parsed);
+                                  setDragOverTopBlockId(null);
+                                }}
+                              />
+                              <div className="h-0.5" />
+                            </div>
+                          ) : <div className="flex-1" />}
+                        </div>
                       </div>
                     </div>
                   </div>

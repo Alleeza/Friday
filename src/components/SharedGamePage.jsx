@@ -27,7 +27,7 @@ function normalizeProjectState(projectState) {
   };
 }
 
-export default function SharedGamePage({ shareId }) {
+export default function SharedGamePage({ projectId, shareId }) {
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -51,7 +51,7 @@ export default function SharedGamePage({ shareId }) {
   useEffect(() => {
     let cancelled = false;
 
-    loadPublishedProject(shareId)
+    loadPublishedProject(projectId, shareId)
       .then((nextPublication) => {
         if (cancelled) return;
         setPublication({
@@ -72,7 +72,7 @@ export default function SharedGamePage({ shareId }) {
       cancelled = true;
       stopRuntime();
     };
-  }, [shareId, stopRuntime]);
+  }, [projectId, shareId, stopRuntime]);
 
   useEffect(() => {
     if (mode !== 'play') return undefined;

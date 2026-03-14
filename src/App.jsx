@@ -52,14 +52,18 @@ function deriveProjectPlan(setupData) {
   return setupData.plan || getFallbackPlan(setupData.idea || '', 0);
 }
 
-function getSharedGameIdFromPath() {
+function getSharedPublicationFromPath() {
   if (typeof window === 'undefined') return null;
-  const match = window.location.pathname.match(/^\/play\/([^/]+)$/);
-  return match ? decodeURIComponent(match[1]) : null;
+  const match = window.location.pathname.match(/^\/play\/gamemakeSession\/([^/]+)\/([^/]+)$/);
+  if (!match) return null;
+  return {
+    projectId: decodeURIComponent(match[1]),
+    shareId: decodeURIComponent(match[2]),
+  };
 }
 
 export default function App() {
-  const sharedGameId = getSharedGameIdFromPath();
+  const sharedPublication = getSharedPublicationFromPath();
   const lastSavedSnapshotRef = useRef('');
   const publishTimeoutRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,8 +80,13 @@ export default function App() {
     if (publishTimeoutRef.current) window.clearTimeout(publishTimeoutRef.current);
   }, []);
 
-  if (sharedGameId) {
-    return <SharedGamePage shareId={sharedGameId} />;
+  if (sharedPublication) {
+    return (
+      <SharedGamePage
+        projectId={sharedPublication.projectId}
+        shareId={sharedPublication.shareId}
+      />
+    );
   }
 
   useEffect(() => {

@@ -86,8 +86,10 @@ export async function publishSavedProject() {
   return payload.publication || null;
 }
 
-export async function loadPublishedProject(shareId) {
-  const response = await fetch(`${PUBLISHED_PROJECT_ENDPOINT}/${encodeURIComponent(shareId)}`);
+export async function loadPublishedProject(projectId, shareId) {
+  const response = await fetch(
+    `${PUBLISHED_PROJECT_ENDPOINT}/${encodeURIComponent(shareId)}?projectId=${encodeURIComponent(projectId)}`,
+  );
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);

@@ -25,7 +25,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 4. Run the SQL in [schema.sql](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/supabase/schema.sql) inside your Supabase project.
 
-If you already created `published_projects` with `project_id` as the primary key, run this migration once before deploying this branch:
+If you already created `published_projects` with `project_id` as the primary key, run [20260315_published_projects_multi_share.sql](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/supabase/migrations/20260315_published_projects_multi_share.sql) once before deploying this branch:
 
 ```sql
 alter table public.published_projects drop constraint if exists published_projects_pkey;

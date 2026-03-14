@@ -25,6 +25,15 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 4. Run the SQL in [schema.sql](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/supabase/schema.sql) inside your Supabase project.
 
+If you already created `published_projects` with `project_id` as the primary key, run [20260315_published_projects_multi_share.sql](C:/Users/Allee/OneDrive/Pictures/Desktop/Fri/Friday/supabase/migrations/20260315_published_projects_multi_share.sql) once before deploying this branch:
+
+```sql
+alter table public.published_projects drop constraint if exists published_projects_pkey;
+alter table public.published_projects add column if not exists id bigint generated always as identity;
+alter table public.published_projects add constraint published_projects_pkey primary key (id);
+create index if not exists published_projects_project_id_idx on public.published_projects (project_id);
+```
+
 5. Start the frontend and backend together:
 
 ```bash
@@ -33,7 +42,7 @@ npm run dev
 
 6. Open the local Vite URL shown in the terminal, usually `http://localhost:5173`.
 
-Project saves and published share snapshots are stored in Supabase. The browser keeps only a stable local editor ID so each device can reopen its own draft while the actual project data works on Vercel and across refreshes.
+Project saves and published share snapshots are stored in Supabase. Each browser session keeps an active local editor ID, and starting a new game rotates that ID so one user can create and publish multiple distinct games while older shared links still resolve to their saved snapshots.
 
 ## Vercel deployment
 

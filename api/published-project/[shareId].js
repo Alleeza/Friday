@@ -9,7 +9,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = await getPublishedProject(req.query?.shareId || null);
+    const result = await getPublishedProject(req.query?.projectId || null, req.query?.shareId || null);
     sendJson(res, result.statusCode, result.payload);
   } catch (error) {
     sendJson(res, error.statusCode || 500, {

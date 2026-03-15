@@ -1,9 +1,13 @@
-const backdropImageModules = typeof import.meta.glob === 'function'
-  ? import.meta.glob('../../assets/*.png', {
-      eager: true,
-      import: 'default',
-    })
-  : {};
+let backdropImageModules = {};
+
+try {
+  backdropImageModules = import.meta.glob('../../assets/*.png', {
+    eager: true,
+    import: 'default',
+  });
+} catch {
+  // Node-based tests do not provide Vite's import.meta.glob helper.
+}
 
 export const sandboxAssets = [
   { id: 'bunny', emoji: '🐰', label: 'Bunny', unlockLevel: 1 },

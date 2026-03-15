@@ -37,6 +37,26 @@ function normalizeSymbol(symbol) {
   return (symbol || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+function normalizeEventKey(value) {
+  const normalized = normalizeSymbol(value);
+  if (normalized === ' ') return 'space';
+  if (normalized === 'spacebar') return 'space';
+  return normalized;
+}
+
+function compileEventName(block) {
+  const baseEventName = normalizeSymbol(readTokenValue(block?.parts?.[1]));
+  if (baseEventName === 'key is pressed') {
+    const keyValue = normalizeEventKey(readTokenValue(block?.parts?.[2]));
+    return {
+      baseEventName,
+      eventName: keyValue ? `${baseEventName}|${keyValue}` : baseEventName,
+    };
+  }
+
+  return { baseEventName, eventName: baseEventName };
+}
+
 function compilePredicateFromParts(parts = []) {
   if (!parts.length) return null;
   const first = normalizeSymbol(readTokenValue(parts[0]));
@@ -158,8 +178,10 @@ function compileScript(blocks) {
 
   normalizedBlocks.forEach((block) => {
     if (isEventBlock(block)) {
+      const { baseEventName, eventName } = compileEventName(block);
       currentSection = {
-        eventName: normalizeSymbol(readTokenValue(block.parts?.[1])),
+        baseEventName,
+        eventName,
         instructions: [],
       };
       sections.push(currentSection);
@@ -179,7 +201,7 @@ function compileScript(blocks) {
   const events = {};
   const hasInstructions = sections.some((section) => section.instructions.length > 0);
   sections.forEach((section) => {
-    if (!EVENT_LABELS.has(section.eventName)) errors.push(`Unsupported event "${section.eventName || 'unknown'}".`);
+    if (!EVENT_LABELS.has(section.baseEventName)) errors.push(`Unsupported event "${section.baseEventName || 'unknown'}".`);
     if (!events[section.eventName]) events[section.eventName] = [];
     if (section.instructions.length) {
       events[section.eventName].push(...section.instructions);

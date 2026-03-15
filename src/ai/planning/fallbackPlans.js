@@ -138,6 +138,88 @@ const SPACE_DODGER_ARCHETYPE = {
   ],
 };
 
+/** Crossy Road style lane-dodging challenge. */
+const CROSSY_ROAD_ARCHETYPE = {
+  summary: 'Guide your Chicken across busy lanes while avoiding Cars and reaching the finish',
+  eta: '20-25 minutes',
+  infeasible: false,
+  suggestion: null,
+  entities: {
+    assets: ['chicken', 'car', 'goal'],
+    blocks: ['Move Forward', 'Forever', 'Say'],
+    events: ['When key pressed', 'When game starts', 'When bumps'],
+  },
+  checkpoints: ['Set up your chicken', 'Add moving traffic', 'Add the finish'],
+  stages: [
+    {
+      id: 'stage-1',
+      label: 'Your character',
+      objective: 'Place the Chicken and add simple keyboard controls',
+      why: 'The player needs a character and input before the game can be played',
+      success: 'Your Chicken is on the screen and responds to keyboard input',
+      steps: [
+        'Drag the Chicken onto the canvas and place it near the bottom of the screen',
+        'Choose the event that should make the Chicken react when the player presses a key',
+        'Add movement blocks so the Chicken can move when keys are pressed',
+      ],
+      stepXp: [5, 10, 15],
+      stepChecks: [
+        [{ type: 'hasAsset', value: 'chicken' }],
+        [{ type: 'eventIs', asset: 'chicken', event: 'key pressed' }],
+        [
+          { type: 'eventIs', asset: 'chicken', event: 'key pressed' },
+          { type: 'hasBlockOnAsset', asset: 'chicken', block: 'Move Forward' },
+        ],
+      ],
+      optionalSteps: [
+        { description: 'Add separate key scripts so the Chicken can move in more than one direction', bonusXp: 10 },
+      ],
+    },
+    {
+      id: 'stage-2',
+      label: 'Moving obstacles',
+      objective: 'Place Cars in lanes and make them keep moving',
+      why: 'Moving obstacles create the main challenge in a Crossy Road style game',
+      success: 'Several Cars move across the screen while the Chicken tries to cross',
+      steps: [
+        'Drag at least 3 Cars onto the canvas and spread them across different lanes',
+        'Choose the event that should make each Car start moving as soon as the game begins',
+        'Add a Forever loop with movement so the Cars keep driving across the screen',
+      ],
+      stepXp: [10, 10, 15],
+      stepChecks: [
+        [{ type: 'assetCount', asset: 'car', min: 3 }],
+        [{ type: 'eventIs', asset: 'car', event: 'game starts' }],
+        [{ type: 'scriptOnAssetContains', asset: 'car', blocks: ['Forever', 'Move Forward'] }],
+      ],
+      optionalSteps: [
+        { description: 'Change the movement number so one lane feels faster than another', bonusXp: 5 },
+      ],
+    },
+    {
+      id: 'stage-3',
+      label: 'Winning',
+      objective: 'Add a finish line and a reaction when the Chicken reaches it',
+      why: 'A clear win condition makes the game feel complete',
+      success: 'The game shows a win reaction when the Chicken reaches the finish',
+      steps: [
+        'Drag a Goal onto the canvas and place it at the top of the screen',
+        'Choose the event that should run when the Chicken reaches the Goal',
+        'When this happens, make the character say "You win!"',
+      ],
+      stepXp: [5, 10, 15],
+      stepChecks: [
+        [{ type: 'hasAsset', value: 'goal' }],
+        [{ type: 'eventIs', asset: 'goal', event: 'bumps' }],
+        [{ type: 'minBlockCount', asset: 'goal', min: 1 }],
+      ],
+      optionalSteps: [
+        { description: 'Add a second Goal reaction like a sound effect', bonusXp: 5 },
+      ],
+    },
+  ],
+};
+
 /** Navigate through Rocks to reach the Goal flag. */
 const MAZE_ARCHETYPE = {
   summary: 'Guide your character through Rocks to reach the Goal',
@@ -310,6 +392,11 @@ const ARCHETYPES = [
     keywords: ['space', 'ship', 'spaceship', 'shooter', 'asteroid', 'asteroids', 'dodge', 'survive', 'survival'],
     plan: SPACE_DODGER_ARCHETYPE,
     requiredAssets: ['bunny', 'rock'],
+  },
+  {
+    keywords: ['crossy', 'road', 'traffic', 'lane', 'lanes', 'car', 'cars', 'chicken'],
+    plan: CROSSY_ROAD_ARCHETYPE,
+    requiredAssets: ['chicken', 'car'],
   },
   {
     keywords: ['maze', 'navigate', 'obstacle', 'avoid', 'rock', 'wall', 'path', 'goal'],

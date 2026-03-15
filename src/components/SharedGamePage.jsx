@@ -76,8 +76,11 @@ export default function SharedGamePage({ projectId, shareId }) {
 
   useEffect(() => {
     if (mode !== 'play') return undefined;
-    const onKeyDown = () => {
-      runtimeRef.current?.dispatch('key is pressed');
+    const onKeyDown = (event) => {
+      const normalizedKey = String(event.key || '').toLowerCase() === 'spacebar'
+        ? 'space'
+        : (event.key === ' ' ? 'space' : String(event.key || '').toLowerCase());
+      runtimeRef.current?.dispatch('key is pressed', { key: normalizedKey });
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };
     window.addEventListener('keydown', onKeyDown);

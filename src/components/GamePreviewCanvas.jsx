@@ -11,7 +11,14 @@ function getVisualAsset(asset, runtimeSnapshot) {
 function getTransform(asset) {
   const style = asset.rotationStyle || 'dont rotate';
   const parts = [];
-  if (style === 'left-right') parts.push(`scaleX(${asset.facing === -1 ? -1 : 1})`);
+  const defaultFacingScaleX = asset.id === 'chicken' ? -1 : 1;
+  const runtimeFacingScaleX = asset.facing === -1 ? -1 : 1;
+
+  if (style === 'left-right') {
+    parts.push(`scaleX(${defaultFacingScaleX * runtimeFacingScaleX})`);
+  } else if (defaultFacingScaleX === -1) {
+    parts.push('scaleX(-1)');
+  }
   if (style === 'all around') parts.push(`rotate(${asset.rotation || 0}deg)`);
   return parts.join(' ') || 'none';
 }
@@ -323,6 +330,7 @@ export default function GamePreviewCanvas({
       ghost.style.height = '96px';
       ghost.style.background = '#ffffff';
       ghost.style.fontSize = '64px';
+      ghost.style.transform = getTransform(asset);
     }
 
     document.body.appendChild(ghost);
@@ -348,23 +356,39 @@ export default function GamePreviewCanvas({
     return `Level ${Math.floor(normalizedXp / 10) + 1}`;
   };
 
-  const renderSpriteAssetCard = (asset) => (
-    <div
-      key={asset.id}
-      draggable={(asset.unlockXp || 0) <= currentXp}
-      onDragStart={(e) => onAssetDragStart(e, asset, 'sprite')}
-      className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`}
-      title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}
-    >
-      <div className="text-3xl">{asset.emoji}</div>
-      <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
+  const renderSpriteAssetCard = (asset) => {
+    const isExtraAsset = prioritySpriteAssetIdSet.size > 0 && !prioritySpriteAssetIdSet.has(asset.id);
+    const isUnlocked = (asset.unlockXp || 0) <= currentXp;
+    const isEnabled = isUnlocked && !isExtraAsset;
+
+    return (
+      <div
+        key={asset.id}
+        draggable={isEnabled}
+        onDragStart={isEnabled ? (e) => onAssetDragStart(e, asset, 'sprite') : undefined}
+        className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${
+          isEnabled
+            ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing'
+            : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'
+        }`}
+        title={
+          isExtraAsset
+            ? `${asset.label} is not needed for this project`
+            : isUnlocked
+              ? asset.label
+              : `Unlocks at ${asset.unlockXp} XP`
+        }
+      >
+        <div className="text-3xl" style={{ transform: getTransform(asset) }}>{asset.emoji}</div>
+        <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
       {(asset.unlockXp || 0) > currentXp ? (
         <div className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
           🔒 {getUnlockLevelLabel(asset.unlockXp)}
         </div>
       ) : null}
-    </div>
-  );
+      </div>
+    );
+  };
 
   const onCanvasDrop = (e) => {
     if (!isEditMode) return;
@@ -821,7 +845,7 @@ export default function GamePreviewCanvas({
         );
       })}
 
-      {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
+      {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1" style={{ transform: getTransform(selectedPlacedAsset) }}>{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
       {showTrayToggle && isEditMode && !draggingPlacedAssetKey ? <button ref={trayToggleRef} onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
 
       {trayOpen && isEditMode ? (

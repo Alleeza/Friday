@@ -16,11 +16,23 @@ const ASSET_SEMANTICS = Object.freeze({
     pairings: ['carrot', 'rock', 'goal', 'tree'],
     constraints: ['Best used as the thing that moves', 'Movement plans should usually attach scripts to the Bunny'],
   },
+  chicken: {
+    roles: ['player', 'hero', 'runner'],
+    uses: ['crossing roads', 'dodging obstacles', 'main controllable character'],
+    pairings: ['car', 'goal', 'coin'],
+    constraints: ['Works best as the player character in road-crossing or dodge games'],
+  },
   carrot: {
     roles: ['collectible', 'reward', 'pickup'],
     uses: ['item to reach or collect', 'object that reacts when touched'],
     pairings: ['bunny', 'coin', 'goal'],
     constraints: ['Usually works best as a static reward object'],
+  },
+  car: {
+    roles: ['hazard', 'obstacle', 'moving blocker'],
+    uses: ['traffic obstacle', 'moving hazard', 'lane-based dodge challenge'],
+    pairings: ['chicken', 'goal', 'coin'],
+    constraints: ['Best used as a moving obstacle with a repeating script'],
   },
   rock: {
     roles: ['obstacle', 'wall', 'hazard stand-in'],

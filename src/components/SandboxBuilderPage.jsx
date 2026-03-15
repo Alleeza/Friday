@@ -5,6 +5,8 @@ import AIChatPanel from './AIChatPanel';
 import BlockTutorialTooltip from './BlockTutorialTooltip';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
+import { createDefaultAIService } from '../ai/createDefaultAIService';
+import { useAIChat } from '../hooks/useAIChat';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 import { StageProgressSection } from './ProjectRoadmapPage';
@@ -215,12 +217,6 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
-  if (selectedErrors.length) return `Fix ${selectedLabel}'s compile issues, then press Play again.`;
-  if (mode === 'play') return `Running ${selectedLabel}. Click the sprite or press a key to trigger more events.`;
-  return `For "${selectedBlock}", think event -> loop -> action.`;
-}
-
 function BuilderTopNav({ onCreateNewGame }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
@@ -314,7 +310,6 @@ export default function SandboxBuilderPage({
   const [pendingEventValue, setPendingEventValue] = useState('');
   const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([]);
 
   const priorityBuilderAssetIds = useMemo(
     () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
@@ -335,6 +330,35 @@ export default function SandboxBuilderPage({
     }),
     [sceneInstances, scriptsByInstanceKey, runtimeSnapshot]
   );
+
+  const aiService = useMemo(() => createDefaultAIService(), []);
+  const chatContextData = useMemo(
+    () => ({
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: availableBuilderAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    }),
+    [
+      availableBuilderAssets,
+      compileErrorsByInstance,
+      mode,
+      runtimeSnapshot,
+      sceneInstances,
+      scriptsByInstanceKey,
+    ]
+  );
+  const {
+    messages,
+    sendMessage: sendChat,
+    isStreaming: isChatStreaming,
+    abortResponse: abortChatResponse,
+  } = useAIChat({
+    aiService,
+    contextData: chatContextData,
+  });
 
   useEffect(() => {
     const nextProjectState = {
@@ -998,12 +1022,6 @@ export default function SandboxBuilderPage({
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
-  };
-
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
   };
 
   const quickEditorPosition = selectedInstance
@@ -1786,7 +1804,14 @@ export default function SandboxBuilderPage({
         </div>
       </section>
       <section>
-        <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+        <div className="w-full">
+          <AIChatPanel
+            messages={messages}
+            onSend={sendChat}
+            isStreaming={isChatStreaming}
+            onAbort={abortChatResponse}
+          />
+        </div>
       </section>
       {draggingPaletteBlock && mode !== 'play' ? (
         <div className="pointer-events-none fixed inset-0 z-[80]">

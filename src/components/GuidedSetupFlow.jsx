@@ -11,18 +11,18 @@ import {
 
 /* ─── Option data ─── */
 const STYLES = [
-  { id: 'platformer', label: 'Platformer', icon: '🦘', desc: 'Side-scrolling jump & run' },
-  { id: 'puzzle', label: 'Puzzle', icon: '🧩', desc: 'Logic and problem solving' },
-  { id: 'action', label: 'Action', icon: '⚡', desc: 'Fast-paced combat & reflexes' },
-  { id: 'arcade', label: 'Arcade', icon: '🕹️', desc: 'Classic score-chasing fun' },
+  { id: 'platformer', label: 'Platformer', icon: 'PLT', desc: 'Side-scrolling jump & run' },
+  { id: 'puzzle', label: 'Puzzle', icon: 'PZL', desc: 'Logic and problem solving' },
+  { id: 'action', label: 'Action', icon: 'ACT', desc: 'Fast-paced combat & reflexes' },
+  { id: 'arcade', label: 'Arcade', icon: 'ARC', desc: 'Classic score-chasing fun' },
 ];
 
 const GOALS = [
-  { id: 'collect', label: 'Collect items', icon: '🪙' },
-  { id: 'survive', label: 'Survive for time', icon: '⏱️' },
-  { id: 'reach', label: 'Reach the end', icon: '🏁' },
-  { id: 'highscore', label: 'High score', icon: '🏆' },
-  { id: 'defeat', label: 'Defeat enemies', icon: '⚔️' },
+  { id: 'collect', label: 'Collect items', icon: 'COL' },
+  { id: 'survive', label: 'Survive for time', icon: 'TMR' },
+  { id: 'reach', label: 'Reach the end', icon: 'END' },
+  { id: 'highscore', label: 'High score', icon: 'TOP' },
+  { id: 'defeat', label: 'Defeat enemies', icon: 'BAT' },
 ];
 
 const DIFFICULTIES = [
@@ -264,9 +264,9 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                     Tell Questy your idea and we&apos;ll turn it into a playful starter plan with assets, goals, and first steps.
                   </p>
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-bold text-slate-600">
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🐰 Character</span>
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🏁 Goal</span>
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🪨 Obstacle</span>
+                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Character</span>
+                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Goal</span>
+                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Obstacle</span>
                   </div>
 
                   <form ref={formRef} onSubmit={handleInitialSubmit} className="mt-6 w-full max-w-[1040px]">
@@ -329,7 +329,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                         <div className="flex flex-col gap-4">
                           <div className="flex items-start gap-3">
                             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#cfe8b7] bg-[#e8f7d3] text-[26px] shadow-[0_4px_0_rgba(88,204,2,0.14)]">
-                              <span aria-hidden="true">🐰</span>
+                              <span aria-hidden="true">BN</span>
                             </span>
                             <div className="min-w-0 pt-1">
                               <h3 className="font-display text-[1.75rem] font-bold leading-none tracking-[-0.02em] text-slate-900">Bunny Chases Carrot</h3>
@@ -347,18 +347,18 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                               <div className="rounded-[20px] border border-[#d8e9f7] bg-[#f8fcff] p-3.5">
                                 <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">Goals</p>
                                 <div className="mt-2.5 space-y-2 text-[15px] font-bold text-slate-600">
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🥕 Snag the carrot before time runs out</div>
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🪨 Swerve around rocky obstacles</div>
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🏁 Hop to the goal flag to win</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">Snag the carrot before time runs out</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">Swerve around rocky obstacles</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">Hop to the goal flag to win</div>
                                 </div>
                               </div>
                               <div className="rounded-[20px] border border-[#dceac8] bg-[#f4fce8] p-3.5">
                                 <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#4a8c12]">Starter Assets</p>
                                 <div className="mt-2.5 flex flex-wrap gap-2 text-[15px] font-bold text-[#3f7f10]">
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🐰 Bunny</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🥕 Carrot</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🪨 Rock</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">🏁 Goal</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">Bunny</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">Carrot</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">Rock</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(88,204,2,0.08)]">Goal</span>
                                 </div>
                               </div>
                             </div>
@@ -379,7 +379,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                         <div className="flex flex-col gap-4">
                           <div className="flex items-start gap-3">
                             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#cfe7fb] bg-[#e7f5ff] text-[26px] shadow-[0_4px_0_rgba(37,168,239,0.14)]">
-                              <span aria-hidden="true">🚗</span>
+                              <span aria-hidden="true">CA</span>
                             </span>
                             <div className="min-w-0 pt-1">
                               <h3 className="font-display text-[1.75rem] font-bold leading-none tracking-[-0.02em] text-slate-900">Crossy Road Dash</h3>
@@ -397,18 +397,18 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                               <div className="rounded-[20px] border border-[#d8e9f7] bg-[#f8fcff] p-3.5">
                                 <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">Goals</p>
                                 <div className="mt-2.5 space-y-2 text-[15px] font-bold text-slate-600">
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🚗 Dodge the moving cars and blocked lanes</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">Dodge the moving cars and blocked lanes</div>
                                   <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">⌨️ Use the keyboard to guide your chicken</div>
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🏁 Reach the far-side goal without crashing</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">Reach the far-side goal without crashing</div>
                                 </div>
                               </div>
                               <div className="rounded-[20px] border border-[#d8e9f7] bg-[#eef8ff] p-3.5">
                                 <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">Starter Assets</p>
                                 <div className="mt-2.5 flex flex-wrap gap-2 text-[15px] font-bold text-[#246ea5]">
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🐓 Chicken</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🚗 Car</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🏁 Goal</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">⌨️ Key Press</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Chicken</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Car</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Goal</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">Key Press</span>
                                 </div>
                               </div>
                             </div>

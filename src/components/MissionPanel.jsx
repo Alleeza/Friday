@@ -155,28 +155,23 @@ export default function MissionPanel() {
           </div>
           <div className="mt-2 min-w-0">
             <h2 className="max-w-[240px] text-[18px] font-black leading-[1.04] tracking-[-0.03em] text-slate-900">{currentStageTitle}</h2>
-            <p className="mt-1 text-[11px] font-medium leading-[1.35] text-[#475569]">{currentMission.description}</p>
           </div>
-        </div>
-
-        <div className="rounded-[28px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
+          <div className="mt-5 border-t border-[#EEF2F7] pt-4">
+            <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
             <span>Mission Progress</span>
             <span>{completedSteps}/{totalSteps} steps</span>
+            </div>
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
+              <div
+                className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
           </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
-            <div
-              className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#475569]">
-            {`Stage ${currentStageNumber}: ${currentStageTitle}`.toUpperCase()}
-          </div>
           <ul className="flex flex-col gap-3">
             {currentMission.steps.map((step, index) => {
               const count = missionProgress[step.id] || 0;

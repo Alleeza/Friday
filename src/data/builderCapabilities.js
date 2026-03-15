@@ -1,3 +1,5 @@
+import { soundOptions } from './soundLibrary';
+
 export const EVENT_OPTIONS = [
   'game starts',
   'sprite clicked',
@@ -44,7 +46,7 @@ export const BLOCK_PALETTE = {
   'Looks & Sounds': [
     { id: 'switch-costume', tone: 'looks', parts: ['Switch costume to', { type: 'dropdown', value: 'bunny jump', options: ['bunny jump', 'tree glow', 'crab legs'] }] },
     { id: 'next-costume', tone: 'sound', parts: ['Next costume'] },
-    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
+    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: soundOptions }, 'until done'] },
     { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
   ],
   Control: [

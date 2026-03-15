@@ -366,8 +366,8 @@ export default function SandboxBuilderPage({
 
   useEffect(() => {
     if (mode !== 'play') return undefined;
-    const onKeyDown = () => {
-      runtimeRef.current?.dispatch('key is pressed');
+    const onKeyDown = (event) => {
+      runtimeRef.current?.dispatch('key is pressed', { key: normalizeKeyPressValue(event.key) });
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };
     window.addEventListener('keydown', onKeyDown);

@@ -37,7 +37,7 @@ export const missionsData = [
         id: 'set_timer',
         description: 'Set a timer',
         target: 1,
-        check: (event) => event.type === 'BlockUsed' && event.payload?.blockType === 'Variables' && event.payload?.action?.includes('time')
+        check: (event) => event.type === 'BlockUsed' && event.payload?.blockType === 'variables' && event.payload?.action?.includes('time')
       },
       {
         id: 'collect_5_carrots',
@@ -58,7 +58,7 @@ export const missionsData = [
         id: 'move_bunny',
         description: 'Use movement blocks on the bunny',
         target: 3,
-        check: (event) => event.type === 'BlockUsed' && event.payload?.blockType === 'Movement'
+        check: (event) => event.type === 'BlockUsed' && event.payload?.blockType === 'movement'
       },
       {
         id: 'avoid_obstacles',

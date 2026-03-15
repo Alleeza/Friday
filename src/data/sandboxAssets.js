@@ -1,7 +1,9 @@
-const backdropImageModules = import.meta.glob('../../assets/*.png', {
-  eager: true,
-  import: 'default',
-});
+const backdropImageModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../assets/*.png', {
+      eager: true,
+      import: 'default',
+    })
+  : {};
 
 export const sandboxAssets = [
   { id: 'bunny', emoji: '🐰', label: 'Bunny', unlockXp: 0 },

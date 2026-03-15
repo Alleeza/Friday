@@ -9,7 +9,7 @@ import {
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
 import SharedGamePage from './components/SharedGamePage';
-import { createBunnyCarrotExampleProject } from './data/exampleProjects';
+import { createBunnyCarrotExampleProject, createCrossyRoadExampleProject } from './data/exampleProjects';
 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
 const emptyProjectState = {
@@ -154,8 +154,11 @@ export default function App() {
     setSaveState('idle');
   }, []);
 
-  const handleLaunchExample = useCallback(() => {
-    handleSetupComplete(createBunnyCarrotExampleProject());
+  const handleLaunchExample = useCallback((exampleId = 'bunny') => {
+    const project = exampleId === 'crossy'
+      ? createCrossyRoadExampleProject()
+      : createBunnyCarrotExampleProject();
+    handleSetupComplete(project);
   }, [handleSetupComplete]);
 
   const handleCreateNewGame = useCallback(() => {
@@ -237,7 +240,12 @@ export default function App() {
   if (activeScreen !== 'builder') {
     return (
       <>
-        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} />
+        {storageError ? (
+          <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-[#ffd7dc] bg-[#fff4f5] px-4 py-2 text-sm font-bold text-rose-600 shadow">
+            Storage offline: {storageError}
+          </div>
+        ) : null}
+        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} onGoHome={handleCreateNewGame} />
       </>
     );
   }

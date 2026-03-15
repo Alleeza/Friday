@@ -12,14 +12,18 @@ function TopNav({ onCreateNewGame }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3.5 lg:px-6">
-        <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onCreateNewGame}
+          className="flex items-center gap-3 rounded-2xl transition hover:opacity-85"
+        >
           <img
             src={questyImage}
             alt="Questy avatar"
             className="h-12 w-auto rounded-xl object-contain"
           />
           <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
-        </div>
+        </button>
 
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">

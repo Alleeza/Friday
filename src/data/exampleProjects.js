@@ -15,3 +15,15 @@ export function createBunnyCarrotExampleProject() {
     initialScripts: cloneValue({}),
   };
 }
+
+export function createCrossyRoadExampleProject() {
+  const idea = 'A bunny crosses a busy road, dodges rocks, and reaches the goal.';
+
+  return {
+    idea,
+    title: 'Crossy Road Dash',
+    plan: getFallbackPlan(idea, 0),
+    initialScene: cloneValue([]),
+    initialScripts: cloneValue({}),
+  };
+}

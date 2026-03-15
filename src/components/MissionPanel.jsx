@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BrainCircuit, CheckCircle, Circle, Map } from 'lucide-react';
+import { BrainCircuit, CheckCircle, ChevronDown, ChevronUp, Circle, Map } from 'lucide-react';
 import { useGamification } from '../hooks/useGamification';
 import { missionsData } from '../gamification/missions';
 
@@ -58,7 +58,7 @@ function getStepDetails(missionId, step, stepXp) {
 
 export default function MissionPanel() {
   const { userProgress } = useGamification();
-  const [hoveredStepId, setHoveredStepId] = useState(null);
+  const [expandedStepId, setExpandedStepId] = useState(null);
   const [celebratingStepId, setCelebratingStepId] = useState(null);
   const previousCompletionMapRef = useRef({});
   const celebrationTimeoutRef = useRef(null);
@@ -196,7 +196,7 @@ export default function MissionPanel() {
             {currentMission.steps.map((step, index) => {
               const count = missionProgress[step.id] || 0;
               const isChecked = count >= step.target;
-              const isHovered = hoveredStepId === step.id;
+              const isExpanded = expandedStepId === step.id;
               const isCelebrating = celebratingStepId === step.id;
               const stepReward = stepRewards[index] || 0;
               const stepDetails = getStepDetails(currentMission.id, step, stepReward);
@@ -204,74 +204,89 @@ export default function MissionPanel() {
               return (
                 <li
                   key={step.id}
-                  tabIndex={0}
-                  onMouseEnter={() => setHoveredStepId(step.id)}
-                  onMouseLeave={() => setHoveredStepId((current) => (current === step.id ? null : current))}
-                  onFocus={() => setHoveredStepId(step.id)}
-                  onBlur={() => setHoveredStepId((current) => (current === step.id ? null : current))}
-                  className={`relative flex items-start gap-2.5 rounded-xl border p-3 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#bfe3f8] ${
+                  className={`overflow-hidden rounded-xl border transition-all duration-300 ${
                     isChecked
                       ? 'border-[#c5e8c9] bg-[#f2faf0]'
                       : 'border-[#e7ebf0] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]'
                   }`}
                   style={isCelebrating ? { animation: 'cq-step-complete 650ms ease-out' } : undefined}
                 >
-                  <span
-                    className={`mt-0.5 shrink-0 ${isChecked ? 'text-[#58cc02]' : 'text-slate-300'}`}
-                    style={isCelebrating && isChecked ? { animation: 'cq-check-pop 280ms ease-out' } : undefined}
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={`mission-step-panel-${step.id}`}
+                    onClick={() => setExpandedStepId((current) => (current === step.id ? null : step.id))}
+                    className={`flex w-full items-start gap-2.5 p-3 text-left transition duration-200 ease-out hover:bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#bfe3f8] ${
+                      isChecked ? 'hover:bg-[#edf7e8]' : ''
+                    }`}
                   >
-                    {isChecked
-                      ? <CheckCircle className="h-[18px] w-[18px]" />
-                      : <Circle className="h-[18px] w-[18px] stroke-[2]" />
-                    }
-                  </span>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <div className="flex items-start justify-between gap-1">
-                      <span className={`text-[13px] font-semibold leading-tight ${isChecked ? 'text-[#3a7d0a] line-through decoration-[#3a7d0a]/30' : 'text-slate-700'}`}>
-                        {step.description}
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black whitespace-nowrap ${
-                          isChecked ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-500'
-                        }`}
-                        style={isCelebrating ? { animation: 'cq-xp-flash 420ms ease-out 1' } : undefined}
-                      >
-                        +{stepReward} XP
-                      </span>
-                    </div>
-                    {step.target > 1 ? (
-                      <div className="mt-0.5 flex items-center gap-2">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className={`h-full rounded-full transition-all ${isChecked ? 'bg-[#58cc02]' : 'bg-blue-400'}`}
-                            style={{ width: `${Math.min(100, (count / step.target) * 100)}%` }}
-                          />
-                        </div>
-                        <span className={`text-[10px] font-bold tabular-nums ${isChecked ? 'text-[#3a7d0a]' : 'text-blue-500'}`}>
-                          {count}/{step.target}
+                    <span
+                      className={`mt-0.5 shrink-0 ${isChecked ? 'text-[#58cc02]' : 'text-slate-300'}`}
+                      style={isCelebrating && isChecked ? { animation: 'cq-check-pop 280ms ease-out' } : undefined}
+                    >
+                      {isChecked
+                        ? <CheckCircle className="h-[18px] w-[18px]" />
+                        : <Circle className="h-[18px] w-[18px] stroke-[2]" />
+                      }
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`text-[13px] font-semibold leading-tight ${isChecked ? 'text-[#3a7d0a] line-through decoration-[#3a7d0a]/30' : 'text-slate-700'}`}>
+                          {step.description}
                         </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black whitespace-nowrap ${
+                              isChecked ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-500'
+                            }`}
+                            style={isCelebrating ? { animation: 'cq-xp-flash 420ms ease-out 1' } : undefined}
+                          >
+                            +{stepReward} XP
+                          </span>
+                          <span className="shrink-0 text-slate-400">
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </span>
+                        </div>
                       </div>
-                    ) : null}
-                  </div>
+                      {step.target > 1 ? (
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full transition-all ${isChecked ? 'bg-[#58cc02]' : 'bg-blue-400'}`}
+                              style={{ width: `${Math.min(100, (count / step.target) * 100)}%` }}
+                            />
+                          </div>
+                          <span className={`text-[10px] font-bold tabular-nums ${isChecked ? 'text-[#3a7d0a]' : 'text-blue-500'}`}>
+                            {count}/{step.target}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
 
                   <div
-                    className={`pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-30 w-[240px] -translate-y-1/2 rounded-2xl border border-[#d9e7f2] bg-white/95 p-3 shadow-[0_16px_40px_rgba(15,23,42,0.14)] transition-all duration-200 ${
-                      isHovered ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'
-                    }`}
-                    aria-hidden={!isHovered}
+                    className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
+                    style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr', opacity: isExpanded ? 1 : 0 }}
                   >
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Description</p>
-                        <p className="mt-1 text-[12px] leading-relaxed text-slate-700">{stepDetails.description}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
-                        <p className="mt-1 text-[12px] font-semibold text-slate-700">{stepDetails.concept}</p>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl bg-[#f8fafc] px-3 py-2">
-                        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Reward</span>
-                        <span className="text-[12px] font-extrabold text-[#1b97dd]">{stepDetails.reward}</span>
+                    <div
+                      id={`mission-step-panel-${step.id}`}
+                      className="overflow-hidden"
+                    >
+                      <div className={`border-t px-4 py-3 ${isChecked ? 'border-[#d9efd1] bg-[#eef8ea]' : 'border-slate-100 bg-[#f8fafc]'}`}>
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Description</p>
+                            <p className="mt-1 text-[12px] leading-relaxed text-slate-700">{stepDetails.description}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
+                            <p className="mt-1 text-[12px] font-semibold text-slate-700">{stepDetails.concept}</p>
+                          </div>
+                          <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2">
+                            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Reward</span>
+                            <span className="text-[12px] font-extrabold text-[#1b97dd]">{stepDetails.reward}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

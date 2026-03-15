@@ -1630,71 +1630,77 @@ export default function SandboxBuilderPage({
 
           <div className={`min-w-0 ${isFullscreen ? 'fixed inset-0 z-[65] bg-[#F7F7F7]' : 'flex flex-col gap-3'}`}>
             {!isFullscreen ? (
-              <div className="flex flex-wrap items-center justify-end gap-2 rounded-[24px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <button
-                  type="button"
-                  onClick={triggerUndo}
-                  disabled={!canUndo || mode === 'play'}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <Undo2 size={14} />
-                  Undo
-                </button>
-                <button
-                  type="button"
-                  onClick={triggerRedo}
-                  disabled={!canRedo || mode === 'play'}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <Redo2 size={14} />
-                  Redo
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#E5E5E5] bg-white text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7]"
-                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                >
-                  {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                </button>
-                <button
-                  type="button"
-                  onClick={onSaveProject}
-                  disabled={saveState === 'saving'}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Save size={14} />
-                  {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  onClick={onPublishProject}
-                  disabled={!hasSavedProject || publishState === 'publishing'}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <Share2 size={14} />
-                  {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
-                </button>
-                {mode === 'play' ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex min-w-0 items-center gap-3">
                   <button
                     type="button"
-                    onClick={stopRuntime}
-                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                    onClick={toggleFullscreen}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[#D7EAFE] bg-[#F4FBFF] px-3.5 py-2 text-[12px] font-extrabold text-[#1CB0F6] shadow-[0_3px_0_rgba(28,176,246,0.14)] transition hover:-translate-y-[1px] hover:bg-[#E8F7FF]"
+                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                   >
-                    <Square size={14} />
-                    Stop
+                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    Full Screen
                   </button>
-                ) : (
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={startRuntime}
-                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                    onClick={triggerUndo}
+                    disabled={!canUndo || mode === 'play'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    <Play size={14} />
-                    Play
+                    <Undo2 size={14} />
+                    Undo
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={triggerRedo}
+                    disabled={!canRedo || mode === 'play'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Redo2 size={14} />
+                    Redo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSaveProject}
+                    disabled={saveState === 'saving'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onPublishProject}
+                    disabled={!hasSavedProject || publishState === 'publishing'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Share2 size={14} />
+                    {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                  </button>
+                  {mode === 'play' ? (
+                    <button
+                      type="button"
+                      onClick={stopRuntime}
+                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                    >
+                      <Square size={14} />
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startRuntime}
+                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                    >
+                      <Play size={14} />
+                      Play
+                    </button>
+                  )}
+                </div>
               </div>
             ) : null}
 
@@ -1815,7 +1821,7 @@ export default function SandboxBuilderPage({
               />
 
                 {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
-                <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
+                <div ref={quickEditorRef} className="absolute z-10 flex flex-col gap-3" style={quickEditorPosition}>
                   {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
                   {renderAddEventPill()}
                 </div>

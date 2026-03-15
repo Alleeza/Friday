@@ -274,6 +274,7 @@ export default function SandboxBuilderPage({
   const lastPublishedProjectRef = useRef('');
   const quickEditorRef = useRef(null);
   const draggingScriptPayloadRef = useRef(null);
+  const draggingPaletteTemplateRef = useRef(null);
   const initialSceneInstances = useMemo(
     () => {
       const persistedScene = normalizeSceneState(initialProjectState?.scene).placedAssets;
@@ -708,6 +709,7 @@ export default function SandboxBuilderPage({
       setDraggingPaletteBlock(true);
       setTrashActive(false);
     });
+    draggingPaletteTemplateRef.current = template;
     const payload = JSON.stringify({ kind: 'palette-template', template });
     e.dataTransfer.setData('application/json', payload);
     e.dataTransfer.setData('text/plain', payload);
@@ -715,26 +717,38 @@ export default function SandboxBuilderPage({
   };
 
   const handlePaletteDragEnd = () => {
+    draggingPaletteTemplateRef.current = null;
     setDraggingPaletteBlock(false);
     setTrashActive(false);
   };
 
-  const parseDragTemplate = (e) => {
-    try {
-      const parsed = JSON.parse(e.dataTransfer.getData('application/json'));
-      return parsed?.kind === 'palette-template' ? parsed.template : null;
-    } catch {
-      return null;
+  const readDragData = (e) => {
+    const rawJson = e.dataTransfer.getData('application/json');
+    const rawText = e.dataTransfer.getData('text/plain');
+
+    for (const raw of [rawJson, rawText]) {
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        // Ignore malformed drag data and keep trying fallbacks.
+      }
     }
+
+    return null;
+  };
+
+  const parseDragTemplate = (e) => {
+    const parsed = readDragData(e);
+    if (parsed?.kind === 'palette-template') return parsed.template;
+    return draggingPaletteTemplateRef.current;
   };
 
   const parseScriptDragPayload = (e) => {
-    try {
-      const parsed = JSON.parse(e.dataTransfer.getData('application/json'));
-      return parsed?.kind === 'script-block' ? parsed : null;
-    } catch {
-      return null;
-    }
+    const parsed = readDragData(e);
+    if (parsed?.kind === 'script-block') return parsed;
+    return draggingScriptPayloadRef.current || draggingScriptBlock;
   };
 
   const updateTopLevelPart = (blockId, partIdx, nextValue) => {
@@ -1062,19 +1076,8 @@ export default function SandboxBuilderPage({
   };
 
   const readDragPayload = (e) => {
-    const rawJson = e.dataTransfer.getData('application/json');
-    const rawText = e.dataTransfer.getData('text/plain');
-
-    for (const raw of [rawJson, rawText]) {
-      if (!raw) continue;
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') return parsed;
-      } catch {
-        // Ignore malformed drag data and keep trying fallbacks.
-      }
-    }
-
+    const parsed = readDragData(e);
+    if (parsed) return parsed;
     return draggingScriptPayloadRef.current || draggingScriptBlock;
   };
 
@@ -2189,16 +2192,6 @@ export default function SandboxBuilderPage({
             />
           </div>
         </section>
-
-        {draggingPaletteBlock && mode !== 'play' ? (
-          <div className="pointer-events-none fixed inset-0 z-[80]">
-            <div
-              className={`absolute inset-0 transition ${
-                draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
-              }`}
-            />
-          </div>
-        ) : null}
       </main>
     </>
   );

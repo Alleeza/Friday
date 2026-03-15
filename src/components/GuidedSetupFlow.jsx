@@ -8,6 +8,8 @@ import {
   getDefaultModelForProvider,
   getDefaultProviderName,
 } from '../ai/providerCatalog.js';
+import { useGamification } from '../hooks/useGamification.jsx';
+import { getXpForLevel } from '../gamification/levels.js';
 
 /* ─── Option data ─── */
 const STYLES = [
@@ -38,6 +40,13 @@ const questyWaveAnimation = {
 
 /* ─── Shared Nav ─── */
 function TopNav({ step, onGoHome }) {
+  const { userProgress } = useGamification();
+  const currentLevelXp = getXpForLevel(userProgress.level);
+  const nextLevelXp = getXpForLevel(userProgress.level + 1);
+  const xpIntoLevel = Math.max(0, userProgress.total_xp - currentLevelXp);
+  const xpNeededForNext = Math.max(nextLevelXp - currentLevelXp, 1);
+  const progressPercent = Math.min(100, Math.max(0, (xpIntoLevel / xpNeededForNext) * 100));
+
   return (
     <header className="sticky top-0 z-30 border-b border-[#d9efc0] bg-[#f4fce8]/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1140px] items-center justify-between px-6 py-3.5 lg:px-10">
@@ -60,10 +69,11 @@ function TopNav({ step, onGoHome }) {
           {/* Level badge */}
           <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
             <Star className="h-3.5 w-3.5" />
-            Level 1
+            {`Level ${userProgress.level}`}
             <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
-              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
+              <div className="h-full rounded-full bg-[#58cc02]" style={{ width: `${progressPercent}%` }} />
             </div>
+            <span className="text-[11px] font-extrabold text-[#4a8c12]">{`${xpIntoLevel}/${xpNeededForNext} XP`}</span>
           </div>
 
           {/* Streak */}
@@ -90,6 +100,7 @@ function TopNav({ step, onGoHome }) {
 
 /* ─── Main Component ─── */
 export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome }) {
+  const { userProgress } = useGamification();
   const [step, setStep] = useState('idea');
   const [idea, setIdea] = useState('');
   const [style, setStyle] = useState('platformer');
@@ -105,7 +116,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
     plan, status, error, infeasible, suggestion, usedFallback,
     turnStats, refinementHistory,
     generatePlan, refinePlan, abort, reset,
-  } = usePlanSession({ xp: 0, providerName: selectedProvider, model: selectedModel });
+  } = usePlanSession({ xp: userProgress.total_xp, providerName: selectedProvider, model: selectedModel });
 
   // ⌘+Enter / Ctrl+Enter keyboard shortcut
   useEffect(() => {

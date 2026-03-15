@@ -277,6 +277,7 @@ export default function SandboxBuilderPage({
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
   const lastSnapshotPublishRef = useRef(0);
+  const previewStageRef = useRef(null);
   const lastPublishedProjectRef = useRef('');
   const quickEditorRef = useRef(null);
   const draggingScriptPayloadRef = useRef(null);
@@ -310,6 +311,7 @@ export default function SandboxBuilderPage({
   const [pendingEventValue, setPendingEventValue] = useState('');
   const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
+  const [previewStageSize, setPreviewStageSize] = useState({ width: 1280, height: 720 });
 
   const priorityBuilderAssetIds = useMemo(
     () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
@@ -404,6 +406,34 @@ export default function SandboxBuilderPage({
 
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  useEffect(() => {
+    const node = previewStageRef.current;
+    if (!node || typeof window === 'undefined') return undefined;
+
+    const updateStageSize = () => {
+      const rect = node.getBoundingClientRect();
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (!width || !height) return;
+      setPreviewStageSize((current) => (
+        current.width === width && current.height === height
+          ? current
+          : { width, height }
+      ));
+    };
+
+    updateStageSize();
+
+    if (typeof window.ResizeObserver !== 'function') {
+      window.addEventListener('resize', updateStageSize);
+      return () => window.removeEventListener('resize', updateStageSize);
+    }
+
+    const observer = new window.ResizeObserver(() => updateStageSize());
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -1001,7 +1031,11 @@ export default function SandboxBuilderPage({
       setEditorStage('expanded');
       return;
     }
-    const runtime = createScriptRuntime({ instances: sceneInstances, programsByKey });
+    const runtime = createScriptRuntime({
+      instances: sceneInstances,
+      programsByKey,
+      stageSize: previewStageSize,
+    });
     runtime.dispatch('game starts');
     runtimeRef.current = runtime;
     setEditorInstanceKey(null);
@@ -1515,14 +1549,13 @@ export default function SandboxBuilderPage({
         />
       ) : null}
       <section>
-        <div className="relative h-[720px] w-full">
+        <div ref={previewStageRef} className="relative h-[720px] w-full">
           <GamePreviewCanvas
             mode={mode}
             runtimeSnapshot={runtimeSnapshot}
             initialSceneState={initialProjectState?.scene}
             availableSpriteAssets={availableBuilderAssets}
             prioritySpriteAssetIds={priorityBuilderAssetIds}
-            currentXp={0}
             selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
             onSceneChange={handleSceneChange}
             onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}

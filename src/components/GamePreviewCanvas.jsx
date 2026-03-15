@@ -359,7 +359,7 @@ export default function GamePreviewCanvas({
   const renderSpriteAssetCard = (asset) => {
     const isExtraAsset = prioritySpriteAssetIdSet.size > 0 && !prioritySpriteAssetIdSet.has(asset.id);
     const isUnlocked = (asset.unlockXp || 0) <= currentXp;
-    const isEnabled = isUnlocked && !isExtraAsset;
+    const isEnabled = isUnlocked;
 
     return (
       <div
@@ -372,11 +372,9 @@ export default function GamePreviewCanvas({
             : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'
         }`}
         title={
-          isExtraAsset
-            ? `${asset.label} is not needed for this project`
-            : isUnlocked
-              ? asset.label
-              : `Unlocks at ${asset.unlockXp} XP`
+          isUnlocked
+            ? (isExtraAsset ? `${asset.label} is unlocked and optional for this project` : asset.label)
+            : `Unlocks at ${asset.unlockXp} XP`
         }
       >
         <div className="text-3xl" style={{ transform: getTransform(asset) }}>{asset.emoji}</div>

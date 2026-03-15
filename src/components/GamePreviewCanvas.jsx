@@ -28,6 +28,11 @@ function getOpacity(asset) {
   return 1 - (invisibility / 100);
 }
 
+function getUnlockLevelLabel(unlockXp) {
+  const requiredXp = Math.max(0, Number(unlockXp) || 0);
+  return `${requiredXp} XP`;
+}
+
 function normalizeSelectionBox(box) {
   if (!box) return null;
   const left = Math.min(box.startX, box.currentX);

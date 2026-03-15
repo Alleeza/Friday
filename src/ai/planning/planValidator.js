@@ -7,7 +7,7 @@
  * Both are pure functions with no AI or React dependencies.
  */
 
-import { createPlan, createStage } from './planModels.js';
+import { createPlan } from './planModels.js';
 import { ALL_BLOCK_NAMES, AVAILABLE_EVENTS_SET, IMPOSSIBLE_KEYWORDS } from './planRegistry.js';
 
 function normalizeText(value) {
@@ -25,6 +25,198 @@ function normalizeBlockName(value) {
 function textMentionsAny(text, items) {
   const normalized = normalizeText(text);
   return items.some((item) => normalized.includes(normalizeText(item)));
+}
+
+const PLAYER_CONTROL_EVENTS = new Set([
+  'key pressed',
+  'key is pressed',
+  'object is tapped',
+  'sprite clicked',
+]);
+
+const REACTION_CHECK_TYPES = new Set([
+  'minBlockCount',
+  'hasBlockOnAsset',
+  'scriptOnAssetContains',
+  'blockValueOnAsset',
+]);
+
+const AUTOPLAY_LANGUAGE_PATTERNS = [
+  /\bautomatic(?:ally)?\b/,
+  /\bautonomous\b/,
+  /\bon its own\b/,
+  /\bby itself\b/,
+  /\bplays itself\b/,
+  /\bscreensaver\b/,
+  /\bidle\b/,
+  /\bdemo mode\b/,
+];
+
+const ROTATION_HEAVY_LANGUAGE_PATTERNS = [
+  /\bsteer(?:ing)?\b/,
+  /\bturn(?:ing)?\b/,
+  /\brotation\b/,
+  /\brotate\b/,
+  /\bspin(?:ning)?\b/,
+];
+
+const OBJECTIVE_PATTERNS = [
+  /\b(win|goal|finish|finish line|survive|before the timer ends|before time runs out|score reaches|timer reaches)\b/,
+  /\b(collect|find|discover|reach|get|gather)\s+(all|every|both|each|\d+|two|three|four|five)\b/,
+  /\b(all|every|both|each|\d+|two|three|four|five)\s+(carrots?|coins?|stars?|targets?|goals?)\b/,
+];
+
+const PATHING_WORDS = [
+  'challenge',
+  'path',
+  'route',
+  'obstacle',
+  'maze',
+  'avoid',
+  'dodge',
+  'navigate',
+  'steer around',
+  'through the',
+];
+
+const POLISH_STAGE_WORDS = [
+  'polish',
+  'playtest',
+  'play test',
+  'test',
+  'tune',
+  'final',
+  'touch',
+];
+
+const WEAK_POLISH_STEP_PATTERNS = [
+  /\badjust\b/,
+  /\btweak\b/,
+  /\bimprove\b/,
+  /\bbetter\b/,
+  /\bfeel\b/,
+  /\bexperience\b/,
+  /\bpace\b/,
+  /\bdifficulty\b/,
+  /\bfinal adjustment\b/,
+];
+
+function collectStepEntries(plan) {
+  return plan.stages.flatMap((stage) => stage.steps.map((stepText, stepIndex) => ({
+    stage,
+    stepIndex,
+    stepText,
+    checks: Array.isArray(stage.stepChecks?.[stepIndex]) ? stage.stepChecks[stepIndex] : [],
+  })));
+}
+
+function getPrimaryPlayerAsset(plan) {
+  if (plan.entities.assets.includes('bunny')) return 'bunny';
+  return plan.entities.assets[0] ?? null;
+}
+
+function checkUsesAsset(check, assetId) {
+  return check?.asset === assetId || check?.value === assetId;
+}
+
+function checkMentionsBlock(check, blockName) {
+  const normalizedBlock = normalizeBlockName(blockName);
+  if (check?.type === 'hasBlockOnAsset' || check?.type === 'blockValueOnAsset') {
+    return normalizeBlockName(check.block) === normalizedBlock;
+  }
+  if (check?.type === 'scriptOnAssetContains' && Array.isArray(check.blocks)) {
+    return check.blocks.some((value) => normalizeBlockName(value) === normalizedBlock);
+  }
+  return false;
+}
+
+function planHasEvent(entries, assetId, eventName) {
+  return entries.some(({ checks }) => checks.some((check) => (
+    check?.type === 'eventIs'
+    && check.asset === assetId
+    && normalizeEventName(check.event) === normalizeEventName(eventName)
+  )));
+}
+
+function planHasBlock(entries, assetId, blockName) {
+  return entries.some(({ checks }) => checks.some((check) => (
+    checkUsesAsset(check, assetId) && checkMentionsBlock(check, blockName)
+  )));
+}
+
+function planHasAnyBlock(entries, assetId, blockNames) {
+  return blockNames.some((blockName) => planHasBlock(entries, assetId, blockName));
+}
+
+function planHasInteractiveTarget(entries, playerAssetId) {
+  const targetState = new Map();
+
+  entries.forEach(({ checks }) => {
+    checks.forEach((check) => {
+      const assetId = check?.asset ?? check?.value;
+      if (!assetId || assetId === playerAssetId) return;
+
+      const current = targetState.get(assetId) ?? { bumps: false, reaction: false };
+      if (check.type === 'eventIs' && normalizeEventName(check.event) === 'bumps') {
+        current.bumps = true;
+      }
+      if (REACTION_CHECK_TYPES.has(check.type)) {
+        current.reaction = true;
+      }
+      targetState.set(assetId, current);
+    });
+  });
+
+  return [...targetState.values()].some((state) => state.bumps && state.reaction);
+}
+
+function planHasExplicitObjective(plan) {
+  const normalizedPlanText = normalizeText([
+    plan.summary,
+    ...plan.checkpoints,
+    ...plan.stages.flatMap((stage) => [stage.label, stage.objective, stage.success, ...stage.steps]),
+  ].join(' '));
+
+  return OBJECTIVE_PATTERNS.some((pattern) => pattern.test(normalizedPlanText));
+}
+
+function planHasPathingStage(plan) {
+  return plan.stages.some((stage) => {
+    const stageText = normalizeText([
+      stage.label,
+      stage.objective,
+      stage.success,
+      ...stage.steps,
+    ].join(' '));
+    return PATHING_WORDS.some((word) => stageText.includes(word));
+  });
+}
+
+function stageLooksLikePolish(stage) {
+  const normalizedStageText = normalizeText([stage.label, stage.objective, stage.success].join(' '));
+  return POLISH_STAGE_WORDS.some((word) => normalizedStageText.includes(word));
+}
+
+function getWeakPolishIssues(plan) {
+  const issues = [];
+
+  plan.stages.forEach((stage) => {
+    if (!stageLooksLikePolish(stage)) return;
+
+    stage.steps.forEach((stepText, stepIndex) => {
+      const checks = Array.isArray(stage.stepChecks?.[stepIndex]) ? stage.stepChecks[stepIndex] : [];
+      if (checks.length > 0) return;
+
+      const normalizedStep = normalizeText(stepText);
+      if (!WEAK_POLISH_STEP_PATTERNS.some((pattern) => pattern.test(normalizedStep))) return;
+
+      issues.push(
+        `${stage.label} / Step ${stepIndex + 1}: this polish step asks for a concrete tweak but uses [] instead of a programmatic check`
+      );
+    });
+  });
+
+  return issues;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,9 +237,10 @@ function textMentionsAny(text, items) {
  * Only hard requirements cause `valid: false`.
  *
  * @param {unknown} raw - Parsed JSON from the AI response
+ * @param {{ minStages?: number, minStepsPerStage?: number }} [options]
  * @returns {StructureResult}
  */
-export function validateStructure(raw) {
+export function validateStructure(raw, { minStages = 1, minStepsPerStage = 1 } = {}) {
   const errors = [];
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -63,6 +256,12 @@ export function validateStructure(raw) {
   if (!Array.isArray(raw.stages) || raw.stages.length === 0) {
     errors.push('"stages" must be a non-empty array');
     return { valid: false, errors, plan: null };
+  }
+
+  if (raw.stages.length < minStages) {
+    errors.push(
+      `Plan has ${raw.stages.length} stage(s) but minimum is ${minStages} — add more stages to cover the full game creation lifecycle`
+    );
   }
 
   // Validate each stage
@@ -81,6 +280,9 @@ export function validateStructure(raw) {
     if (!Array.isArray(stage.steps) || stage.steps.length === 0) {
       errors.push(`${prefix}: "steps" must be a non-empty array`);
     } else {
+      if (stage.steps.length < minStepsPerStage) {
+        errors.push(`${prefix} has ${stage.steps.length} step(s) but minimum is ${minStepsPerStage}`);
+      }
       if (stage.stepXp !== undefined) {
         if (!Array.isArray(stage.stepXp)) {
           errors.push(`${prefix}: "stepXp" must be an array`);
@@ -324,17 +526,120 @@ export function validateSemanticAlignment(plan, {
 }
 
 // ---------------------------------------------------------------------------
+// Layer 4: Gameplay quality validation
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {Object} GameplayValidationResult
+ * @property {boolean} valid
+ * @property {string[]} issues
+ */
+
+/**
+ * Rejects technically valid plans that still fail to create a playable game loop.
+ *
+ * @param {import('./planModels.js').Plan} plan
+ * @param {{ gameplayRequirements?: import('./gameplayRequirements.js').GameplayRequirements }} [options]
+ * @returns {GameplayValidationResult}
+ */
+export function validateGameplayQuality(plan, { gameplayRequirements = {} } = {}) {
+  const issues = [];
+  const entries = collectStepEntries(plan);
+  const playerAssetId = getPrimaryPlayerAsset(plan);
+  const normalizedPlanText = normalizeText([
+    plan.summary,
+    ...plan.checkpoints,
+    ...plan.stages.flatMap((stage) => [stage.label, stage.objective, stage.success, ...stage.steps]),
+  ].join(' '));
+
+  const hasPlayerControl = Boolean(
+    playerAssetId && entries.some(({ checks }) => checks.some((check) => (
+      check?.type === 'eventIs'
+      && check.asset === playerAssetId
+      && PLAYER_CONTROL_EVENTS.has(normalizeEventName(check.event))
+    )))
+  );
+
+  const hasAutoplayCoreLoop = Boolean(
+    playerAssetId
+    && planHasEvent(entries, playerAssetId, 'game starts')
+    && planHasBlock(entries, playerAssetId, 'Forever')
+    && planHasBlock(entries, playerAssetId, 'Move Forward')
+  );
+  const hasAxisMovement = Boolean(
+    playerAssetId && planHasAnyBlock(entries, playerAssetId, ['Change X by', 'Change Y by'])
+  );
+  const hasRotationHeavyPlayerMovement = Boolean(
+    playerAssetId && (
+      planHasBlock(entries, playerAssetId, 'Turn degrees')
+      || planHasBlock(entries, playerAssetId, 'Move Forward')
+    )
+  );
+
+  if (gameplayRequirements.requiresPlayerAgency) {
+    if (!hasPlayerControl) {
+      issues.push('Exploration must be student-controlled for this prompt. Add a player-control event on the main character, usually "When key is pressed".');
+    }
+
+    if (gameplayRequirements.forbidAutoplayCoreLoop && hasAutoplayCoreLoop && !hasPlayerControl) {
+      issues.push('This plan is an autoplay toy, not a player-controlled game. The main character moves automatically on "When game starts" instead of being guided by the player.');
+    }
+
+    if (AUTOPLAY_LANGUAGE_PATTERNS.some((pattern) => pattern.test(normalizedPlanText))) {
+      issues.push('The summary or objectives describe the game as automatic/autonomous even though this idea should be player-controlled.');
+    }
+  }
+
+  if (gameplayRequirements.preferAxisMovement && !hasAxisMovement) {
+    issues.push('This plan should use simple WASD-style movement with "Change X by" and "Change Y by" on the player instead of rotation-heavy control.');
+  }
+
+  if (gameplayRequirements.discourageRotationMovement && hasRotationHeavyPlayerMovement && !hasAxisMovement) {
+    issues.push('Rotation or steering is doing too much of the player-control work here. For this idea, prefer direct horizontal/vertical movement over "Turn degrees" and "Move Forward".');
+  }
+
+  if (gameplayRequirements.discourageRotationMovement && ROTATION_HEAVY_LANGUAGE_PATTERNS.some((pattern) => pattern.test(normalizedPlanText)) && !hasAxisMovement) {
+    issues.push('The plan talks about steering or turning as the main control scheme, but this idea should default to direct axis movement.');
+  }
+
+  if (gameplayRequirements.requiresExplicitObjective && !planHasExplicitObjective(plan)) {
+    issues.push('The plan needs an explicit objective with a finish condition, such as finding every target or reaching a goal.');
+  }
+
+  if (gameplayRequirements.requiresInteractiveTarget && !planHasInteractiveTarget(entries, playerAssetId)) {
+    issues.push('The plan needs an interactive target with a "When bumps" event and a visible reaction script.');
+  }
+
+  if (gameplayRequirements.preferObstacleOrPathing && !planHasPathingStage(plan)) {
+    issues.push('The plan needs a meaningful challenge or pathing stage so the objective takes effort.');
+  }
+
+  issues.push(...getWeakPolishIssues(plan));
+
+  return { valid: issues.length === 0, issues };
+}
+
+// ---------------------------------------------------------------------------
 // Combined validate helper
 // ---------------------------------------------------------------------------
 
 /**
  * Runs both layers and returns a merged result.
  * @param {unknown} raw
- * @param {{ unlockedAssets: Array<{id:string,label:string}>, allowedBlockNames: string[] }} constraints
+ * @param {{
+ *   unlockedAssets: Array<{id:string,label:string}>,
+ *   allowedBlockNames: string[],
+ *   minStages?: number,
+ *   minStepsPerStage?: number,
+ *   gameplayRequirements?: import('./gameplayRequirements.js').GameplayRequirements,
+ * }} constraints
  * @returns {{ valid: boolean, issues: string[], plan: import('./planModels.js').Plan|null }}
  */
-export function validatePlan(raw, constraints) {
-  const structResult = validateStructure(raw);
+export function validatePlan(raw, constraints = {}) {
+  const structResult = validateStructure(raw, {
+    minStages: constraints.minStages,
+    minStepsPerStage: constraints.minStepsPerStage,
+  });
   if (!structResult.valid) {
     return {
       valid: false,
@@ -353,9 +658,18 @@ export function validatePlan(raw, constraints) {
   }
 
   const semanticResult = validateSemanticAlignment(structResult.plan, constraints);
+  if (!semanticResult.valid) {
+    return {
+      valid: false,
+      issues: semanticResult.issues,
+      plan: structResult.plan,
+    };
+  }
+
+  const gameplayResult = validateGameplayQuality(structResult.plan, constraints);
   return {
-    valid: semanticResult.valid,
-    issues: semanticResult.issues,
+    valid: gameplayResult.valid,
+    issues: gameplayResult.issues,
     plan: structResult.plan,
   };
 }

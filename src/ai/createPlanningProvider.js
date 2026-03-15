@@ -7,7 +7,7 @@ import { getDefaultModelForProvider, getDefaultProviderName } from './providerCa
  *
  * Unlike createDefaultAIService(), this returns the provider directly (not
  * wrapped in AIService) because PlanningService calls provider.sendMessage()
- * directly. Uses maxTokens: 2048 to accommodate structured JSON plan output.
+ * directly. Uses maxTokens: 8192 to accommodate detailed structured JSON plans.
  *
  * @param {{ providerName?: string, model?: string }} options
  * @returns {import('./providers/AIProvider.js').AIProvider}
@@ -25,7 +25,7 @@ export function createPlanningProvider(options = {}) {
 
   return new ClaudeProvider({
     model,
-    maxTokens: 2048,
+    maxTokens: 8192,
     apiUrl: import.meta.env.VITE_CLAUDE_API_URL || '/api/claude/messages',
   });
 }

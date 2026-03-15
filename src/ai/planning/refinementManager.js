@@ -10,7 +10,7 @@
  *   import { PlanningService } from './planningService.js';
  *   import { ClaudeProvider } from '../providers/ClaudeProvider.js';
  *
- *   const planner = new PlanningService(new ClaudeProvider({ maxTokens: 2048 }), { xp: 25 });
+ *   const planner = new PlanningService(new ClaudeProvider({ maxTokens: 8192 }), { xp: 25 });
  *   const session = new RefinementSession(planner);
  *
  *   const initial = await session.startSession('bunny collects carrots');

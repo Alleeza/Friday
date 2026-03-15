@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from 'node:fs';
+import { appendFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,9 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 const distDir = path.join(projectRoot, 'dist');
+const plannerDebugDir = path.join(projectRoot, '.planner-debug');
+const plannerDebugLogPath = path.join(plannerDebugDir, 'planner-runs.jsonl');
+const plannerDebugLatestPath = path.join(plannerDebugDir, 'latest-planner-run.json');
 const port = Number(process.env.PORT || 3001);
 
 loadLocalEnv(projectRoot);
@@ -66,6 +69,50 @@ function readBody(req) {
   });
 }
 
+function ensurePlannerDebugDir() {
+  if (!existsSync(plannerDebugDir)) {
+    mkdirSync(plannerDebugDir, { recursive: true });
+  }
+}
+
+function writePlannerDebugRun(run) {
+  ensurePlannerDebugDir();
+
+  const payload = {
+    ...run,
+    receivedAt: new Date().toISOString(),
+  };
+
+  appendFileSync(plannerDebugLogPath, `${JSON.stringify(payload)}\n`, 'utf8');
+  writeFileSync(plannerDebugLatestPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+
+  return {
+    ok: true,
+    logPath: path.relative(projectRoot, plannerDebugLogPath),
+    latestPath: path.relative(projectRoot, plannerDebugLatestPath),
+  };
+}
+
+function readPlannerDebugRuns(limit = 10) {
+  if (!existsSync(plannerDebugLogPath)) return [];
+
+  const lines = readFileSync(plannerDebugLogPath, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return lines.slice(-Math.max(1, limit)).map((line) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return {
+        parseError: 'Could not parse planner debug line',
+        raw: line,
+      };
+    }
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
@@ -109,6 +156,31 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, result.statusCode, result.payload);
     } catch (error) {
       sendError(res, error, 'Unable to publish project.', 400);
+    }
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/planner-debug' && req.method === 'POST') {
+    try {
+      const rawBody = await readBody(req);
+      const parsed = rawBody ? JSON.parse(rawBody) : {};
+      const result = writePlannerDebugRun(parsed);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendError(res, error, 'Unable to write planner debug log.', 400);
+    }
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/planner-debug' && req.method === 'GET') {
+    try {
+      sendJson(res, 200, {
+        logPath: path.relative(projectRoot, plannerDebugLogPath),
+        latestPath: path.relative(projectRoot, plannerDebugLatestPath),
+        runs: readPlannerDebugRuns(Number(requestUrl.searchParams.get('limit') || 10)),
+      });
+    } catch (error) {
+      sendError(res, error, 'Unable to read planner debug logs.');
     }
     return;
   }

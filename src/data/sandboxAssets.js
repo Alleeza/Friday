@@ -1,11 +1,15 @@
-const backdropImageModules = import.meta.glob('../../assets/*.png', {
-  eager: true,
-  import: 'default',
-});
+const backdropImageModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../assets/*.png', {
+      eager: true,
+      import: 'default',
+    })
+  : {};
 
 export const sandboxAssets = [
   { id: 'bunny', emoji: '🐰', label: 'Bunny', unlockXp: 0 },
+  { id: 'chicken', emoji: '🐓', label: 'Chicken', unlockXp: 0 },
   { id: 'carrot', emoji: '🥕', label: 'Carrot', unlockXp: 0 },
+  { id: 'car', emoji: '🚗', label: 'Car', unlockXp: 0 },
   { id: 'rock', emoji: '🪨', label: 'Rock', unlockXp: 0 },
   { id: 'tree', emoji: '🌳', label: 'Tree', unlockXp: 0 },
   { id: 'frog', emoji: '🐸', label: 'Frog', unlockXp: 10 },
@@ -37,13 +41,20 @@ export const backdropAssets = Object.entries(backdropImageModules)
   .map(([path, src]) => {
     const match = path.match(/\/(\d+)\.png$/);
     const number = Number(match?.[1] || 0);
+    const unlockXp = number <= 4
+      ? 0
+      : number <= 8
+        ? 20
+        : number <= 12
+          ? 50
+          : 80;
 
     return {
       id: `backdrop-${number}`,
       label: `Backdrop ${number}`,
       previewLabel: `${number}`,
       src,
-      unlockXp: 0,
+      unlockXp,
       type: 'backdrop',
       sortOrder: number,
     };

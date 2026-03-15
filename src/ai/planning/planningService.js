@@ -8,7 +8,7 @@
  *   import { PlanningService } from './planningService.js';
  *   import { ClaudeProvider } from '../providers/ClaudeProvider.js';
  *
- *   const planner = new PlanningService(new ClaudeProvider({ maxTokens: 2048 }), { xp: 0 });
+ *   const planner = new PlanningService(new ClaudeProvider({ maxTokens: 8192 }), { xp: 0 });
  *   const result = await planner.generatePlan('I want a bunny that collects carrots');
  *   // result: { ok, plan, infeasible, suggestion, error, usedFallback }
  *
@@ -27,11 +27,24 @@ import {
   buildStructureRetryMessage,
   buildFeasibilityRetryMessage,
   buildSemanticRetryMessage,
+  buildGameplayRetryMessage,
 } from './planningPrompt.js';
-import { validateStructure, validateFeasibility, validateSemanticAlignment } from './planValidator.js';
+import {
+  validateStructure,
+  validateFeasibility,
+  validateSemanticAlignment,
+  validateGameplayQuality,
+} from './planValidator.js';
 import { createPlan, createSuccessResult, createErrorResult } from './planModels.js';
 import { getFallbackPlan, getFallbackPlanResultMeta } from './fallbackPlans.js';
 import { getPlannerCapabilityConstraints } from './plannerCapabilityCatalog.js';
+import { deriveGameplayRequirements } from './gameplayRequirements.js';
+import {
+  createPlannerDebugRun,
+  addPlannerDebugAttempt,
+  addPlannerDebugNote,
+  finalizePlannerDebugRun,
+} from './plannerDebug.js';
 
 // Max idea text length accepted (chars)
 const MAX_IDEA_LENGTH = 500;
@@ -82,7 +95,7 @@ export class PlanningService {
     }
 
     // 2. Build constraints
-    const constraints = this._buildConstraints();
+    const constraints = this._buildConstraints(sanitized);
 
     // 3. Build system prompt
     const systemPrompt = buildPlanningSystemPrompt({
@@ -92,6 +105,17 @@ export class PlanningService {
       plannerBlocks: constraints.plannerBlocks,
       plannerEvents: constraints.plannerEvents,
       plannerCheckabilityGuide: constraints.plannerCheckabilityGuide,
+      gameplayRequirements: constraints.gameplayRequirements,
+    });
+
+    const debugRun = createPlannerDebugRun({
+      mode: 'generate',
+      ideaText: sanitized,
+      userMessage: sanitized,
+      systemPrompt,
+      constraints,
+      provider: this._provider,
+      xp: this._xp,
     });
 
     // 4. Call AI → parse → validate (with one retry per stage)
@@ -101,6 +125,7 @@ export class PlanningService {
       constraints,
       ideaText: sanitized,
       signal,
+      debugRun,
     });
   }
 
@@ -118,7 +143,8 @@ export class PlanningService {
       return createErrorResult('Please describe how you want the plan to change');
     }
 
-    const constraints = this._buildConstraints();
+    const gameplayIdea = `${currentPlan?.summary ?? ''} ${sanitized}`.trim();
+    const constraints = this._buildConstraints(gameplayIdea);
 
     const systemPrompt = buildRefinementSystemPrompt({
       unlockedAssets: constraints.unlockedAssets,
@@ -127,9 +153,21 @@ export class PlanningService {
       plannerBlocks: constraints.plannerBlocks,
       plannerEvents: constraints.plannerEvents,
       plannerCheckabilityGuide: constraints.plannerCheckabilityGuide,
+      gameplayRequirements: constraints.gameplayRequirements,
     });
 
     const userMessage = buildRefinementUserMessage(currentPlan, sanitized);
+
+    const debugRun = createPlannerDebugRun({
+      mode: 'refine',
+      ideaText: sanitized,
+      userMessage,
+      systemPrompt,
+      constraints,
+      provider: this._provider,
+      xp: this._xp,
+      currentPlan,
+    });
 
     return this._runPipeline({
       userMessage,
@@ -137,6 +175,7 @@ export class PlanningService {
       constraints,
       ideaText: sanitized,
       signal,
+      debugRun,
     });
   }
 
@@ -148,22 +187,30 @@ export class PlanningService {
    * Build the constraint set for this student's XP level.
    * @private
    */
-  _buildConstraints() {
+  _buildConstraints(ideaText = '') {
     const difficultyProfile = getDifficultyProfile(this._xp);
     const unlockedAssets = getUnlockedAssets(this._xp);
     const allowedBlockNames = getAllowedBlockNames(difficultyProfile);
+    const gameplayRequirements = deriveGameplayRequirements(ideaText, difficultyProfile);
     return {
       difficultyProfile,
       unlockedAssets,
       allowedBlockNames,
+      gameplayRequirements,
       ...getPlannerCapabilityConstraints(difficultyProfile, this._xp),
     };
   }
 
-  _createFallbackResult(ideaText) {
+  _createFallbackResult(ideaText, debugRun, reason) {
     const plan = getFallbackPlan(ideaText, this._xp);
     const meta = getFallbackPlanResultMeta(ideaText, this._xp);
-    return createSuccessResult(plan, { ...meta, usedFallback: true });
+    const result = createSuccessResult(plan, { ...meta, usedFallback: true });
+    addPlannerDebugNote(debugRun, 'fallback-result-created', {
+      reason,
+      meta,
+      plan: this._summarizePlan(plan),
+    });
+    return result;
   }
 
   /**
@@ -172,39 +219,77 @@ export class PlanningService {
    *
    * @private
    */
-  async _runPipeline({ userMessage, systemPrompt, constraints, ideaText, signal }) {
+  async _runPipeline({ userMessage, systemPrompt, constraints, ideaText, signal, debugRun }) {
+    const structureOptions = {
+      minStages: constraints.difficultyProfile.minStages,
+      minStepsPerStage: constraints.difficultyProfile.minStepsPerStage,
+    };
+
+    addPlannerDebugNote(debugRun, 'pipeline-start', {
+      structureOptions,
+      difficultyProfile: constraints.difficultyProfile,
+      gameplayRequirements: constraints.gameplayRequirements,
+    });
+
     // --- First attempt ---
     let rawText;
     try {
-      const response = await this._provider.sendMessage({
-        messages: [{ role: 'user', content: userMessage }],
+      rawText = await this._attemptProviderCall({
+        label: 'initial-response',
+        messageText: userMessage,
         systemPrompt,
         signal,
+        debugRun,
       });
-      rawText = response.text;
     } catch (err) {
       if (err.name === 'AbortError') throw err;
-      return createErrorResult(`Could not reach the AI service: ${err.message}`);
+      const errorResult = createErrorResult(`Could not reach the AI service: ${err.message}`);
+      await finalizePlannerDebugRun(debugRun, {
+        status: 'provider-error',
+        result: errorResult,
+        error: err,
+      });
+      return errorResult;
     }
 
     // Parse JSON from raw text
-    let parsed = this._parseJSON(rawText);
+    let parseResult = this._parseJSONWithMeta(rawText);
+    let parsed = parseResult.parsed;
 
     // --- Structure validation (retry if needed) ---
-    let structResult = validateStructure(parsed);
+    let structResult = validateStructure(parsed, structureOptions);
+    this._recordValidationAttempt(debugRun, 'initial-response', {
+      rawText,
+      parseResult,
+      structure: structResult,
+    });
+
     if (!structResult.valid) {
       // Retry once with error feedback
       const retryText = await this._retry({
         systemPrompt,
         retryMessage: buildStructureRetryMessage(ideaText, structResult.errors),
         signal,
+        debugRun,
+        label: 'structure-retry',
       });
       if (retryText) {
-        parsed = this._parseJSON(retryText);
-        structResult = validateStructure(parsed);
+        parseResult = this._parseJSONWithMeta(retryText);
+        parsed = parseResult.parsed;
+        structResult = validateStructure(parsed, structureOptions);
+        this._recordValidationAttempt(debugRun, 'structure-retry', {
+          rawText: retryText,
+          parseResult,
+          structure: structResult,
+        });
       }
       if (!structResult.valid || !structResult.plan) {
-        return this._createFallbackResult(ideaText);
+        const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'structure-validation-failed');
+        await finalizePlannerDebugRun(debugRun, {
+          status: 'fallback-structure',
+          result: fallbackResult,
+        });
+        return fallbackResult;
       }
     }
 
@@ -212,72 +297,223 @@ export class PlanningService {
 
     // --- Feasibility validation (retry if needed) ---
     const feasResult = validateFeasibility(plan, constraints);
+    addPlannerDebugAttempt(debugRun, 'feasibility-initial', {
+      feasibility: feasResult,
+      plan: this._summarizePlan(plan),
+    });
     if (!feasResult.valid) {
       const retryText = await this._retry({
         systemPrompt,
         retryMessage: buildFeasibilityRetryMessage(ideaText, feasResult.violations),
         signal,
+        debugRun,
+        label: 'feasibility-retry',
       });
       if (retryText) {
-        const retryParsed = this._parseJSON(retryText);
-        const retryStruct = validateStructure(retryParsed);
+        const retryParseResult = this._parseJSONWithMeta(retryText);
+        const retryParsed = retryParseResult.parsed;
+        const retryStruct = validateStructure(retryParsed, structureOptions);
+        this._recordValidationAttempt(debugRun, 'feasibility-retry', {
+          rawText: retryText,
+          parseResult: retryParseResult,
+          structure: retryStruct,
+        });
         if (retryStruct.valid && retryStruct.plan) {
           const retryFeas = validateFeasibility(retryStruct.plan, constraints);
+          addPlannerDebugAttempt(debugRun, 'feasibility-retry-validation', {
+            feasibility: retryFeas,
+            plan: this._summarizePlan(retryStruct.plan),
+          });
           if (retryFeas.valid) {
             plan = retryStruct.plan;
+            parsed = retryParsed;
+            parseResult = retryParseResult;
           } else {
             // Still failing after retry — use fallback
-            return this._createFallbackResult(ideaText);
+            const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'feasibility-validation-failed');
+            await finalizePlannerDebugRun(debugRun, {
+              status: 'fallback-feasibility',
+              result: fallbackResult,
+            });
+            return fallbackResult;
           }
         } else {
-          return this._createFallbackResult(ideaText);
+          const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'feasibility-retry-structure-invalid');
+          await finalizePlannerDebugRun(debugRun, {
+            status: 'fallback-feasibility',
+            result: fallbackResult,
+          });
+          return fallbackResult;
         }
       } else {
-        return this._createFallbackResult(ideaText);
+        const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'feasibility-retry-no-response');
+        await finalizePlannerDebugRun(debugRun, {
+          status: 'fallback-feasibility',
+          result: fallbackResult,
+        });
+        return fallbackResult;
       }
     }
 
     // --- Semantic validation (retry if needed) ---
     const semanticResult = validateSemanticAlignment(plan, constraints);
+    addPlannerDebugAttempt(debugRun, 'semantic-initial', {
+      semantic: semanticResult,
+      plan: this._summarizePlan(plan),
+    });
     if (!semanticResult.valid) {
       const retryText = await this._retry({
         systemPrompt,
         retryMessage: buildSemanticRetryMessage(ideaText, semanticResult.issues),
         signal,
+        debugRun,
+        label: 'semantic-retry',
       });
       if (retryText) {
-        const retryParsed = this._parseJSON(retryText);
-        const retryStruct = validateStructure(retryParsed);
+        const retryParseResult = this._parseJSONWithMeta(retryText);
+        const retryParsed = retryParseResult.parsed;
+        const retryStruct = validateStructure(retryParsed, structureOptions);
+        this._recordValidationAttempt(debugRun, 'semantic-retry', {
+          rawText: retryText,
+          parseResult: retryParseResult,
+          structure: retryStruct,
+        });
         if (retryStruct.valid && retryStruct.plan) {
           const retryFeas = validateFeasibility(retryStruct.plan, constraints);
           const retrySemantic = retryFeas.valid
             ? validateSemanticAlignment(retryStruct.plan, constraints)
             : { valid: false };
 
+          addPlannerDebugAttempt(debugRun, 'semantic-retry-validation', {
+            feasibility: retryFeas,
+            semantic: retrySemantic,
+            plan: this._summarizePlan(retryStruct.plan),
+          });
+
           if (retryFeas.valid && retrySemantic.valid) {
             plan = retryStruct.plan;
             parsed = retryParsed;
+            parseResult = retryParseResult;
           } else {
-            return this._createFallbackResult(ideaText);
+            const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'semantic-validation-failed');
+            await finalizePlannerDebugRun(debugRun, {
+              status: 'fallback-semantic',
+              result: fallbackResult,
+            });
+            return fallbackResult;
           }
         } else {
-          return this._createFallbackResult(ideaText);
+          const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'semantic-retry-structure-invalid');
+          await finalizePlannerDebugRun(debugRun, {
+            status: 'fallback-semantic',
+            result: fallbackResult,
+          });
+          return fallbackResult;
         }
       } else {
-        return this._createFallbackResult(ideaText);
+        const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'semantic-retry-no-response');
+        await finalizePlannerDebugRun(debugRun, {
+          status: 'fallback-semantic',
+          result: fallbackResult,
+        });
+        return fallbackResult;
+      }
+    }
+
+    // --- Gameplay quality validation (retry if needed) ---
+    const gameplayResult = validateGameplayQuality(plan, constraints);
+    addPlannerDebugAttempt(debugRun, 'gameplay-initial', {
+      gameplay: gameplayResult,
+      plan: this._summarizePlan(plan),
+      requirements: constraints.gameplayRequirements,
+    });
+    if (!gameplayResult.valid) {
+      const retryText = await this._retry({
+        systemPrompt,
+        retryMessage: buildGameplayRetryMessage(ideaText, gameplayResult.issues),
+        signal,
+        debugRun,
+        label: 'gameplay-retry',
+      });
+      if (retryText) {
+        const retryParseResult = this._parseJSONWithMeta(retryText);
+        const retryParsed = retryParseResult.parsed;
+        const retryStruct = validateStructure(retryParsed, structureOptions);
+        this._recordValidationAttempt(debugRun, 'gameplay-retry', {
+          rawText: retryText,
+          parseResult: retryParseResult,
+          structure: retryStruct,
+        });
+        if (retryStruct.valid && retryStruct.plan) {
+          const retryFeas = validateFeasibility(retryStruct.plan, constraints);
+          const retrySemantic = retryFeas.valid
+            ? validateSemanticAlignment(retryStruct.plan, constraints)
+            : { valid: false };
+          const retryGameplay = retryFeas.valid && retrySemantic.valid
+            ? validateGameplayQuality(retryStruct.plan, constraints)
+            : { valid: false, issues: ['Gameplay validation skipped because feasibility or semantic validation failed first.'] };
+
+          addPlannerDebugAttempt(debugRun, 'gameplay-retry-validation', {
+            feasibility: retryFeas,
+            semantic: retrySemantic,
+            gameplay: retryGameplay,
+            plan: this._summarizePlan(retryStruct.plan),
+          });
+
+          if (retryFeas.valid && retrySemantic.valid && retryGameplay.valid) {
+            plan = retryStruct.plan;
+            parsed = retryParsed;
+            parseResult = retryParseResult;
+          } else {
+            const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'gameplay-validation-failed');
+            await finalizePlannerDebugRun(debugRun, {
+              status: 'fallback-gameplay',
+              result: fallbackResult,
+            });
+            return fallbackResult;
+          }
+        } else {
+          const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'gameplay-retry-structure-invalid');
+          await finalizePlannerDebugRun(debugRun, {
+            status: 'fallback-gameplay',
+            result: fallbackResult,
+          });
+          return fallbackResult;
+        }
+      } else {
+        const fallbackResult = this._createFallbackResult(ideaText, debugRun, 'gameplay-retry-no-response');
+        await finalizePlannerDebugRun(debugRun, {
+          status: 'fallback-gameplay',
+          result: fallbackResult,
+        });
+        return fallbackResult;
       }
     }
 
     // --- Apply hard rules (clamp stage count, fix IDs) ---
+    const planBeforeRules = plan;
     plan = this._applyRules(plan, constraints.difficultyProfile);
+    addPlannerDebugAttempt(debugRun, 'post-rules', {
+      parsedWith: parseResult.strategy,
+      beforeRules: this._summarizePlan(planBeforeRules),
+      afterRules: this._summarizePlan(plan),
+    });
 
     // --- Handle infeasibility flag from the AI ---
     const wasInfeasible = Boolean(parsed?.infeasible);
     const suggestion = wasInfeasible && typeof parsed?.suggestion === 'string'
       ? parsed.suggestion
       : null;
-
-    return createSuccessResult(plan, { infeasible: wasInfeasible, suggestion });
+    const successResult = createSuccessResult(plan, { infeasible: wasInfeasible, suggestion });
+    await finalizePlannerDebugRun(debugRun, {
+      status: 'success',
+      result: {
+        ...successResult,
+        parsed,
+        finalPlanSummary: this._summarizePlan(plan),
+      },
+    });
+    return successResult;
   }
 
   /**
@@ -285,15 +521,20 @@ export class PlanningService {
    * Returns the raw text response or null if the call fails.
    * @private
    */
-  async _retry({ systemPrompt, retryMessage, signal }) {
+  async _retry({ systemPrompt, retryMessage, signal, debugRun, label }) {
     try {
-      const response = await this._provider.sendMessage({
-        messages: [{ role: 'user', content: retryMessage }],
+      return await this._attemptProviderCall({
+        label,
+        messageText: retryMessage,
         systemPrompt,
         signal,
+        debugRun,
       });
-      return response.text;
-    } catch {
+    } catch (error) {
+      addPlannerDebugNote(debugRun, `${label}-provider-error`, {
+        message: error.message,
+        name: error.name,
+      });
       return null;
     }
   }
@@ -303,26 +544,59 @@ export class PlanningService {
    * Tries JSON.parse first, then extracts from markdown fences, then substring search.
    * @private
    */
-  _parseJSON(text) {
-    if (!text || typeof text !== 'string') return null;
+  _parseJSONWithMeta(text) {
+    if (!text || typeof text !== 'string') {
+      return {
+        parsed: null,
+        strategy: 'invalid-input',
+      };
+    }
 
     // Direct parse
-    try { return JSON.parse(text.trim()); } catch { /* continue */ }
+    try {
+      return {
+        parsed: JSON.parse(text.trim()),
+        strategy: 'direct',
+      };
+    } catch {
+      // continue
+    }
 
     // Extract from ```json ... ``` or ``` ... ```
     const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) {
-      try { return JSON.parse(fenceMatch[1].trim()); } catch { /* continue */ }
+      try {
+        return {
+          parsed: JSON.parse(fenceMatch[1].trim()),
+          strategy: 'markdown-fence',
+        };
+      } catch {
+        // continue
+      }
     }
 
     // Extract first { ... } substring
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace > firstBrace) {
-      try { return JSON.parse(text.slice(firstBrace, lastBrace + 1)); } catch { /* continue */ }
+      try {
+        return {
+          parsed: JSON.parse(text.slice(firstBrace, lastBrace + 1)),
+          strategy: 'brace-substring',
+        };
+      } catch {
+        // continue
+      }
     }
 
-    return null;
+    return {
+      parsed: null,
+      strategy: 'failed',
+    };
+  }
+
+  _parseJSON(text) {
+    return this._parseJSONWithMeta(text).parsed;
   }
 
   /**
@@ -376,5 +650,62 @@ export class PlanningService {
         assets: clampedAssets,
       },
     });
+  }
+
+  async _attemptProviderCall({ label, messageText, systemPrompt, signal, debugRun }) {
+    addPlannerDebugNote(debugRun, `${label}-request`, {
+      systemPrompt,
+      messageText,
+    });
+
+    const response = await this._provider.sendMessage({
+      messages: [{ role: 'user', content: messageText }],
+      systemPrompt,
+      signal,
+    });
+
+    addPlannerDebugAttempt(debugRun, `${label}-raw-response`, {
+      rawText: response.text,
+      textLength: response.text?.length ?? 0,
+    });
+
+    return response.text;
+  }
+
+  _recordValidationAttempt(debugRun, label, {
+    rawText,
+    parseResult,
+    structure,
+  }) {
+    addPlannerDebugAttempt(debugRun, `${label}-parsed`, {
+      rawText,
+      rawTextLength: rawText?.length ?? 0,
+      parseStrategy: parseResult?.strategy ?? 'unknown',
+      parsed: parseResult?.parsed ?? null,
+      structure: {
+        valid: structure?.valid ?? false,
+        errors: structure?.errors ?? [],
+        planSummary: structure?.plan ? this._summarizePlan(structure.plan) : null,
+      },
+    });
+  }
+
+  _summarizePlan(plan) {
+    if (!plan) return null;
+
+    return {
+      summary: plan.summary,
+      eta: plan.eta,
+      checkpoints: plan.checkpoints,
+      entities: plan.entities,
+      stageCount: plan.stages.length,
+      stages: plan.stages.map((stage) => ({
+        id: stage.id,
+        label: stage.label,
+        stepCount: stage.steps.length,
+        steps: stage.steps,
+        stepChecks: stage.stepChecks,
+      })),
+    };
   }
 }

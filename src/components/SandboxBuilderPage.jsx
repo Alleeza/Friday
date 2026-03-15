@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pencil, Play, Redo2, Save, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pencil, Play, Redo2, RotateCcw, Save, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
+import BlockTutorialTooltip from './BlockTutorialTooltip';
 import GamePreviewCanvas from './GamePreviewCanvas';
 import LogicBlock from './LogicBlock';
+import { createDefaultAIService } from '../ai/createDefaultAIService';
+import { useAIChat } from '../hooks/useAIChat';
 import { compileScriptsByInstance } from '../utils/scriptCompiler';
 import { createScriptRuntime } from '../utils/scriptRuntime';
 import { StageProgressSection } from './ProjectRoadmapPage';
 import { sandboxAssets } from '../data/sandboxAssets';
+import { soundOptions } from '../data/soundLibrary';
 import questyImage from '../imgages/profile.png';
 import GamificationHUD from './GamificationHUD';
 import MissionPanel from './MissionPanel';
@@ -65,9 +69,7 @@ const palette = {
     { id: 'point-direction', tone: 'movement', parts: ['Point in direction', { label: '90', numeric: true }] },
   ],
   'Looks & Sounds': [
-    { id: 'switch-costume', tone: 'looks', parts: ['Switch costume to', { type: 'dropdown', value: 'bunny jump', options: ['bunny jump', 'tree glow', 'crab legs'] }] },
-    { id: 'next-costume', tone: 'sound', parts: ['Next costume'] },
-    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: ['jump', 'coin', 'Human Beatbox1'] }, 'until done'] },
+    { id: 'play-sound', tone: 'sound', parts: ['Play sound', { type: 'dropdown', value: 'jump', options: soundOptions }] },
     { id: 'say', tone: 'looks', parts: ['Say', { label: 'Hello!' }] },
     { id: 'hide', tone: 'looks', parts: ['Hide object'] },
     { id: 'show', tone: 'looks', parts: ['Show object'] },
@@ -219,12 +221,6 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
-  if (selectedErrors.length) return `Fix ${selectedLabel}'s compile issues, then press Play again.`;
-  if (mode === 'play') return `Running ${selectedLabel}. Click the sprite or press a key to trigger more events.`;
-  return `For "${selectedBlock}", think event -> loop -> action.`;
-}
-
 function BuilderTopNav({ onCreateNewGame, onOpenAchievements }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
@@ -312,7 +308,6 @@ export default function SandboxBuilderPage({
   const [pendingEventValue, setPendingEventValue] = useState('');
   const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
-  const [messages, setMessages] = useState([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const priorityBuilderAssetIds = useMemo(
@@ -334,6 +329,35 @@ export default function SandboxBuilderPage({
     }),
     [sceneInstances, scriptsByInstanceKey, runtimeSnapshot]
   );
+
+  const aiService = useMemo(() => createDefaultAIService(), []);
+  const chatContextData = useMemo(
+    () => ({
+      sceneInstances,
+      scriptsByInstanceKey,
+      availableAssets: availableBuilderAssets,
+      compileErrors: compileErrorsByInstance,
+      runtimeSnapshot,
+      mode,
+    }),
+    [
+      availableBuilderAssets,
+      compileErrorsByInstance,
+      mode,
+      runtimeSnapshot,
+      sceneInstances,
+      scriptsByInstanceKey,
+    ]
+  );
+  const {
+    messages,
+    sendMessage: sendChat,
+    isStreaming: isChatStreaming,
+    abortResponse: abortChatResponse,
+  } = useAIChat({
+    aiService,
+    contextData: chatContextData,
+  });
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -388,8 +412,8 @@ export default function SandboxBuilderPage({
 
   useEffect(() => {
     if (mode !== 'play') return undefined;
-    const onKeyDown = () => {
-      runtimeRef.current?.dispatch('key is pressed');
+    const onKeyDown = (event) => {
+      runtimeRef.current?.dispatch('key is pressed', { key: normalizeKeyPressValue(event.key) });
       if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
     };
     window.addEventListener('keydown', onKeyDown);
@@ -1049,12 +1073,6 @@ export default function SandboxBuilderPage({
     rafRef.current = requestAnimationFrame(loop);
   };
 
-  const sendChat = (text, canned) => {
-    setMessages((prev) => [...prev, { role: 'you', text }]);
-    const reply = canned || getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode);
-    setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
-  };
-
   const canScriptUndo = historyStack.length > 0;
   const canScriptRedo = futureHistoryStack.length > 0;
   const canSceneUndo = canvasHistoryState.canUndo;
@@ -1111,7 +1129,6 @@ export default function SandboxBuilderPage({
       setCanvasRedoSignal((prev) => prev + 1);
     }
   };
-
   const quickEditorPosition = selectedInstance
     ? (() => {
         const quickEditorHeight = 72;
@@ -1419,7 +1436,7 @@ export default function SandboxBuilderPage({
     return (
       <div
         key={eventBlock.id}
-        className={`inline-flex max-w-[500px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-4 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
+        className={`inline-flex w-fit max-w-[540px] items-center gap-2 rounded-[22px] border-b-4 border-[#9f2259] bg-[#c3296e] pl-5 pr-5 py-2.5 text-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] transition ${
           active ? 'ring-4 ring-[#f6bfd1]/70' : ''
         }`}
         draggable={mode !== 'play'}
@@ -1456,7 +1473,7 @@ export default function SandboxBuilderPage({
                   setActiveEventBlockId(eventBlock.id);
                   handleEventChange(e.target.value, eventBlock.id);
                 }}
-                className="h-10 w-[88px] min-w-0 appearance-none bg-transparent px-3 text-center text-[16px] font-black text-white outline-none"
+                className="h-10 w-[98px] min-w-0 appearance-none bg-transparent px-3 text-center text-[16px] font-black text-white outline-none"
               >
                 {eventOptions.map((eventName) => (
                   <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
@@ -1471,7 +1488,7 @@ export default function SandboxBuilderPage({
                   setActiveEventBlockId(eventBlock.id);
                   handleEventRightChange(e.target.value, eventBlock.id);
                 }}
-                className="h-10 w-[126px] min-w-0 rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
+                className="h-10 w-[136px] min-w-0 rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
               >
                 {collisionTargetOptions.map((option) => (
                   <option key={`${eventBlock.id}-right-${option.value}`} value={option.value}>
@@ -1572,7 +1589,7 @@ export default function SandboxBuilderPage({
   };
 
   const renderAddEventPill = () => (
-    <div className="flex min-h-[64px] items-center gap-3 rounded-[20px] border-b-4 border-[#d06f8f] bg-[#ea8ead] px-4 text-white shadow-[0_10px_0_rgba(208,111,143,0.22)]">
+    <div className="flex w-fit min-h-[64px] items-center gap-3 rounded-[20px] border-b-4 border-[#d06f8f] bg-[#ea8ead] px-4 text-white shadow-[0_10px_0_rgba(208,111,143,0.22)]">
       <span className="text-[20px] font-black leading-none tracking-[-0.01em]">When</span>
       <div className="relative min-w-[220px] max-w-[240px]">
         <select
@@ -1968,24 +1985,25 @@ export default function SandboxBuilderPage({
                     <button
                       type="button"
                       onClick={closeEditor}
-                      className="grid h-11 w-11 place-items-center rounded-full bg-[#8f98a3] text-white shadow-[0_6px_0_rgba(71,85,105,0.22)]"
+                      className="grid h-14 w-14 place-items-center rounded-full bg-[#9aa3af] text-white shadow-[0_8px_0_rgba(148,163,184,0.42)] transition hover:brightness-95 active:translate-y-[1px] active:shadow-[0_7px_0_rgba(148,163,184,0.38)]"
                       aria-label="Close editor"
                     >
-                      <X size={22} />
+                      <X size={28} strokeWidth={3} />
                     </button>
                     <button
                       type="button"
                       onClick={handleScriptUndo}
                       disabled={!historyStack.length || mode === 'play'}
-                      className="grid h-11 w-11 place-items-center rounded-full bg-[#8f98a3] text-white shadow-[0_6px_0_rgba(71,85,105,0.22)] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="grid h-14 w-14 place-items-center rounded-full bg-[#d1d6de] text-white shadow-[0_8px_0_rgba(226,232,240,0.95)] transition hover:brightness-95 active:translate-y-[1px] active:shadow-[0_7px_0_rgba(226,232,240,0.85)] disabled:cursor-not-allowed disabled:bg-[#e5e7eb] disabled:text-white/75 disabled:shadow-[0_8px_0_rgba(241,245,249,0.95)]"
+                      aria-label="Return to previous step"
                     >
-                      <span className="text-[22px] font-black leading-none">↶</span>
+                      <RotateCcw size={28} strokeWidth={3} />
                     </button>
                   </div>
                 </div>
 
                 <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-[#f8f6ef] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
+                  <div className="flex min-h-0 flex-col rounded-[30px] border border-[#e5e7eb] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
                     <div className="mb-4 px-1">
                       <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Block Categories</p>
                     </div>
@@ -2013,17 +2031,18 @@ export default function SandboxBuilderPage({
                             {isOpen ? (
                               <div className="space-y-3 pb-3 pt-2">
                                 {categoryBlocks.map((block) => (
-                                  <LogicBlock
-                                    key={block.id}
-                                    parts={hydrateParts(block.parts)}
-                                    tone={block.tone}
-                                    compact
-                                    assetOptions={assetOptions}
-                                    draggable={mode !== 'play'}
-                                    onDragStart={(e) => handleDragStart(e, block)}
-                                    onDragEnd={handlePaletteDragEnd}
-                                    onClick={() => addTopLevel(block)}
-                                  />
+                                  <BlockTutorialTooltip key={block.id} block={block}>
+                                    <LogicBlock
+                                      parts={hydrateParts(block.parts)}
+                                      tone={block.tone}
+                                      compact
+                                      assetOptions={assetOptions}
+                                      draggable={mode !== 'play'}
+                                      onDragStart={(e) => handleDragStart(e, block)}
+                                      onDragEnd={handlePaletteDragEnd}
+                                      onClick={() => addTopLevel(block)}
+                                    />
+                                  </BlockTutorialTooltip>
                                 ))}
                               </div>
                             ) : null}
@@ -2079,7 +2098,14 @@ export default function SandboxBuilderPage({
         </section>
 
         <section>
-          <div className="w-full"><AIChatPanel messages={messages} onSend={sendChat} /></div>
+          <div className="w-full">
+            <AIChatPanel
+              messages={messages}
+              onSend={sendChat}
+              isStreaming={isChatStreaming}
+              onAbort={abortChatResponse}
+            />
+          </div>
         </section>
 
         {draggingPaletteBlock && mode !== 'play' ? (

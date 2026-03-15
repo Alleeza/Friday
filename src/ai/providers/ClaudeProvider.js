@@ -4,8 +4,9 @@ import { parseSSEStream } from '../streamParser.js';
 /**
  * ClaudeProvider — Anthropic Claude API implementation.
  *
- * Routes requests through a local proxy (default: /api/claude/messages) so that
- * the API key never reaches the browser. See vite.config.js for proxy setup.
+ * Routes requests through a server-side proxy (default: /api/claude/messages) so that
+ * the API key never reaches the browser. In local dev this is handled by Vite;
+ * in production it is handled by the deployed API route.
  *
  * Usage:
  *   const provider = new ClaudeProvider();

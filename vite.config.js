@@ -45,6 +45,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:3001',
           changeOrigin: true,
         },
+        '/api/planner-debug': {
+          target: 'http://127.0.0.1:3001',
+          changeOrigin: true,
+        },
         '/api/published-project': {
           target: 'http://127.0.0.1:3001',
           changeOrigin: true,

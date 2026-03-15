@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { getFallbackPlan, getFallbackPlanResultMeta } from './fallbackPlans.js';
 import { getDifficultyProfile, getAllowedBlockNames, getUnlockedAssets } from './planRegistry.js';
+import { deriveGameplayRequirements } from './gameplayRequirements.js';
 import {
   buildPlanningSystemPrompt,
 } from './planningPrompt.js';
@@ -10,14 +11,15 @@ import {
   getPlannerCapabilityConstraints,
   validatePlannerCapabilityCatalog,
 } from './plannerCapabilityCatalog.js';
-import { validateSemanticAlignment } from './planValidator.js';
+import { validateGameplayQuality, validateSemanticAlignment } from './planValidator.js';
 
-function buildConstraints(xp) {
+function buildConstraints(xp, ideaText = '') {
   const difficultyProfile = getDifficultyProfile(xp);
   return {
     difficultyProfile,
     unlockedAssets: getUnlockedAssets(xp),
     allowedBlockNames: getAllowedBlockNames(difficultyProfile),
+    gameplayRequirements: deriveGameplayRequirements(ideaText, difficultyProfile),
     ...getPlannerCapabilityConstraints(difficultyProfile, xp),
   };
 }
@@ -27,7 +29,7 @@ test('planner capability catalog stays aligned with builder metadata', () => {
 });
 
 test('planning prompt includes structured catalog guidance and hides locked assets', () => {
-  const constraints = buildConstraints(0);
+  const constraints = buildConstraints(0, 'Make a game where a bunny explores a forest of trees and finds carrots.');
   const prompt = buildPlanningSystemPrompt({
     unlockedAssets: constraints.unlockedAssets,
     difficultyProfile: constraints.difficultyProfile,
@@ -35,6 +37,7 @@ test('planning prompt includes structured catalog guidance and hides locked asse
     plannerBlocks: constraints.plannerBlocks,
     plannerEvents: constraints.plannerEvents,
     plannerCheckabilityGuide: constraints.plannerCheckabilityGuide,
+    gameplayRequirements: constraints.gameplayRequirements,
   });
 
   assert.match(prompt, /Available Assets/);
@@ -42,7 +45,8 @@ test('planning prompt includes structured catalog guidance and hides locked asse
   assert.match(prompt, /Good Step Patterns/);
   assert.match(prompt, /Bunny/);
   assert.doesNotMatch(prompt, /Goal \(id: "goal"/);
-  assert.match(prompt, /Move Forward/);
+  assert.match(prompt, /Change X by/);
+  assert.match(prompt, /Change Y by/);
   assert.match(prompt, /When game starts/);
   assert.match(prompt, /Never use any subjective or non-programmatic checker/);
   assert.doesNotMatch(prompt, /aiCheck/);
@@ -122,15 +126,24 @@ test('semantic validation rejects aiCheck steps for MVP plans', () => {
 });
 
 test('fallback plans satisfy semantic validation under the planner catalog', () => {
-  const constraints = buildConstraints(0);
+  const constraints = buildConstraints(0, 'bunny collects carrots');
   const plan = getFallbackPlan('bunny collects carrots', 0);
   const result = validateSemanticAlignment(plan, constraints);
 
   assert.equal(result.valid, true, result.issues.join('\n'));
 });
 
+test('fallback plans also satisfy gameplay validation under the gameplay rubric', () => {
+  const prompt = 'Make a game where a bunny explores a forest of trees and finds carrots.';
+  const constraints = buildConstraints(0, prompt);
+  const plan = getFallbackPlan(prompt, 0);
+  const result = validateGameplayQuality(plan, constraints);
+
+  assert.equal(result.valid, true, result.issues.join('\n'));
+});
+
 test('space shooter fallbacks stay themed and mark the idea as infeasible', () => {
-  const constraints = buildConstraints(0);
+  const constraints = buildConstraints(0, 'Create a space shooter where the player dodges asteroids, shoots enemies, and survives for 60 seconds.');
   const prompt = 'Create a space shooter where the player dodges asteroids, shoots enemies, and survives for 60 seconds.';
   const plan = getFallbackPlan(prompt, 0);
   const meta = getFallbackPlanResultMeta(prompt, 0);

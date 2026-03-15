@@ -52,7 +52,7 @@ export const WHILE_CONDITIONS = Object.freeze(['score < 10', 'is alive', 'time >
 // ---------------------------------------------------------------------------
 
 export const IMPOSSIBLE_KEYWORDS = Object.freeze([
-  'shoot', 'shooting', 'laser', 'bullet', 'fire',
+  'shoot', 'shooting', 'laser', 'bullet',
   'gravity', 'physics', 'fall', 'falling',
   'jump', 'jumping', 'double jump',
   'health', 'lives', 'hit points', 'damage',
@@ -72,7 +72,9 @@ export const IMPOSSIBLE_KEYWORDS = Object.freeze([
 /**
  * @typedef {Object} DifficultyProfile
  * @property {string}   label            - Human-readable tier name
+ * @property {number}   minStages        - Minimum number of stages a plan should contain
  * @property {number}   maxStages        - Maximum number of stages in a plan
+ * @property {number}   minStepsPerStage - Minimum number of steps each stage should contain
  * @property {number}   maxAssets        - Maximum number of distinct asset types
  * @property {string[]} allowedCategories - Block categories the student can use
  */
@@ -82,8 +84,10 @@ const DIFFICULTY_TIERS = [
     minXp: 80,
     profile: Object.freeze({
       label: 'creator',
-      maxStages: 5,
-      maxAssets: 6,
+      minStages: 6,
+      maxStages: 8,
+      minStepsPerStage: 3,
+      maxAssets: 7,
       allowedCategories: Object.freeze(['movement', 'looks', 'sound', 'control']),
     }),
   },
@@ -91,8 +95,10 @@ const DIFFICULTY_TIERS = [
     minXp: 50,
     profile: Object.freeze({
       label: 'builder',
-      maxStages: 4,
-      maxAssets: 4,
+      minStages: 5,
+      maxStages: 7,
+      minStepsPerStage: 3,
+      maxAssets: 5,
       allowedCategories: Object.freeze(['movement', 'looks', 'sound', 'control']),
     }),
   },
@@ -100,18 +106,22 @@ const DIFFICULTY_TIERS = [
     minXp: 20,
     profile: Object.freeze({
       label: 'explorer',
-      maxStages: 3,
-      maxAssets: 3,
-      allowedCategories: Object.freeze(['movement', 'control']),
+      minStages: 5,
+      maxStages: 6,
+      minStepsPerStage: 3,
+      maxAssets: 4,
+      allowedCategories: Object.freeze(['movement', 'looks', 'sound', 'control']),
     }),
   },
   {
     minXp: 0,
     profile: Object.freeze({
       label: 'beginner',
-      maxStages: 2,
-      maxAssets: 2,
-      allowedCategories: Object.freeze(['movement', 'control']),
+      minStages: 4,
+      maxStages: 5,
+      minStepsPerStage: 3,
+      maxAssets: 3,
+      allowedCategories: Object.freeze(['movement', 'looks', 'sound', 'control']),
     }),
   },
 ];

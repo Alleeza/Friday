@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronUp, Map } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Map } from 'lucide-react';
 import { useGamification } from '../hooks/useGamification';
 import { missionsData } from '../gamification/missions';
+import { evaluateStepChecks } from '../utils/stepChecker';
 
 const STEP_DETAILS = {
   mission_1: {
@@ -61,23 +62,96 @@ function getStepDetails(missionId, step, stepXp) {
   };
 }
 
-export default function MissionPanel() {
+function getPlanStepDetails(stage, step, stepXp) {
+  return {
+    description: stage.success || stage.why || stage.objective || step.description,
+    concept: stage.objective || 'Project stage',
+    reward: `+${stepXp} XP`,
+  };
+}
+
+function buildPlanMissionView(plan, workspaceState) {
+  const stages = plan?.stages || [];
+  if (!stages.length) return null;
+
+  const stageViews = stages.map((stage, stageIndex) => {
+    const steps = (stage.steps || []).map((description, stepIndex) => {
+      const checks = stage.stepChecks?.[stepIndex] ?? [];
+      const evaluation = checks.length && workspaceState
+        ? evaluateStepChecks(checks, workspaceState)
+        : { passed: false, pendingAiChecks: [] };
+      const isCompleted = evaluation.passed && (evaluation.pendingAiChecks?.length || 0) === 0;
+
+      return {
+        id: `${stage.id}-step-${stepIndex + 1}`,
+        description,
+        target: 1,
+        completed: isCompleted,
+        rewardXp: stage.stepXp?.[stepIndex] || 0,
+      };
+    });
+
+    const completedSteps = steps.filter((step) => step.completed).length;
+
+    return {
+      id: stage.id,
+      title: stage.label || `Stage ${stageIndex + 1}`,
+      description: stage.objective || stage.why || '',
+      reward_xp: steps.reduce((sum, step) => sum + step.rewardXp, 0),
+      steps,
+      sourceStage: stage,
+      completedSteps,
+      isComplete: steps.length > 0 && completedSteps === steps.length,
+    };
+  });
+
+  const firstIncompleteIndex = stageViews.findIndex((stage) => !stage.isComplete);
+  const currentIndex = firstIncompleteIndex === -1 ? Math.max(stageViews.length - 1, 0) : firstIncompleteIndex;
+  const currentMission = stageViews[currentIndex];
+  const missionProgress = Object.fromEntries(
+    currentMission.steps.map((step) => [step.id, step.completed ? 1 : 0])
+  );
+
+  return {
+    currentMission,
+    currentStageNumber: currentIndex + 1,
+    currentStageTitle: currentMission.title,
+    missionProgress,
+    stepRewards: currentMission.steps.map((step) => step.rewardXp),
+    completedSteps: currentMission.completedSteps,
+    totalSteps: currentMission.steps.length,
+    progressPercent: currentMission.steps.length > 0
+      ? (currentMission.completedSteps / currentMission.steps.length) * 100
+      : 0,
+    isAllComplete: stageViews.every((stage) => stage.isComplete),
+  };
+}
+
+export default function MissionPanel({ plan = null, workspaceState = null }) {
   const { userProgress } = useGamification();
   const [expandedStepId, setExpandedStepId] = useState(null);
   const [celebratingStepId, setCelebratingStepId] = useState(null);
   const previousCompletionMapRef = useRef({});
   const celebrationTimeoutRef = useRef(null);
+  const planMissionView = useMemo(
+    () => buildPlanMissionView(plan, workspaceState),
+    [plan, workspaceState],
+  );
 
-  const currentMission = missionsData.find((mission) => mission.id === userProgress.current_mission);
-  const currentStageNumber = currentMission ? Math.max(1, missionsData.findIndex((mission) => mission.id === currentMission.id) + 1) : 1;
-  const currentStageTitle = currentMission ? (STAGE_TITLES[currentMission.id] || currentMission.title) : 'Current Stage';
+  const fallbackMission = missionsData.find((mission) => mission.id === userProgress.current_mission);
+  const currentMission = planMissionView?.currentMission || fallbackMission;
+  const currentStageNumber = planMissionView?.currentStageNumber
+    || (fallbackMission ? Math.max(1, missionsData.findIndex((mission) => mission.id === fallbackMission.id) + 1) : 1);
+  const currentStageTitle = planMissionView?.currentStageTitle
+    || (fallbackMission ? (STAGE_TITLES[fallbackMission.id] || fallbackMission.title) : 'Current Stage');
   const missionSteps = currentMission?.steps || [];
-  const missionProgress = currentMission ? (userProgress.mission_progress[currentMission.id] || {}) : {};
-  const totalSteps = missionSteps.length;
-  const stepRewards = currentMission ? distributeStepRewards(currentMission.reward_xp, totalSteps) : [];
-  const completedSteps = missionSteps.filter((step) => (missionProgress[step.id] || 0) >= step.target).length;
-  const progressPercent = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
-  const isAllComplete = completedSteps === totalSteps;
+  const missionProgress = planMissionView?.missionProgress || (currentMission ? (userProgress.mission_progress[currentMission.id] || {}) : {});
+  const totalSteps = planMissionView?.totalSteps ?? missionSteps.length;
+  const stepRewards = planMissionView?.stepRewards || (currentMission ? distributeStepRewards(currentMission.reward_xp, totalSteps) : []);
+  const completedSteps = planMissionView?.completedSteps
+    ?? missionSteps.filter((step) => (missionProgress[step.id] || 0) >= step.target).length;
+  const progressPercent = planMissionView?.progressPercent ?? (totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0);
+  const isAllComplete = planMissionView?.isAllComplete ?? (completedSteps === totalSteps);
   const activeStep = missionSteps.find((step) => (missionProgress[step.id] || 0) < step.target);
   const activeStepIndex = missionSteps.findIndex((step) => (missionProgress[step.id] || 0) < step.target);
   const missionXpEarned = missionSteps.reduce(
@@ -184,7 +258,9 @@ export default function MissionPanel() {
               const isExpanded = expandedStepId === step.id;
               const isCelebrating = celebratingStepId === step.id;
               const stepReward = stepRewards[index] || 0;
-              const stepDetails = getStepDetails(currentMission.id, step, stepReward);
+              const stepDetails = planMissionView
+                ? getPlanStepDetails(currentMission.sourceStage, step, stepReward)
+                : getStepDetails(currentMission.id, step, stepReward);
               const isCurrent = !isChecked && index === activeStepIndex;
               const isLocked = !isChecked && activeStepIndex !== -1 && index > activeStepIndex;
               const cardClasses = isChecked
@@ -302,16 +378,6 @@ export default function MissionPanel() {
             })}
           </ul>
 
-          <div className="mt-2 flex items-center justify-between gap-3 px-1">
-            <span className="text-[12px] font-black uppercase tracking-[0.12em] text-[#1CB0F6]">Bonus Quests (Optional)</span>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#B7DAFB] bg-white text-[#1CB0F6] transition hover:bg-[#F4FBFF]"
-              aria-label="View bonus quests"
-            >
-              <ChevronRight className="h-4.5 w-4.5" />
-            </button>
-          </div>
         </div>
 
         <div className="mt-auto pt-2">

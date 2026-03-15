@@ -61,9 +61,12 @@ function createAssetState(instance) {
     costume: 'default',
     costumeIndex: 0,
     lastSound: null,
+    soundTick: 0,
     lastSpeed: 0,
     invisibility: 0,
     facing: 1,
+    speechText: '',
+    speechRemainingMs: 0,
   };
 }
 
@@ -287,9 +290,12 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
         break;
       case 'playSound':
         asset.lastSound = instruction.sound;
+        asset.soundTick += 1;
         log(`${asset.label} plays ${instruction.sound}`);
         break;
       case 'say':
+        asset.speechText = String(instruction.text || 'Hi!');
+        asset.speechRemainingMs = 2500;
         log(`${asset.label} says "${instruction.text}"`);
         break;
       case 'setVisibility':
@@ -411,6 +417,10 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
       }
       Object.keys(state.assetsByKey).forEach((instanceKey) => {
         const asset = state.assetsByKey[instanceKey];
+        if (asset.speechRemainingMs > 0) {
+          asset.speechRemainingMs = Math.max(0, asset.speechRemainingMs - deltaMs);
+          if (asset.speechRemainingMs === 0) asset.speechText = '';
+        }
         const touchingAssets = Object.values(state.assetsByKey).filter((otherAsset) => areAssetsTouching(asset, otherAsset));
         const isTouchingAny = touchingAssets.length > 0;
         const previousTouchState = state.touchingByKey[instanceKey] || { touching: false, otherKey: null };

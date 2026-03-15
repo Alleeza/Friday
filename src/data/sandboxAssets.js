@@ -37,13 +37,20 @@ export const backdropAssets = Object.entries(backdropImageModules)
   .map(([path, src]) => {
     const match = path.match(/\/(\d+)\.png$/);
     const number = Number(match?.[1] || 0);
+    const unlockXp = number <= 4
+      ? 0
+      : number <= 8
+        ? 20
+        : number <= 12
+          ? 50
+          : 80;
 
     return {
       id: `backdrop-${number}`,
       label: `Backdrop ${number}`,
       previewLabel: `${number}`,
       src,
-      unlockXp: 0,
+      unlockXp,
       type: 'backdrop',
       sortOrder: number,
     };

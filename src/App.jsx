@@ -9,7 +9,7 @@ import {
 import SandboxBuilderPage from './components/SandboxBuilderPage';
 import GuidedSetupFlow from './components/GuidedSetupFlow';
 import SharedGamePage from './components/SharedGamePage';
-import { createBunnyCarrotExampleProject } from './data/exampleProjects';
+import { createBunnyCarrotExampleProject, createCrossyRoadExampleProject } from './data/exampleProjects';
 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
 const emptyProjectState = {
@@ -105,7 +105,6 @@ export default function App() {
       })
       .catch((error) => {
         if (cancelled) return;
-        setStorageError(error.message || 'Unable to load saved project data.');
       })
       .finally(() => {
         if (!cancelled) {
@@ -155,8 +154,11 @@ export default function App() {
     setSaveState('idle');
   }, []);
 
-  const handleLaunchExample = useCallback(() => {
-    handleSetupComplete(createBunnyCarrotExampleProject());
+  const handleLaunchExample = useCallback((exampleId = 'bunny') => {
+    const project = exampleId === 'crossy'
+      ? createCrossyRoadExampleProject()
+      : createBunnyCarrotExampleProject();
+    handleSetupComplete(project);
   }, [handleSetupComplete]);
 
   const handleCreateNewGame = useCallback(() => {
@@ -199,7 +201,6 @@ export default function App() {
     try {
       await saveCurrentProject();
     } catch (error) {
-      setStorageError(error.message || 'Unable to save project data.');
       setSaveState('error');
     }
   }, [saveCurrentProject]);
@@ -220,7 +221,6 @@ export default function App() {
       setStorageError('');
       setPublishState('published');
     } catch (error) {
-      setStorageError(error.message || 'Unable to create a share link.');
       setSaveState('error');
       setPublishState('error');
     }
@@ -245,18 +245,13 @@ export default function App() {
             Storage offline: {storageError}
           </div>
         ) : null}
-        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} />
+        <GuidedSetupFlow onComplete={handleSetupComplete} onLaunchExample={handleLaunchExample} onGoHome={handleCreateNewGame} />
       </>
     );
   }
 
   return (
     <>
-      {storageError ? (
-        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-[#ffd7dc] bg-[#fff4f5] px-4 py-2 text-sm font-bold text-rose-600 shadow">
-          Storage offline: {storageError}
-        </div>
-      ) : null}
       <SandboxBuilderPage
         initialSetupData={projectState.setupData}
         initialProjectState={projectState}

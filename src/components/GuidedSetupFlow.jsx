@@ -48,7 +48,7 @@ function TopNav({ step, onGoHome }) {
   const progressPercent = Math.min(100, Math.max(0, (xpIntoLevel / xpNeededForNext) * 100));
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#d9efc0] bg-[#f4fce8]/95 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1140px] items-center justify-between px-6 py-3.5 lg:px-10">
         {/* Logo */}
         <button

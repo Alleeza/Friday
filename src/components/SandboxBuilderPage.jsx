@@ -383,6 +383,7 @@ export default function SandboxBuilderPage({
   useEffect(() => {
     const nextProjectState = {
       setupData: initialSetupData,
+      plan: projectPlan || initialSetupData?.plan || null,
       scene: normalizeSceneState(persistedSceneState),
       scriptsByInstanceKey: normalizeScriptsByInstance(scriptsByInstanceKey),
     };
@@ -390,7 +391,7 @@ export default function SandboxBuilderPage({
     if (snapshot === lastPublishedProjectRef.current) return;
     lastPublishedProjectRef.current = snapshot;
     onProjectStateChange?.(nextProjectState);
-  }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
+  }, [initialSetupData, onProjectStateChange, persistedSceneState, projectPlan, scriptsByInstanceKey]);
 
   useEffect(() => {
     const instanceKeys = new Set(sceneInstances.map((instance) => instance.key));

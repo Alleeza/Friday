@@ -14,6 +14,7 @@ import { createBunnyCarrotExampleProject, createCrossyRoadExampleProject } from 
 const BUILDER_RESUME_KEY = 'friday-codequest-resume-builder';
 const emptyProjectState = {
   setupData: null,
+  plan: null,
   scene: {
     placedAssets: [],
     selectedPlacedAssetKey: null,
@@ -25,6 +26,7 @@ const emptyProjectState = {
 function normalizeProjectState(projectState) {
   return {
     setupData: projectState?.setupData || null,
+    plan: projectState?.plan || projectState?.setupData?.plan || null,
     scene: {
       ...emptyProjectState.scene,
       ...(projectState?.scene || {}),
@@ -47,9 +49,13 @@ function writeResumeBuilderFlag(value) {
   window.localStorage.setItem(BUILDER_RESUME_KEY, value ? 'true' : 'false');
 }
 
-function deriveProjectPlan(setupData) {
+function deriveProjectPlan(projectState) {
+  const savedPlan = projectState?.plan || projectState?.setupData?.plan || null;
+  if (savedPlan) return savedPlan;
+
+  const setupData = projectState?.setupData || null;
   if (!setupData) return null;
-  return setupData.plan || getFallbackPlan(setupData.idea || '', 0);
+  return getFallbackPlan(setupData.idea || '', 0);
 }
 
 function getSharedPublicationFromPath() {
@@ -97,7 +103,7 @@ export default function App() {
         if (cancelled) return;
         const normalized = normalizeProjectState(savedProject);
         setProjectState(normalized);
-        setProjectPlan(deriveProjectPlan(normalized.setupData));
+        setProjectPlan(deriveProjectPlan(normalized));
         lastSavedSnapshotRef.current = JSON.stringify(normalized);
         setSaveState(savedProject ? 'saved' : 'idle');
         setHasSavedProject(Boolean(savedProject));
@@ -146,11 +152,12 @@ export default function App() {
   }, [hasPersistedProject, isLoading, resumeToken]);
 
   const handleSetupComplete = useCallback((nextSetupData) => {
+    const nextProjectPlan = nextSetupData?.plan || null;
     writeResumeBuilderFlag(true);
     setResumeToken(true);
     setActiveScreen('builder');
-    setProjectState((current) => ({ ...current, setupData: nextSetupData }));
-    setProjectPlan(deriveProjectPlan(nextSetupData));
+    setProjectState((current) => ({ ...current, setupData: nextSetupData, plan: nextProjectPlan }));
+    setProjectPlan(nextProjectPlan || deriveProjectPlan({ setupData: nextSetupData }));
     setSaveState('idle');
   }, []);
 
@@ -181,7 +188,7 @@ export default function App() {
     setResumeToken(true);
     setActiveScreen('builder');
     setProjectState(normalized);
-    setProjectPlan(deriveProjectPlan(normalized.setupData));
+    setProjectPlan(deriveProjectPlan(normalized));
   }, []);
 
   const saveCurrentProject = useCallback(async () => {
@@ -189,7 +196,7 @@ export default function App() {
     const savedProject = await saveProjectState(projectState);
     const normalized = normalizeProjectState(savedProject || projectState);
     setProjectState(normalized);
-    setProjectPlan(deriveProjectPlan(normalized.setupData));
+    setProjectPlan(deriveProjectPlan(normalized));
     lastSavedSnapshotRef.current = JSON.stringify(normalized);
     setStorageError('');
     setSaveState('saved');

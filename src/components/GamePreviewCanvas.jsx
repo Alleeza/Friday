@@ -478,20 +478,39 @@ export default function GamePreviewCanvas({
     updateSelection(placed.key);
   };
 
-  const renderSpriteAssetCard = (asset) => (
-    <button
-      type="button"
-      key={asset.id}
-      draggable={(asset.unlockXp || 0) <= currentXp}
-      onDragStart={(e) => onAssetDragStart(e, asset, 'sprite')}
-      onClick={() => addSpriteAssetToCanvas(asset)}
-      className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${(asset.unlockXp || 0) <= currentXp ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing' : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'}`}
-      title={(asset.unlockXp || 0) <= currentXp ? asset.label : `Unlocks at ${asset.unlockXp} XP`}
-    >
-      <div className="text-3xl">{asset.emoji}</div>
-      <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
-    </button>
-  );
+  const renderSpriteAssetCard = (asset) => {
+    const isExtraAsset = prioritySpriteAssetIdSet.size > 0 && !prioritySpriteAssetIdSet.has(asset.id);
+    const isUnlocked = (asset.unlockXp || 0) <= currentXp;
+    const isEnabled = isUnlocked;
+
+    return (
+      <button
+        type="button"
+        key={asset.id}
+        draggable={isEnabled}
+        onDragStart={isEnabled ? (e) => onAssetDragStart(e, asset, 'sprite') : undefined}
+        onClick={() => addSpriteAssetToCanvas(asset)}
+        className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${
+          isEnabled
+            ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing'
+            : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'
+        }`}
+        title={
+          isUnlocked
+            ? (isExtraAsset ? `${asset.label} is unlocked and optional for this project` : asset.label)
+            : `Unlocks at ${asset.unlockXp} XP`
+        }
+      >
+        <div className="text-3xl" style={{ transform: getTransform(asset) }}>{asset.emoji}</div>
+        <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
+        {(asset.unlockXp || 0) > currentXp ? (
+          <div className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
+            🔒 {getUnlockLevelLabel(asset.unlockXp)}
+          </div>
+        ) : null}
+      </button>
+    );
+  };
 
   const onCanvasDrop = (e) => {
     if (!isEditMode) return;

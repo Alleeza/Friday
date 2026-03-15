@@ -25,8 +25,13 @@ export async function loadGamificationProgress() {
     throw new Error(`Load failed with status ${response.status}`);
   }
 
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+
   const payload = await response.json();
-  return payload.progress || null;
+  return payload?.progress || null;
 }
 
 export async function saveGamificationProgress(progress) {
@@ -45,6 +50,11 @@ export async function saveGamificationProgress(progress) {
     throw new Error(`Save failed with status ${response.status}`);
   }
 
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+
   const payload = await response.json();
-  return payload.progress || null;
+  return payload?.progress || null;
 }

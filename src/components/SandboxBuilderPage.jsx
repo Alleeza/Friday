@@ -311,6 +311,7 @@ export default function SandboxBuilderPage({
   const [mode, setMode] = useState('edit');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [previewStageSize, setPreviewStageSize] = useState({ width: 1280, height: 720 });
+  const [quickEditorSize, setQuickEditorSize] = useState({ width: 420, height: 220 });
 
   const priorityBuilderAssetIds = useMemo(
     () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
@@ -537,6 +538,33 @@ export default function SandboxBuilderPage({
   const selectedEventRight = collisionTargetOptions.some((option) => option.value === rawSelectedEventRight)
     ? rawSelectedEventRight
     : (collisionTargetOptions[0]?.value || 'Self');
+
+  useEffect(() => {
+    const node = quickEditorRef.current;
+    if (!node || editorStage !== 'event') return undefined;
+
+    const updateQuickEditorSize = () => {
+      const rect = node.getBoundingClientRect();
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (!width || !height) return;
+      setQuickEditorSize((current) => (
+        current.width === width && current.height === height
+          ? current
+          : { width, height }
+      ));
+    };
+
+    updateQuickEditorSize();
+
+    if (typeof window === 'undefined' || typeof window.ResizeObserver !== 'function') {
+      return undefined;
+    }
+
+    const observer = new window.ResizeObserver(() => updateQuickEditorSize());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [editorInstanceKey, editorStage, eventSections.length, isFullscreen]);
 
   const hydratePart = (part) => {
     if (typeof part === 'string') return part;
@@ -1170,17 +1198,28 @@ export default function SandboxBuilderPage({
   };
   const quickEditorPosition = selectedInstance
     ? (() => {
-        const quickEditorHeight = 72;
+        const stagePadding = 24;
+        const gap = 24;
+        const stageWidth = previewStageSize.width || 1280;
+        const stageHeight = previewStageSize.height || 720;
+        const overlayWidth = Math.min(quickEditorSize.width || 420, Math.max(stageWidth - (stagePadding * 2), 220));
+        const overlayHeight = quickEditorSize.height || 220;
         const assetScale = selectedInstance.scale || 1;
         const assetSize = 180 * assetScale;
         const assetHalf = assetSize / 2;
         const x = selectedInstance.x || 0;
         const y = selectedInstance.y || 0;
+        const assetLeft = x - assetHalf;
         const assetRight = x + assetHalf;
-        const gap = 24;
+        const hasRoomOnRight = assetRight + gap + overlayWidth <= stageWidth - stagePadding;
+        const preferredLeft = hasRoomOnRight
+          ? assetRight + gap
+          : assetLeft - gap - overlayWidth;
+        const maxLeft = Math.max(stagePadding, stageWidth - overlayWidth - stagePadding);
+        const maxTop = Math.max(stagePadding, stageHeight - overlayHeight - stagePadding);
         return {
-          left: `${Math.max(assetRight + gap, 24)}px`,
-          top: `${Math.min(Math.max(y - quickEditorHeight / 2, 88), 540)}px`,
+          left: `${Math.min(Math.max(preferredLeft, stagePadding), maxLeft)}px`,
+          top: `${Math.min(Math.max(y - overlayHeight / 2, stagePadding), maxTop)}px`,
         };
       })()
     : null;
@@ -1881,7 +1920,7 @@ export default function SandboxBuilderPage({
               />
 
                 {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
-                <div ref={quickEditorRef} className="absolute z-10 flex flex-col gap-3" style={quickEditorPosition}>
+                <div ref={quickEditorRef} className="absolute z-40 flex max-w-[calc(100%-3rem)] flex-col gap-3" style={quickEditorPosition}>
                   {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
                   {renderAddEventPill()}
                 </div>

@@ -213,7 +213,7 @@ function normalizeRuntimeKey(rawKey) {
   return next;
 }
 
-export function createScriptRuntime({ instances, programsByKey, stageSize }) {
+export function createScriptRuntime({ instances, programsByKey, stageSize, onEvent = null }) {
   const state = {
     assetsByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, createAssetState(instance)])),
     taskQueuesByKey: Object.fromEntries((instances || []).map((instance) => [instance.key, []])),
@@ -229,6 +229,11 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
   const log = (message) => {
     state.logs.push(message);
     if (state.logs.length > 40) state.logs.shift();
+  };
+
+  const notifyEvent = (eventType, payload = {}) => {
+    if (typeof onEvent !== 'function') return;
+    onEvent(eventType, payload, cloneSnapshot(state));
   };
 
   const enqueueInstructions = (instanceKey, eventType, instructions) => {
@@ -388,6 +393,7 @@ export function createScriptRuntime({ instances, programsByKey, stageSize }) {
 
   return {
     dispatch(eventType, payload = {}) {
+      notifyEvent(eventType, payload);
       if ((eventType === 'object is tapped' || eventType === 'bumps') && payload.instanceKey) {
         const program = state.programsByKey[payload.instanceKey];
         enqueueInstructions(payload.instanceKey, eventType, program?.events?.[eventType]);

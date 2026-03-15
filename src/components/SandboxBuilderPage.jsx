@@ -213,6 +213,10 @@ function normalizeScriptsByInstance(scriptsByInstanceKey) {
   return cloneScripts(scriptsByInstanceKey);
 }
 
+const PLAYER_ASSET_IDS = new Set(['bunny', 'chicken', 'frog', 'robot', 'dragon', 'unicorn']);
+const COLLECTIBLE_ASSET_IDS = new Set(['carrot', 'coin', 'star', 'heart', 'gift', 'key', 'treasure']);
+const OBSTACLE_ASSET_IDS = new Set(['rock', 'car', 'ghost', 'volcano']);
+
 function getInstanceDisplayLabel(instances, instanceKey) {
   const instance = instances.find((item) => item.key === instanceKey);
   if (!instance) return 'Select an object';
@@ -311,6 +315,7 @@ export default function SandboxBuilderPage({
   const [mode, setMode] = useState('edit');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [previewStageSize, setPreviewStageSize] = useState({ width: 1280, height: 720 });
+  const sessionStatsRef = useRef({ startTimeMs: 0, hits: 0, collectedKeys: new Set() });
 
   const priorityBuilderAssetIds = useMemo(
     () => (projectPlan ? collectPlanAssetIds(projectPlan, sceneInstances) : []),
@@ -1065,7 +1070,57 @@ export default function SandboxBuilderPage({
     lastSnapshotPublishRef.current = 0;
     setMode('edit');
     setRuntimeSnapshot(null);
+    sessionStatsRef.current = { startTimeMs: 0, hits: 0, collectedKeys: new Set() };
   };
+
+  const handleRuntimeEvent = useCallback((eventType, payload = {}, snapshot = null) => {
+    if (eventType === 'game starts') {
+      sessionStatsRef.current = { startTimeMs: Date.now(), hits: 0, collectedKeys: new Set() };
+      return;
+    }
+
+    if (eventType === 'bumps') {
+      const assetsByKey = snapshot?.assetsByKey || {};
+      const firstAsset = assetsByKey[payload.instanceKey];
+      const secondAsset = assetsByKey[payload.otherInstanceKey];
+      if (!firstAsset || !secondAsset) return;
+
+      const pair = [firstAsset, secondAsset];
+      const player = pair.find((asset) => PLAYER_ASSET_IDS.has(asset.id));
+      const collectible = pair.find((asset) => COLLECTIBLE_ASSET_IDS.has(asset.id));
+      const obstacle = pair.find((asset) => OBSTACLE_ASSET_IDS.has(asset.id));
+
+      if (player && collectible && !sessionStatsRef.current.collectedKeys.has(collectible.key)) {
+        sessionStatsRef.current.collectedKeys.add(collectible.key);
+        processEvent({
+          type: 'ItemCollected',
+          payload: {
+            item: collectible.id === 'treasure' ? 'gem' : collectible.id,
+            itemKey: collectible.key,
+            player: player.id,
+          },
+        });
+      }
+
+      if (player && obstacle) {
+        sessionStatsRef.current.hits += 1;
+      }
+      return;
+    }
+
+    if (eventType === 'score reaches 10' || eventType === 'timer reaches 0') {
+      const startTimeMs = sessionStatsRef.current.startTimeMs || Date.now();
+      const timeTaken = Math.max(0, Math.round((Date.now() - startTimeMs) / 1000));
+      processEvent({
+        type: 'LevelCompleted',
+        payload: {
+          hits: sessionStatsRef.current.hits,
+          timeTaken,
+          reason: eventType,
+        },
+      });
+    }
+  }, [processEvent]);
 
   const startRuntime = () => {
     if (!sceneInstances.length) {
@@ -1085,6 +1140,7 @@ export default function SandboxBuilderPage({
       instances: sceneInstances,
       programsByKey,
       stageSize: previewStageSize,
+      onEvent: handleRuntimeEvent,
     });
     runtime.dispatch('game starts');
     runtimeRef.current = runtime;

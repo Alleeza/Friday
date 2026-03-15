@@ -27,27 +27,27 @@ export default function GamificationHUD({ className = '', onOpenAchievements = n
   return (
     <>
       <div className={`flex flex-wrap items-center justify-end gap-2 ${className}`.trim()}>
-        <div className="flex min-w-[390px] items-center gap-3 rounded-[999px] border border-[#EEF2F7] bg-white px-4 py-2 shadow-[0_3px_14px_rgba(148,163,184,0.12)]">
-          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#F4C24D] bg-[#FFF7D6] text-[#B7791F] shadow-[inset_0_-2px_0_rgba(244,194,77,0.24)]">
-            <span className="text-[19px] font-black leading-none">{userProgress.level}</span>
-            <span className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full border border-[#F4C24D] bg-[#FFF7D6]">
-              <Star className="h-2.5 w-2.5 fill-[#F4C24D] text-[#F4C24D]" />
+        <div className="flex min-w-[340px] items-center gap-2.5 rounded-[999px] border border-[#EEF3F8] bg-white/98 px-3.5 py-1.5 shadow-[0_2px_10px_rgba(148,163,184,0.10)]">
+          <div className="relative flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full border-[3px] border-[#F4C04E] bg-[#FFF8DD] text-[#B7791F] shadow-[inset_0_-2px_0_rgba(244,192,78,0.20)]">
+            <span className="text-[17px] font-black leading-none">{userProgress.level}</span>
+            <span className="absolute -bottom-1 -right-1 flex h-[16px] w-[16px] items-center justify-center rounded-full border border-[#F4C04E] bg-[#FFF8DD] shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+              <Star className="h-[9px] w-[9px] fill-[#F4C04E] text-[#F4C04E]" />
             </span>
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A3AEC2]">Level {userProgress.level}</p>
-                <p className="truncate text-[14px] font-black leading-[1.05] text-[#49556B]">{levelTitle}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#B3BDCC]">Level {userProgress.level}</p>
+                <p className="truncate text-[12px] font-black leading-[1.05] text-[#4E5B73]">{levelTitle}</p>
               </div>
-              <span className="shrink-0 pt-0.5 text-[12px] font-black text-[#F0A640]">
+              <span className="shrink-0 pt-0.5 text-[10px] font-black tracking-[0.01em] text-[#F2A63A]">
                 {xpIntoLevel} / {Math.max(xpNeededForNext, 1)} XP
               </span>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E9EEF5]">
+            <div className="mt-1.5 h-[7px] overflow-hidden rounded-full bg-[#EAEFF5]">
               <div
-                className="h-full rounded-full bg-[#F5B347] transition-all duration-500 ease-out"
+                className="h-full rounded-full bg-[#F4B347] shadow-[inset_0_-1px_0_rgba(209,135,33,0.22)] transition-all duration-500 ease-out"
                 style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
               />
             </div>
@@ -57,11 +57,11 @@ export default function GamificationHUD({ className = '', onOpenAchievements = n
         <button
           type="button"
           onClick={onOpenAchievements}
-          className={`flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#F4D48B] bg-[#FFF8E1] text-[#A16207] shadow-[0_3px_10px_rgba(244,212,139,0.22)] transition hover:brightness-[0.98] ${onOpenAchievements ? 'cursor-pointer' : 'cursor-default'}`}
+          className={`flex h-[42px] w-[42px] items-center justify-center rounded-full border-[3px] border-[#F4D48B] bg-[#FFF8E1] text-[#A16207] shadow-[0_2px_10px_rgba(244,212,139,0.18)] transition hover:brightness-[0.98] ${onOpenAchievements ? 'cursor-pointer' : 'cursor-default'}`}
           aria-label="Open badges"
           title={`${unlockedAchievements}/${totalAchievements} badges`}
         >
-          <Trophy className="h-4.5 w-4.5" />
+          <Trophy className="h-4 w-4" />
         </button>
       </div>
 

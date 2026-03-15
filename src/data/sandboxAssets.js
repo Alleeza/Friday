@@ -5,7 +5,9 @@ const backdropImageModules = import.meta.glob('../../assets/*.png', {
 
 export const sandboxAssets = [
   { id: 'bunny', emoji: '🐰', label: 'Bunny', unlockXp: 0 },
+  { id: 'chicken', emoji: '🐓', label: 'Chicken', unlockXp: 0 },
   { id: 'carrot', emoji: '🥕', label: 'Carrot', unlockXp: 0 },
+  { id: 'car', emoji: '🚗', label: 'Car', unlockXp: 0 },
   { id: 'rock', emoji: '🪨', label: 'Rock', unlockXp: 0 },
   { id: 'tree', emoji: '🌳', label: 'Tree', unlockXp: 0 },
   { id: 'frog', emoji: '🐸', label: 'Frog', unlockXp: 10 },

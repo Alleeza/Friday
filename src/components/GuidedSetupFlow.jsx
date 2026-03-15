@@ -397,16 +397,16 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                               <div className="rounded-[20px] border border-[#d8e9f7] bg-[#f8fcff] p-3.5">
                                 <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">Goals</p>
                                 <div className="mt-2.5 space-y-2 text-[15px] font-bold text-slate-600">
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🚗 Dodge the road hazards and blocked lanes</div>
-                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">⌨️ Use the keyboard to guide your bunny</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🚗 Dodge the moving cars and blocked lanes</div>
+                                  <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">⌨️ Use the keyboard to guide your chicken</div>
                                   <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_2px_0_rgba(15,23,42,0.04)]">🏁 Reach the far-side goal without crashing</div>
                                 </div>
                               </div>
                               <div className="rounded-[20px] border border-[#d8e9f7] bg-[#eef8ff] p-3.5">
                                 <p className="text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#1b97dd]">Starter Assets</p>
                                 <div className="mt-2.5 flex flex-wrap gap-2 text-[15px] font-bold text-[#246ea5]">
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🐰 Bunny</span>
-                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🪨 Rock</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🐓 Chicken</span>
+                                  <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🚗 Car</span>
                                   <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🏁 Goal</span>
                                   <span className="rounded-full bg-white px-3 py-2 shadow-[0_2px_0_rgba(37,168,239,0.08)]">⌨️ Key Press</span>
                                 </div>

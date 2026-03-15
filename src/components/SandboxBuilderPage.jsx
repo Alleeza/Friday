@@ -11,6 +11,7 @@ import { sandboxAssets } from '../data/sandboxAssets';
 import questyImage from '../imgages/profile.png';
 import GamificationHUD from './GamificationHUD';
 import MissionPanel from './MissionPanel';
+import AchievementPanel from './AchievementPanel';
 import { useGamification } from '../hooks/useGamification';
 
 const eventOptions = [
@@ -224,7 +225,7 @@ function getRuntimeHint(selectedErrors, selectedLabel, selectedBlock, mode) {
   return `For "${selectedBlock}", think event -> loop -> action.`;
 }
 
-function BuilderTopNav({ onCreateNewGame }) {
+function BuilderTopNav({ onCreateNewGame, onOpenAchievements }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
@@ -238,7 +239,7 @@ function BuilderTopNav({ onCreateNewGame }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <GamificationHUD />
+          <GamificationHUD onOpenAchievements={onOpenAchievements} />
 
           <button
             type="button"
@@ -267,6 +268,7 @@ export default function SandboxBuilderPage({
   onCreateNewGame,
 }) {
   const { processEvent } = useGamification();
+  const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const canvasContainerRef = useRef(null);
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
@@ -1591,7 +1593,28 @@ export default function SandboxBuilderPage({
 
   return (
     <>
-      <BuilderTopNav onCreateNewGame={onCreateNewGame} />
+      <BuilderTopNav onCreateNewGame={onCreateNewGame} onOpenAchievements={() => setIsAchievementsOpen(true)} />
+      {isAchievementsOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close badges panel"
+            className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"
+            onClick={() => setIsAchievementsOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-[560px]">
+            <button
+              type="button"
+              aria-label="Close badges panel"
+              onClick={() => setIsAchievementsOpen(false)}
+              className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <AchievementPanel />
+          </div>
+        </div>
+      ) : null}
       <main className="mx-auto w-full max-w-[1920px] space-y-4 px-4 py-4 lg:px-6">
         {projectPlan ? (
           <StageProgressSection
@@ -1605,22 +1628,14 @@ export default function SandboxBuilderPage({
         <section className="grid min-h-[720px] gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <MissionPanel />
 
-          <div
-            ref={canvasContainerRef}
-            className={`relative flex min-h-[720px] min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#dde3ea] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)] ${isFullscreen ? 'h-full w-full rounded-none border-0 shadow-none' : ''}`}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Sandbox Canvas</p>
-                <p className="text-sm font-semibold text-slate-600">Build and test the mission here.</p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className={`min-w-0 ${isFullscreen ? 'fixed inset-0 z-[65] bg-[#F7F7F7]' : 'flex flex-col gap-3'}`}>
+            {!isFullscreen ? (
+              <div className="flex flex-wrap items-center justify-end gap-2 rounded-[24px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
                 <button
                   type="button"
                   onClick={triggerUndo}
                   disabled={!canUndo || mode === 'play'}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Undo2 size={14} />
                   Undo
@@ -1629,7 +1644,7 @@ export default function SandboxBuilderPage({
                   type="button"
                   onClick={triggerRedo}
                   disabled={!canRedo || mode === 'play'}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Redo2 size={14} />
                   Redo
@@ -1637,16 +1652,17 @@ export default function SandboxBuilderPage({
                 <button
                   type="button"
                   onClick={toggleFullscreen}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#E5E5E5] bg-white text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7]"
+                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                 >
-                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                  {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 </button>
                 <button
                   type="button"
                   onClick={onSaveProject}
                   disabled={saveState === 'saving'}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[12px] font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Save size={14} />
                   {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
@@ -1655,7 +1671,7 @@ export default function SandboxBuilderPage({
                   type="button"
                   onClick={onPublishProject}
                   disabled={!hasSavedProject || publishState === 'publishing'}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Share2 size={14} />
                   {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
@@ -1664,7 +1680,7 @@ export default function SandboxBuilderPage({
                   <button
                     type="button"
                     onClick={stopRuntime}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(220,38,38,0.4)] transition hover:bg-red-600"
+                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
                   >
                     <Square size={14} />
                     Stop
@@ -1673,21 +1689,93 @@ export default function SandboxBuilderPage({
                   <button
                     type="button"
                     onClick={startRuntime}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#1cb0f6] px-4 py-2 text-[12px] font-bold text-white shadow-[0_2px_0_rgba(14,138,199,0.5)] transition hover:bg-[#19a0e0]"
+                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
                   >
                     <Play size={14} />
                     Play
                   </button>
                 )}
               </div>
-            </div>
+            ) : null}
 
-            <div className="relative min-h-0 flex-1 p-3 sm:p-4">
-              {isFullscreen ? (
+            <div
+              ref={canvasContainerRef}
+              className={`relative flex min-h-[720px] min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#E5E5E5] bg-[#F7F7F7] shadow-[0_16px_40px_rgba(15,23,42,0.08)] ${isFullscreen ? 'h-full w-full rounded-none border-0 shadow-none' : ''}`}
+            >
+              <div className="relative min-h-0 flex-1 p-3 sm:p-4">
+                {isFullscreen ? (
+                  <div className="absolute right-6 top-6 z-10 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={triggerUndo}
+                      disabled={!canUndo || mode === 'play'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Undo2 size={14} />
+                      Undo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={triggerRedo}
+                      disabled={!canRedo || mode === 'play'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Redo2 size={14} />
+                      Redo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleFullscreen}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#E5E5E5] bg-white text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7]"
+                      aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                      title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    >
+                      {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSaveProject}
+                      disabled={saveState === 'saving'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Save size={14} />
+                      {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onPublishProject}
+                      disabled={!hasSavedProject || publishState === 'publishing'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Share2 size={14} />
+                      {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                    </button>
+                    {mode === 'play' ? (
+                      <button
+                        type="button"
+                        onClick={stopRuntime}
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                      >
+                        <Square size={14} />
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startRuntime}
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                      >
+                        <Play size={14} />
+                        Play
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+                {isFullscreen ? (
                 <button
                   type="button"
                   onClick={toggleFullscreen}
-                  className="absolute right-6 top-6 z-40 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur-sm"
+                  className="absolute left-6 top-6 z-20 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur-sm"
                 >
                   <Minimize2 size={14} />
                   Exit Fullscreen
@@ -1726,14 +1814,14 @@ export default function SandboxBuilderPage({
                 }}
               />
 
-              {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
+                {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
                 <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
                   {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
                   {renderAddEventPill()}
                 </div>
-              ) : null}
+                ) : null}
 
-              {draggingScriptBlock && mode !== 'play' ? (
+                {draggingScriptBlock && mode !== 'play' ? (
                 <div
                   className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
                   onDragOver={(e) => {
@@ -1760,9 +1848,9 @@ export default function SandboxBuilderPage({
                     <Trash2 size={28} strokeWidth={2.6} />
                   </div>
                 </div>
-              ) : null}
+                ) : null}
 
-              {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
+                {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
                 <div className="pointer-events-none absolute inset-0 z-30 p-6">
                   <div className="pointer-events-auto absolute inset-x-6 top-5 bottom-6 flex flex-col gap-4">
                     <div className="flex items-center gap-4 rounded-[30px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
@@ -1978,7 +2066,8 @@ export default function SandboxBuilderPage({
                 </div>
               </div>
                 </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           </div>
         </section>

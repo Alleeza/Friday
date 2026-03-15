@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BrainCircuit, CheckCircle, ChevronDown, ChevronUp, Circle, Map } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronUp, Map } from 'lucide-react';
 import { useGamification } from '../hooks/useGamification';
 import { missionsData } from '../gamification/missions';
 
@@ -39,6 +39,11 @@ const STEP_DETAILS = {
     },
   },
 };
+const STAGE_TITLES = {
+  mission_1: 'Bring your Bunny to life',
+  mission_2: 'Add something to collect',
+  mission_3: 'Complete the challenge',
+};
 
 function distributeStepRewards(totalXp, stepCount) {
   if (!stepCount) return [];
@@ -64,6 +69,8 @@ export default function MissionPanel() {
   const celebrationTimeoutRef = useRef(null);
 
   const currentMission = missionsData.find((mission) => mission.id === userProgress.current_mission);
+  const currentStageNumber = currentMission ? Math.max(1, missionsData.findIndex((mission) => mission.id === currentMission.id) + 1) : 1;
+  const currentStageTitle = currentMission ? (STAGE_TITLES[currentMission.id] || currentMission.title) : 'Current Stage';
   const missionSteps = currentMission?.steps || [];
   const missionProgress = currentMission ? (userProgress.mission_progress[currentMission.id] || {}) : {};
   const totalSteps = missionSteps.length;
@@ -72,12 +79,11 @@ export default function MissionPanel() {
   const progressPercent = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
   const isAllComplete = completedSteps === totalSteps;
   const activeStep = missionSteps.find((step) => (missionProgress[step.id] || 0) < step.target);
-  const missionXpTotal = stepRewards.reduce((sum, reward) => sum + reward, 0);
+  const activeStepIndex = missionSteps.findIndex((step) => (missionProgress[step.id] || 0) < step.target);
   const missionXpEarned = missionSteps.reduce(
     (sum, step, index) => sum + ((missionProgress[step.id] || 0) >= step.target ? (stepRewards[index] || 0) : 0),
     0,
   );
-  const missionXpPercent = missionXpTotal > 0 ? (missionXpEarned / missionXpTotal) * 100 : 0;
   const stepCompletionMap = useMemo(
     () => Object.fromEntries(missionSteps.map((step) => [step.id, (missionProgress[step.id] || 0) >= step.target])),
     [missionProgress, missionSteps],
@@ -107,7 +113,7 @@ export default function MissionPanel() {
 
   if (!currentMission) {
     return (
-      <aside className="flex h-full w-full flex-col rounded-[28px] border border-[#e3e8ef] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)] lg:w-[320px]">
+      <aside className="flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-[#E5E5E5] bg-[#F7F7F7] shadow-[0_10px_30px_rgba(15,23,42,0.06)] lg:w-[320px]">
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6">
           <Map className="h-14 w-14 text-slate-200" />
           <h2 className="text-center text-lg font-bold text-slate-700">All Missions Complete!</h2>
@@ -119,18 +125,8 @@ export default function MissionPanel() {
     );
   }
 
-  const aiHint = activeStep?.description.includes('timer') || activeStep?.description.includes('variables')
-    ? "Use the 'Set timer to' block from Variables."
-    : activeStep?.description.includes('Bunny') || activeStep?.description.includes('bunny')
-      ? 'Drag a Bunny from the asset tray onto the canvas.'
-      : activeStep?.description.includes('Movement') || activeStep?.description.includes('movement')
-        ? 'Look under the Movement block category.'
-        : activeStep?.description.includes('Carrot') || activeStep?.description.includes('carrots')
-          ? 'Drag Carrots to the canvas to collect.'
-          : 'Think about what event connects to this action.';
-
   return (
-    <aside className="flex h-full w-full flex-col overflow-visible rounded-[28px] border border-[#e3e8ef] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)] lg:w-[320px]">
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-[#E5E5E5] bg-[#F7F7F7] shadow-[0_10px_30px_rgba(15,23,42,0.06)] lg:w-[320px]">
       <style>{`
         @keyframes cq-step-complete {
           0% { transform: scale(0.98); box-shadow: 0 0 0 rgba(88, 204, 2, 0); }
@@ -149,50 +145,39 @@ export default function MissionPanel() {
         }
       `}</style>
 
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#fff2c7] text-[#b7791f] shadow-sm">
-              <Map className="h-4 w-4" />
-            </div>
+      <div className="flex flex-1 flex-col gap-3 p-3">
+        <div className="rounded-[24px] border border-[#E5E5E5] bg-white px-3.5 py-3.5 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Current Mission</span>
-              <h2 className="text-[20px] font-extrabold leading-tight text-slate-800">{currentMission.title}</h2>
-              <p className="mt-2 text-[13px] leading-relaxed text-slate-500">{currentMission.description}</p>
+              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#64748B]">Stage {currentStageNumber}</span>
+              <h2 className="mt-1 text-[19px] font-black leading-[1.08] tracking-[-0.03em] text-slate-900">{currentStageTitle}</h2>
+              <p className="mt-1.5 text-[11px] font-medium leading-[1.4] text-[#475569]">{currentMission.description}</p>
+            </div>
+            <div className="shrink-0 rounded-full bg-[#89E219] px-3 py-1.5 text-[11px] font-black text-[#2F5F00] shadow-[inset_0_-2px_0_rgba(0,0,0,0.08)]">
+              {missionXpEarned} XP
             </div>
           </div>
         </div>
 
-        <div className="rounded-[22px] border border-[#e8edf3] bg-[#f8fafc] p-3">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+        <div className="rounded-[28px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
             <span>Mission Progress</span>
             <span>{completedSteps}/{totalSteps} steps</span>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
             <div
-              className="h-full rounded-full bg-[#58cc02] transition-all duration-500"
+              className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <div className="mt-2 text-right text-[11px] font-extrabold text-[#58cc02]">{Math.round(progressPercent)}%</div>
-        </div>
-
-        <div className="rounded-[22px] border border-[#e8edf3] bg-[#f8fafc] p-3">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
-            <span>Mission XP Progress</span>
-            <span>{missionXpEarned} / {missionXpTotal} XP</span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full bg-[#1b97dd] transition-all duration-500"
-              style={{ width: `${missionXpPercent}%` }}
-            />
-          </div>
+          <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Steps</div>
-          <ul className="flex flex-col gap-1.5">
+          <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#475569]">
+            {`Stage ${currentStageNumber}: ${currentStageTitle}`.toUpperCase()}
+          </div>
+          <ul className="flex flex-col gap-3">
             {currentMission.steps.map((step, index) => {
               const count = missionProgress[step.id] || 0;
               const isChecked = count >= step.target;
@@ -200,15 +185,20 @@ export default function MissionPanel() {
               const isCelebrating = celebratingStepId === step.id;
               const stepReward = stepRewards[index] || 0;
               const stepDetails = getStepDetails(currentMission.id, step, stepReward);
+              const isCurrent = !isChecked && index === activeStepIndex;
+              const isLocked = !isChecked && activeStepIndex !== -1 && index > activeStepIndex;
+              const cardClasses = isChecked
+                ? 'border-[#B4DE8A] bg-[#EAF7E1] shadow-none'
+                : isCurrent
+                  ? 'border-[#58CC02] bg-[#58CC02] shadow-none'
+                  : isLocked
+                    ? 'border-[#D0D7E2] bg-[#F1F3F6] text-slate-400 shadow-none'
+                    : 'border-[#E5E5E5] bg-white shadow-[0_2px_0_rgba(0,0,0,0.03)]';
 
               return (
                 <li
                   key={step.id}
-                  className={`overflow-hidden rounded-xl border transition-all duration-300 ${
-                    isChecked
-                      ? 'border-[#c5e8c9] bg-[#f2faf0]'
-                      : 'border-[#e7ebf0] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]'
-                  }`}
+                  className={`overflow-hidden rounded-[24px] border transition-all duration-300 ${cardClasses}`}
                   style={isCelebrating ? { animation: 'cq-step-complete 650ms ease-out' } : undefined}
                 >
                   <button
@@ -216,47 +206,58 @@ export default function MissionPanel() {
                     aria-expanded={isExpanded}
                     aria-controls={`mission-step-panel-${step.id}`}
                     onClick={() => setExpandedStepId((current) => (current === step.id ? null : step.id))}
-                    className={`flex w-full items-start gap-2.5 p-3 text-left transition duration-200 ease-out hover:bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#bfe3f8] ${
-                      isChecked ? 'hover:bg-[#edf7e8]' : ''
+                    className={`flex w-full cursor-pointer items-start gap-3 px-4 py-4 text-left transition duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-inset ${
+                      isChecked
+                        ? 'focus:ring-[#89E219] hover:bg-[#E3F4D5]'
+                      : isLocked
+                          ? 'focus:ring-[#D0D7E2] hover:bg-[#ECEFF3]'
+                          : isCurrent
+                            ? 'focus:ring-white/70 hover:brightness-[0.98]'
+                            : 'focus:ring-[#89E219] hover:bg-[#F7F7F7]'
                     }`}
-                  >
+                    >
                     <span
-                      className={`mt-0.5 shrink-0 ${isChecked ? 'text-[#58cc02]' : 'text-slate-300'}`}
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[3px] ${
+                        isChecked
+                          ? 'border-[#58CC02] bg-[#58CC02] text-white'
+                          : isCurrent
+                            ? 'border-[#D0D7E2] bg-white text-transparent'
+                          : isLocked
+                            ? 'border-[#C8D1DD] bg-[#F7F8FA] text-[#F7F8FA]'
+                            : 'border-[#C7D2E2] bg-white text-transparent'
+                      }`}
                       style={isCelebrating && isChecked ? { animation: 'cq-check-pop 280ms ease-out' } : undefined}
                     >
-                      {isChecked
-                        ? <CheckCircle className="h-[18px] w-[18px]" />
-                        : <Circle className="h-[18px] w-[18px] stroke-[2]" />
-                      }
+                      {isChecked ? <Check className="h-4 w-4 stroke-[3]" /> : null}
                     </span>
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className={`text-[13px] font-semibold leading-tight ${isChecked ? 'text-[#3a7d0a] line-through decoration-[#3a7d0a]/30' : 'text-slate-700'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span className={`min-w-0 flex-1 text-[14px] font-bold leading-snug ${isChecked ? 'text-[#325F13]' : isCurrent ? 'text-white' : isLocked ? 'text-[#64748B]' : 'text-slate-800'}`}>
                           {step.description}
                         </span>
                         <div className="flex items-center gap-2">
                           <span
-                            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black whitespace-nowrap ${
-                              isChecked ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-500'
+                            className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black whitespace-nowrap ${
+                              isLocked ? 'bg-[#FAFAFA] text-[#98A2B3]' : isCurrent ? 'bg-white text-[#2F5F00]' : 'bg-[#F7F7F7] text-[#334155]'
                             }`}
                             style={isCelebrating ? { animation: 'cq-xp-flash 420ms ease-out 1' } : undefined}
                           >
                             +{stepReward} XP
                           </span>
-                          <span className="shrink-0 text-slate-400">
+                          <span className={`shrink-0 ${isCurrent ? 'text-white/90' : isLocked ? 'text-[#98A2B3]' : 'text-slate-400'}`}>
                             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </span>
                         </div>
                       </div>
-                      {step.target > 1 ? (
+                      {step.target > 1 && isExpanded ? (
                         <div className="mt-0.5 flex items-center gap-2">
-                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#E5E5E5]">
                             <div
-                              className={`h-full rounded-full transition-all ${isChecked ? 'bg-[#58cc02]' : 'bg-blue-400'}`}
+                              className={`h-full rounded-full transition-all ${isChecked ? 'bg-[#58CC02]' : isLocked ? 'bg-slate-300' : 'bg-[#58CC02]'}`}
                               style={{ width: `${Math.min(100, (count / step.target) * 100)}%` }}
                             />
                           </div>
-                          <span className={`text-[10px] font-bold tabular-nums ${isChecked ? 'text-[#3a7d0a]' : 'text-blue-500'}`}>
+                          <span className={`text-[10px] font-bold tabular-nums ${isChecked ? 'text-[#46A302]' : isLocked ? 'text-slate-400' : 'text-[#58CC02]'}`}>
                             {count}/{step.target}
                           </span>
                         </div>
@@ -272,19 +273,19 @@ export default function MissionPanel() {
                       id={`mission-step-panel-${step.id}`}
                       className="overflow-hidden"
                     >
-                      <div className={`border-t px-4 py-3 ${isChecked ? 'border-[#d9efd1] bg-[#eef8ea]' : 'border-slate-100 bg-[#f8fafc]'}`}>
-                        <div className="space-y-3">
+                      <div className={`border-t px-4 py-3 ${isChecked ? 'border-[#B4DE8A] bg-[#F3FAEC]' : isCurrent ? 'border-white/20 bg-white' : isLocked ? 'border-[#D0D7E2] bg-[#F7F8FA]' : 'border-[#E5E5E5] bg-[#F7F7F7]'}`}>
+                        <div className="space-y-2.5">
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Description</p>
-                            <p className="mt-1 text-[12px] leading-relaxed text-slate-700">{stepDetails.description}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Description</p>
+                            <p className="mt-1 text-[12px] font-medium leading-relaxed text-slate-700">{stepDetails.description}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
-                            <p className="mt-1 text-[12px] font-semibold text-slate-700">{stepDetails.concept}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
+                            <p className="mt-1 text-[12px] font-bold text-slate-700">{stepDetails.concept}</p>
                           </div>
-                          <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2">
-                            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Reward</span>
-                            <span className="text-[12px] font-extrabold text-[#1b97dd]">{stepDetails.reward}</span>
+                          <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+                            <span className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-400">Reward</span>
+                            <span className="text-[12px] font-extrabold text-[#58CC02]">{stepDetails.reward}</span>
                           </div>
                         </div>
                       </div>
@@ -294,20 +295,21 @@ export default function MissionPanel() {
               );
             })}
           </ul>
+
+          <div className="mt-2 flex items-center justify-between px-1">
+            <span className="text-[13px] font-black uppercase tracking-[0.14em] text-[#1CB0F6]">Bonus Quests (Optional)</span>
+            <button
+              type="button"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#B7DAFB] bg-white text-[#1CB0F6] transition hover:bg-[#F4FBFF]"
+              aria-label="View bonus quests"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        <div className="mt-auto border-t border-slate-100 pt-3">
-          {!isAllComplete && activeStep ? (
-            <div className="flex items-start gap-2.5 rounded-xl border border-[#cfe6fb] bg-gradient-to-br from-[#eef7ff] to-white p-3">
-              <div className="mt-0.5 shrink-0 rounded-lg bg-[#d9f0ff] p-1.5">
-                <BrainCircuit className="h-3.5 w-3.5 text-[#1b97dd]" />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#1b97dd]">AI Coach</span>
-                <span className="text-[12px] font-medium leading-snug text-slate-700">{aiHint}</span>
-              </div>
-            </div>
-          ) : isAllComplete ? (
+        <div className="mt-auto pt-2">
+          {isAllComplete ? (
             <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-center">
               <span className="text-[13px] font-bold text-green-700">🎉 Mission Complete!</span>
               <p className="mt-1 text-[11px] text-green-600">+{currentMission.reward_xp} XP earned</p>

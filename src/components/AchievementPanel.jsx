@@ -3,13 +3,13 @@ import { Trophy, Lock } from 'lucide-react';
 import { useGamification } from '../hooks/useGamification';
 import { achievementsData } from '../gamification/achievements';
 
-export default function AchievementPanel() {
+export default function AchievementPanel({ className = '' }) {
   const { userProgress } = useGamification();
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-white h-full">
+    <div className={`flex w-full max-w-[560px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.16)] ${className}`.trim()}>
       {/* Header */}
-      <div className="sticky top-0 bg-white z-10 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-100 bg-white px-5 py-4">
         <div className="bg-yellow-100 p-1.5 rounded-lg text-yellow-600">
           <Trophy className="w-4 h-4" />
         </div>
@@ -17,7 +17,7 @@ export default function AchievementPanel() {
       </div>
 
       {/* Achievement Cards */}
-      <div className="p-3 flex flex-col gap-2.5">
+      <div className="max-h-[70vh] overflow-y-auto p-4 flex flex-col gap-2.5">
         {achievementsData.map(ach => {
           const isUnlocked = userProgress.achievements.includes(ach.id);
 

@@ -4,7 +4,7 @@ import { useGamification } from '../hooks/useGamification';
 import { getXpForLevel } from '../gamification/levels';
 import { achievementsData } from '../gamification/achievements';
 
-export default function GamificationHUD({ className = '' }) {
+export default function GamificationHUD({ className = '', onOpenAchievements = null }) {
   const { userProgress, notification } = useGamification();
 
   const currentLevelXp = getXpForLevel(userProgress.level);
@@ -41,10 +41,15 @@ export default function GamificationHUD({ className = '' }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-full border border-[#f4d48b] bg-[#fff8e1] px-4 py-2 text-[12px] font-bold text-[#a16207]">
+        <button
+          type="button"
+          onClick={onOpenAchievements}
+          className={`flex items-center gap-2 rounded-full border border-[#f4d48b] bg-[#fff8e1] px-4 py-2 text-[12px] font-bold text-[#a16207] transition hover:brightness-[0.98] ${onOpenAchievements ? 'cursor-pointer' : 'cursor-default'}`}
+          aria-label="Open badges"
+        >
           <Trophy className="h-3.5 w-3.5" />
           {unlockedAchievements}/{totalAchievements} badges
-        </div>
+        </button>
       </div>
 
       {notification && (

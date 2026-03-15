@@ -188,7 +188,7 @@ export default function MissionPanel() {
               const isCurrent = !isChecked && index === activeStepIndex;
               const isLocked = !isChecked && activeStepIndex !== -1 && index > activeStepIndex;
               const cardClasses = isChecked
-                ? 'border-[#B4DE8A] bg-[#EAF7E1] shadow-none'
+                ? 'border-[#9DDC63] bg-[#F7FCEB] shadow-[0_2px_0_rgba(157,220,99,0.14)]'
                 : isCurrent
                   ? 'border-[#58CC02] bg-[#58CC02] shadow-none'
                   : isLocked
@@ -208,7 +208,7 @@ export default function MissionPanel() {
                     onClick={() => setExpandedStepId((current) => (current === step.id ? null : step.id))}
                     className={`flex w-full cursor-pointer items-start gap-3 px-4 py-4 text-left transition duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-inset ${
                       isChecked
-                        ? 'focus:ring-[#89E219] hover:bg-[#E3F4D5]'
+                        ? 'focus:ring-[#89E219] hover:bg-[#F2F9E3]'
                       : isLocked
                           ? 'focus:ring-[#D0D7E2] hover:bg-[#ECEFF3]'
                           : isCurrent
@@ -232,13 +232,19 @@ export default function MissionPanel() {
                     </span>
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <div className="flex items-start justify-between gap-3">
-                        <span className={`min-w-0 flex-1 text-[14px] font-bold leading-snug ${isChecked ? 'text-[#325F13]' : isCurrent ? 'text-white' : isLocked ? 'text-[#64748B]' : 'text-slate-800'}`}>
+                        <span className={`min-w-0 flex-1 text-[14px] font-bold leading-snug ${isChecked ? 'text-[#3D7A12]' : isCurrent ? 'text-white' : isLocked ? 'text-[#64748B]' : 'text-slate-800'}`}>
                           {step.description}
                         </span>
                         <div className="flex items-center gap-2">
                           <span
                             className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black whitespace-nowrap ${
-                              isLocked ? 'bg-[#FAFAFA] text-[#98A2B3]' : isCurrent ? 'bg-white text-[#2F5F00]' : 'bg-[#F7F7F7] text-[#334155]'
+                              isChecked
+                                ? 'border border-[#DDE8C8] bg-white text-[#4F5D75]'
+                                : isLocked
+                                  ? 'bg-[#FAFAFA] text-[#98A2B3]'
+                                  : isCurrent
+                                    ? 'bg-white text-[#2F5F00]'
+                                    : 'bg-[#F7F7F7] text-[#334155]'
                             }`}
                             style={isCelebrating ? { animation: 'cq-xp-flash 420ms ease-out 1' } : undefined}
                           >
@@ -273,7 +279,7 @@ export default function MissionPanel() {
                       id={`mission-step-panel-${step.id}`}
                       className="overflow-hidden"
                     >
-                      <div className={`border-t px-4 py-3 ${isChecked ? 'border-[#B4DE8A] bg-[#F3FAEC]' : isCurrent ? 'border-white/20 bg-white' : isLocked ? 'border-[#D0D7E2] bg-[#F7F8FA]' : 'border-[#E5E5E5] bg-[#F7F7F7]'}`}>
+                      <div className={`border-t px-4 py-3 ${isChecked ? 'border-[#B7E17B] bg-white' : isCurrent ? 'border-white/20 bg-white' : isLocked ? 'border-[#D0D7E2] bg-[#F7F8FA]' : 'border-[#E5E5E5] bg-[#F7F7F7]'}`}>
                         <div className="space-y-2.5">
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Description</p>
@@ -283,9 +289,9 @@ export default function MissionPanel() {
                             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
                             <p className="mt-1 text-[12px] font-bold text-slate-700">{stepDetails.concept}</p>
                           </div>
-                          <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+                          <div className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] ${isChecked ? 'border-[#DDE8C8] bg-white' : 'border-[#E5E7EB] bg-white'}`}>
                             <span className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-400">Reward</span>
-                            <span className="text-[12px] font-extrabold text-[#58CC02]">{stepDetails.reward}</span>
+                            <span className="text-[13px] font-extrabold text-[#58CC02]">{stepDetails.reward}</span>
                           </div>
                         </div>
                       </div>

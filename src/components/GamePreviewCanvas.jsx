@@ -141,6 +141,7 @@ export default function GamePreviewCanvas({
   const backdropMovedDuringDragRef = useRef(false);
   const backdropResizeStartRef = useRef(null);
   const backdropResizedDuringDragRef = useRef(false);
+  const suppressNextAssetClickRef = useRef(false);
   const onSceneChangeRef = useRef(onSceneChange);
   const initialSceneRef = useRef(normalizeSceneState(initialSceneState));
   const lastUndoSignalRef = useRef(undoSignal);
@@ -229,7 +230,10 @@ export default function GamePreviewCanvas({
     setSelectedPlacedAssetKey((current) => (
       current === normalizedKey ? current : normalizedKey
     ));
-    setSelectedPlacedAssetKeys(normalizedKey ? [normalizedKey] : []);
+    setSelectedPlacedAssetKeys((current) => {
+      if (!normalizedKey) return [];
+      return current.includes(normalizedKey) ? current : [normalizedKey];
+    });
   }, [selectedInstanceKey]);
 
   useEffect(() => {
@@ -682,6 +686,7 @@ export default function GamePreviewCanvas({
           .map((asset) => asset.key);
         const primaryKey = selectedKeys[selectedKeys.length - 1] || null;
         updateSelection(primaryKey, selectedKeys);
+        suppressNextAssetClickRef.current = true;
       } else if (e?.target === canvasRef.current) {
         updateSelection(null, []);
       }
@@ -858,7 +863,7 @@ export default function GamePreviewCanvas({
     <section
       ref={canvasRef}
       data-sandbox-canvas-root="true"
-      className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]"
+      className="relative h-full select-none overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]"
       onPointerDown={startSelectionBox}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
@@ -867,6 +872,18 @@ export default function GamePreviewCanvas({
       onDragOver={(e) => isEditMode && e.preventDefault()}
       onDrop={onCanvasDrop}
     >
+      <style>{`
+        @keyframes cq-bottom-drawer-in {
+          0% {
+            opacity: 0;
+            transform: translateY(32px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
       {selectedBackdrop ? (
         <div
           ref={backdropRef}
@@ -936,11 +953,15 @@ export default function GamePreviewCanvas({
           <div
             key={asset.key}
             data-canvas-asset="true"
-            className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none ${isEditMode && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-20'} ${isEditMode && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : isPlayMode ? 'cursor-pointer' : ''}`}
+            className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none select-none ${isEditMode && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-20'} ${isEditMode && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : isPlayMode ? 'cursor-pointer' : ''}`}
             style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize, opacity: getOpacity(asset) }}
             title={asset.label}
             onClick={(e) => {
               e.stopPropagation();
+              if (suppressNextAssetClickRef.current) {
+                suppressNextAssetClickRef.current = false;
+                return;
+              }
               if (isEditMode) handleAssetSelection(e, asset.key);
               if (isPlayMode) onSpriteClick?.(asset.key);
             }}
@@ -949,14 +970,14 @@ export default function GamePreviewCanvas({
           >
             {isSelected && showSelectionChrome ? (
               <>
-                <div className="absolute inset-0 border-[3px] border-[#19a2ff]" />
+                <div className="pointer-events-none absolute inset-0 rounded-[2px] border-[3px] border-[#19a2ff]" />
                 <div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, -1)} />
                 <div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, -1)} />
                 <div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, 1)} />
                 <div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, 1)} />
               </>
             ) : null}
-            <div className="grid h-full w-full place-items-center bg-transparent leading-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
+            <div className="grid h-full w-full place-items-center bg-transparent leading-none select-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
           </div>
         );
       })}
@@ -973,25 +994,40 @@ export default function GamePreviewCanvas({
           <div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div>
         </div>
       ) : null}
-      {showTrayToggle && isEditMode && !draggingPlacedAssetKey ? <button ref={trayToggleRef} onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
+      {showTrayToggle && isEditMode && !draggingPlacedAssetKey && !trayOpen ? <button ref={trayToggleRef} onClick={() => setTrayOpen(true)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">+</button> : null}
 
       {trayOpen && isEditMode ? (
-        <div ref={trayRef} className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div
+          ref={trayRef}
+          className="absolute inset-x-4 bottom-4 z-20 flex h-[42%] min-h-[280px] max-h-[420px] flex-col overflow-hidden rounded-[30px] border-2 border-[#d7dde4] bg-white px-5 py-4 shadow-[0_8px_0_rgba(148,163,184,0.22)]"
+          style={{ animation: 'cq-bottom-drawer-in 220ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        >
+          <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p>
               {trayTab === 'backdrops' ? (
                 <p className="mt-1 text-sm font-bold text-slate-500">Pick a backdrop, adjust it once, then lock it into place.</p>
               ) : null}
             </div>
-            <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
-              <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>
-              <button type="button" onClick={() => setTrayTab('backdrops')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'backdrops' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Image size={16} />Backdrop Assets</button>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>
+                <button type="button" onClick={() => setTrayTab('backdrops')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'backdrops' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Image size={16} />Backdrop Assets</button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTrayOpen(false)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#d7dde4] bg-white text-slate-500 shadow-[0_3px_0_rgba(148,163,184,0.14)] transition hover:bg-slate-50"
+                aria-label="Close assets drawer"
+              >
+                <X size={20} />
+              </button>
             </div>
           </div>
 
+          <div className="relative min-h-0 flex-1">
           {trayTab === 'backdrops' ? (
-            <div className="max-h-[360px] overflow-y-auto pr-1">
+            <div className="h-full overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
                 {trayAssets.map((asset) => (
                   <button key={asset.id} type="button" draggable onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')} onClick={() => applyBackdrop(asset)} className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`} title={asset.label}>
@@ -1004,10 +1040,10 @@ export default function GamePreviewCanvas({
               </div>
             </div>
           ) : (
-            <div className="max-h-[360px] space-y-5 overflow-y-auto pr-1">
+            <div className="h-full space-y-4 overflow-y-auto pr-1">
               {spriteAssetSections.map((section) => (
-                <section key={section.id} className="rounded-[28px] border border-[#e2e8f0] bg-[#f8fafc] p-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
-                  <div className="mb-3 flex items-start justify-between gap-3">
+                <section key={section.id} className="rounded-[24px] border border-[#e2e8f0] bg-[#f8fafc] p-3 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                  <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#64748b]">{section.title}</p>
                     </div>
@@ -1022,6 +1058,8 @@ export default function GamePreviewCanvas({
               ))}
             </div>
           )}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white via-white/85 to-transparent" />
+          </div>
         </div>
       ) : null}
 

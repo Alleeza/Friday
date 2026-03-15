@@ -244,10 +244,6 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                     }
 
                   `}</style>
-                  <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d9efc0] bg-[#f4fce8] px-4 py-2 text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#4a8c12] shadow-[0_3px_0_rgba(88,204,2,0.12)]">
-                    <Sparkles className="h-4 w-4" />
-                    Let’s Build Something Fun
-                  </div>
                   <div className="mb-5">
                     <img
                       src={questyHeroImage}
@@ -260,16 +256,8 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                   <h1 className="whitespace-nowrap font-display text-[1.95rem] font-extrabold leading-[0.96] tracking-[-0.03em] text-[#58cc02] [text-shadow:0_2px_0_rgba(70,163,2,0.18)] sm:text-[2.35rem] lg:text-[3.15rem]">
                     What game do you want to build?
                   </h1>
-                  <p className="mt-3 max-w-[620px] text-[16px] font-medium leading-7 text-slate-500 sm:text-[17px]">
-                    Tell Questy your idea and we&apos;ll turn it into a playful starter plan with assets, goals, and first steps.
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-bold text-slate-600">
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🐰 Character</span>
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🏁 Goal</span>
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🪨 Obstacle</span>
-                  </div>
 
-                  <form ref={formRef} onSubmit={handleInitialSubmit} className="mt-6 w-full max-w-[1040px]">
+                  <form ref={formRef} onSubmit={handleInitialSubmit} className="mt-12 w-full max-w-[1040px]">
                     <div className="overflow-hidden rounded-[32px] border-2 border-[#d7e3f0] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] shadow-[0_12px_0_rgba(15,23,42,0.04)]">
                       <label htmlFor="idea-input" className="flex items-center gap-2 border-b border-[#edf1f7] px-6 py-4 text-left text-[13px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">
                         <Lightbulb className="h-4 w-4 text-amber-400" />

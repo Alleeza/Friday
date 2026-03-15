@@ -6,36 +6,36 @@ import { missionsData } from '../gamification/missions';
 const STEP_DETAILS = {
   mission_1: {
     add_bunny: {
-      description: 'Place a Bunny object on the sandbox canvas so it can interact with other objects.',
-      concept: 'Object placement',
+      description: 'Put a Bunny on the game screen.',
+      concept: 'Adding a character',
     },
     add_carrot: {
-      description: 'Add carrot objects the Bunny can collect during the mission.',
-      concept: 'Collectible setup',
+      description: 'Put some carrots in the game for Bunny to grab.',
+      concept: 'Adding things to collect',
     },
     collect_carrots: {
-      description: 'Run the game and guide the Bunny into carrots to prove the interaction works.',
-      concept: 'Playtesting and collision feedback',
+      description: 'Press Play and move Bunny to touch the carrots.',
+      concept: 'Testing your game',
     },
   },
   mission_2: {
     set_timer: {
-      description: 'Use a timer block so the challenge has a countdown and a goal.',
-      concept: 'Variables and timers',
+      description: 'Add a timer so the game can count down.',
+      concept: 'Timers',
     },
     collect_5_carrots: {
-      description: 'Keep testing until the Bunny can gather enough carrots before time runs out.',
-      concept: 'Goal tracking',
+      description: 'Try the game until Bunny can grab 5 carrots in time.',
+      concept: 'Goals',
     },
   },
   mission_3: {
     move_bunny: {
-      description: 'Add movement logic so the player can control or move the Bunny around obstacles.',
-      concept: 'Motion scripting',
+      description: 'Add blocks that make Bunny move.',
+      concept: 'Movement',
     },
     avoid_obstacles: {
-      description: 'Finish the level cleanly to confirm the obstacle rules and movement are working together.',
-      concept: 'Challenge validation',
+      description: 'Make it to the end without hitting the obstacles.',
+      concept: 'Challenge rules',
     },
   },
 };
@@ -146,16 +146,16 @@ export default function MissionPanel() {
       `}</style>
 
       <div className="flex flex-1 flex-col gap-3 p-3">
-        <div className="rounded-[24px] border border-[#E5E5E5] bg-white px-3.5 py-3.5 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#64748B]">Stage {currentStageNumber}</span>
-              <h2 className="mt-1 text-[19px] font-black leading-[1.08] tracking-[-0.03em] text-slate-900">{currentStageTitle}</h2>
-              <p className="mt-1.5 text-[11px] font-medium leading-[1.4] text-[#475569]">{currentMission.description}</p>
-            </div>
+        <div className="rounded-[24px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#64748B]">Stage {currentStageNumber}</span>
             <div className="shrink-0 rounded-full bg-[#89E219] px-3 py-1.5 text-[11px] font-black text-[#2F5F00] shadow-[inset_0_-2px_0_rgba(0,0,0,0.08)]">
               {missionXpEarned} XP
             </div>
+          </div>
+          <div className="mt-2 min-w-0">
+            <h2 className="max-w-[240px] text-[18px] font-black leading-[1.04] tracking-[-0.03em] text-slate-900">{currentStageTitle}</h2>
+            <p className="mt-1 text-[11px] font-medium leading-[1.35] text-[#475569]">{currentMission.description}</p>
           </div>
         </div>
 
@@ -302,14 +302,14 @@ export default function MissionPanel() {
             })}
           </ul>
 
-          <div className="mt-2 flex items-center justify-between px-1">
-            <span className="text-[13px] font-black uppercase tracking-[0.14em] text-[#1CB0F6]">Bonus Quests (Optional)</span>
+          <div className="mt-2 flex items-center justify-between gap-3 px-1">
+            <span className="text-[12px] font-black uppercase tracking-[0.12em] text-[#1CB0F6]">Bonus Quests (Optional)</span>
             <button
               type="button"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#B7DAFB] bg-white text-[#1CB0F6] transition hover:bg-[#F4FBFF]"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#B7DAFB] bg-white text-[#1CB0F6] transition hover:bg-[#F4FBFF]"
               aria-label="View bonus quests"
             >
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-4.5 w-4.5" />
             </button>
           </div>
         </div>

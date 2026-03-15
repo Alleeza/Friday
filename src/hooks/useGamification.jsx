@@ -11,6 +11,7 @@ import {
 const GamificationContext = createContext(null);
 
 const LOCAL_STORAGE_KEY = 'gamification_progress';
+const MAX_EVENTS_HISTORY = 500;
 
 function createDefaultUserProgress() {
   return {
@@ -49,6 +50,40 @@ function normalizeUserProgress(progress = {}) {
   };
 }
 
+function normalizeEventsHistory(eventsHistory) {
+  if (!Array.isArray(eventsHistory)) return [];
+
+  return eventsHistory
+    .filter((event) => event && typeof event === 'object')
+    .map((event) => ({
+      ...event,
+      timestamp: Number.isFinite(event.timestamp) ? event.timestamp : Date.now(),
+    }))
+    .slice(-MAX_EVENTS_HISTORY);
+}
+
+function createPersistedSnapshot(userProgress, eventsHistory) {
+  return {
+    userProgress,
+    eventsHistory: normalizeEventsHistory(eventsHistory),
+  };
+}
+
+function normalizePersistedSnapshot(saved = {}) {
+  // Backward compatibility: older saves stored the progress object directly.
+  if (saved?.userProgress || saved?.eventsHistory) {
+    return {
+      userProgress: normalizeUserProgress(saved.userProgress),
+      eventsHistory: normalizeEventsHistory(saved.eventsHistory),
+    };
+  }
+
+  return {
+    userProgress: normalizeUserProgress(saved),
+    eventsHistory: [],
+  };
+}
+
 export function GamificationProvider({ children }) {
   const [userProgress, setUserProgress] = useState(() => createDefaultUserProgress());
   const [isHydrated, setIsHydrated] = useState(false);
@@ -60,26 +95,29 @@ export function GamificationProvider({ children }) {
     let cancelled = false;
 
     async function hydrateProgress() {
-      let fallbackProgress = null;
+      let fallbackSnapshot = null;
       if (typeof window !== 'undefined') {
         const saved = window.localStorage.getItem(LOCAL_STORAGE_KEY);
         if (saved) {
           try {
-            fallbackProgress = normalizeUserProgress(JSON.parse(saved));
+            fallbackSnapshot = normalizePersistedSnapshot(JSON.parse(saved));
           } catch (error) {
             console.error('Failed to parse gamification progress', error);
           }
         }
       }
 
-      if (fallbackProgress && !cancelled) {
-        setUserProgress(fallbackProgress);
+      if (fallbackSnapshot && !cancelled) {
+        setUserProgress(fallbackSnapshot.userProgress);
+        setEventsHistory(fallbackSnapshot.eventsHistory);
       }
 
       try {
         const remote = await loadGamificationProgress();
-        if (!cancelled && remote?.progress) {
-          setUserProgress(normalizeUserProgress(remote.progress));
+        if (!cancelled && remote) {
+          const normalized = normalizePersistedSnapshot(remote.progress ?? remote);
+          setUserProgress(normalized.userProgress);
+          setEventsHistory(normalized.eventsHistory);
         }
       } catch (error) {
         console.error('Failed to load gamification progress from API', error);
@@ -99,15 +137,18 @@ export function GamificationProvider({ children }) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userProgress));
+      window.localStorage.setItem(
+        LOCAL_STORAGE_KEY,
+        JSON.stringify(createPersistedSnapshot(userProgress, eventsHistory)),
+      );
     }
-  }, [userProgress]);
+  }, [eventsHistory, userProgress]);
 
   useEffect(() => {
     if (!isHydrated) return;
 
     let cancelled = false;
-    saveGamificationProgress(userProgress).catch((error) => {
+    saveGamificationProgress(createPersistedSnapshot(userProgress, eventsHistory)).catch((error) => {
       if (!cancelled) {
         console.error('Failed to save gamification progress to API', error);
       }
@@ -116,7 +157,7 @@ export function GamificationProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, userProgress]);
+  }, [eventsHistory, isHydrated, userProgress]);
 
   const showNotification = useCallback((type, title, message, timeout = 5000) => {
     const id = Date.now();
@@ -164,7 +205,7 @@ export function GamificationProvider({ children }) {
 
   const processGamificationEvent = useCallback((event) => {
     setEventsHistory(prevHistory => {
-      const newHistory = [...prevHistory, { ...event, timestamp: Date.now() }];
+      const newHistory = normalizeEventsHistory([...prevHistory, { ...event, timestamp: Date.now() }]);
       
       setUserProgress(prev => {
         let xpGained = 0;

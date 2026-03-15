@@ -223,7 +223,7 @@ function getInstanceDisplayLabel(instances, instanceKey) {
 
 function BuilderTopNav({ onCreateNewGame, onOpenAchievements }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-[#d9efc0] bg-[#f4fce8]/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
           <img

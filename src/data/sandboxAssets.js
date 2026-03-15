@@ -6,55 +6,55 @@ const backdropImageModules = typeof import.meta.glob === 'function'
   : {};
 
 export const sandboxAssets = [
-  { id: 'bunny', emoji: '🐰', label: 'Bunny', unlockXp: 0 },
-  { id: 'chicken', emoji: '🐓', label: 'Chicken', unlockXp: 0 },
-  { id: 'carrot', emoji: '🥕', label: 'Carrot', unlockXp: 0 },
-  { id: 'car', emoji: '🚗', label: 'Car', unlockXp: 0 },
-  { id: 'rock', emoji: '🪨', label: 'Rock', unlockXp: 0 },
-  { id: 'tree', emoji: '🌳', label: 'Tree', unlockXp: 0 },
-  { id: 'frog', emoji: '🐸', label: 'Frog', unlockXp: 10 },
-  { id: 'goal', emoji: '🏁', label: 'Goal', unlockXp: 20 },
-  { id: 'flower', emoji: '🌸', label: 'Flower', unlockXp: 20 },
-  { id: 'coin', emoji: '🪙', label: 'Coin', unlockXp: 30 },
-  { id: 'mushroom', emoji: '🍄', label: 'Mushroom', unlockXp: 30 },
-  { id: 'cloud', emoji: '☁️', label: 'Cloud', unlockXp: 40 },
-  { id: 'rainbow', emoji: '🌈', label: 'Rainbow', unlockXp: 40 },
-  { id: 'sun', emoji: '🌞', label: 'Sun', unlockXp: 50 },
-  { id: 'robot', emoji: '🤖', label: 'Robot', unlockXp: 50 },
-  { id: 'star', emoji: '⭐', label: 'Star', unlockXp: 60 },
-  { id: 'rocket', emoji: '🚀', label: 'Rocket', unlockXp: 60 },
-  { id: 'heart', emoji: '❤️', label: 'Heart', unlockXp: 70 },
-  { id: 'ghost', emoji: '👻', label: 'Ghost', unlockXp: 70 },
-  { id: 'gift', emoji: '🎁', label: 'Gift', unlockXp: 80 },
-  { id: 'crown', emoji: '👑', label: 'Crown', unlockXp: 80 },
-  { id: 'key', emoji: '🗝️', label: 'Key', unlockXp: 90 },
-  { id: 'planet', emoji: '🪐', label: 'Planet', unlockXp: 90 },
-  { id: 'dragon', emoji: '🐉', label: 'Dragon', unlockXp: 100 },
-  { id: 'castle', emoji: '🏰', label: 'Castle', unlockXp: 100 },
-  { id: 'treasure', emoji: '💎', label: 'Gem', unlockXp: 110 },
-  { id: 'volcano', emoji: '🌋', label: 'Volcano', unlockXp: 120 },
-  { id: 'unicorn', emoji: '🦄', label: 'Unicorn', unlockXp: 130 },
-  { id: 'satellite', emoji: '🛰️', label: 'Satellite', unlockXp: 140 },
+  { id: 'bunny', emoji: '🐰', label: 'Bunny', unlockLevel: 1 },
+  { id: 'chicken', emoji: '🐓', label: 'Chicken', unlockLevel: 1 },
+  { id: 'carrot', emoji: '🥕', label: 'Carrot', unlockLevel: 1 },
+  { id: 'car', emoji: '🚗', label: 'Car', unlockLevel: 1 },
+  { id: 'rock', emoji: '🪨', label: 'Rock', unlockLevel: 1 },
+  { id: 'tree', emoji: '🌳', label: 'Tree', unlockLevel: 1 },
+  { id: 'frog', emoji: '🐸', label: 'Frog', unlockLevel: 2 },
+  { id: 'goal', emoji: '🏁', label: 'Goal', unlockLevel: 2 },
+  { id: 'flower', emoji: '🌸', label: 'Flower', unlockLevel: 2 },
+  { id: 'coin', emoji: '🪙', label: 'Coin', unlockLevel: 2 },
+  { id: 'mushroom', emoji: '🍄', label: 'Mushroom', unlockLevel: 2 },
+  { id: 'cloud', emoji: '☁️', label: 'Cloud', unlockLevel: 3 },
+  { id: 'rainbow', emoji: '🌈', label: 'Rainbow', unlockLevel: 3 },
+  { id: 'sun', emoji: '🌞', label: 'Sun', unlockLevel: 3 },
+  { id: 'robot', emoji: '🤖', label: 'Robot', unlockLevel: 3 },
+  { id: 'star', emoji: '⭐', label: 'Star', unlockLevel: 3 },
+  { id: 'rocket', emoji: '🚀', label: 'Rocket', unlockLevel: 3 },
+  { id: 'heart', emoji: '❤️', label: 'Heart', unlockLevel: 4 },
+  { id: 'ghost', emoji: '👻', label: 'Ghost', unlockLevel: 4 },
+  { id: 'gift', emoji: '🎁', label: 'Gift', unlockLevel: 4 },
+  { id: 'crown', emoji: '👑', label: 'Crown', unlockLevel: 4 },
+  { id: 'key', emoji: '🗝️', label: 'Key', unlockLevel: 4 },
+  { id: 'planet', emoji: '🪐', label: 'Planet', unlockLevel: 4 },
+  { id: 'dragon', emoji: '🐉', label: 'Dragon', unlockLevel: 5 },
+  { id: 'castle', emoji: '🏰', label: 'Castle', unlockLevel: 5 },
+  { id: 'treasure', emoji: '💎', label: 'Gem', unlockLevel: 5 },
+  { id: 'volcano', emoji: '🌋', label: 'Volcano', unlockLevel: 5 },
+  { id: 'unicorn', emoji: '🦄', label: 'Unicorn', unlockLevel: 5 },
+  { id: 'satellite', emoji: '🛰️', label: 'Satellite', unlockLevel: 5 },
 ];
 
 export const backdropAssets = Object.entries(backdropImageModules)
   .map(([path, src]) => {
     const match = path.match(/\/(\d+)\.png$/);
     const number = Number(match?.[1] || 0);
-    const unlockXp = number <= 4
-      ? 0
+    const unlockLevel = number <= 4
+      ? 1
       : number <= 8
-        ? 20
+        ? 2
         : number <= 12
-          ? 50
-          : 80;
+          ? 3
+          : 4;
 
     return {
       id: `backdrop-${number}`,
       label: `Backdrop ${number}`,
       previewLabel: `${number}`,
       src,
-      unlockXp,
+      unlockLevel,
       type: 'backdrop',
       sortOrder: number,
     };

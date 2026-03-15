@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
 import { usePlanSession } from '../hooks/usePlanSession.js';
+import { useGamification } from '../hooks/useGamification';
 import PlanReview from './PlanReview.jsx';
 import questyImage from '../imgages/profile.png';
 import questyHeroImage from '../imgages/Questy_Full_Body-removebg-preview.png';
@@ -90,6 +91,7 @@ function TopNav({ step, onGoHome }) {
 
 /* ─── Main Component ─── */
 export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome }) {
+  const { userProgress } = useGamification();
   const [step, setStep] = useState('idea');
   const [idea, setIdea] = useState('');
   const [style, setStyle] = useState('platformer');
@@ -105,7 +107,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
     plan, status, error, infeasible, suggestion, usedFallback,
     turnStats, refinementHistory,
     generatePlan, refinePlan, abort, reset,
-  } = usePlanSession({ xp: 0, providerName: selectedProvider, model: selectedModel });
+  } = usePlanSession({ xp: userProgress.total_xp, providerName: selectedProvider, model: selectedModel });
 
   // ⌘+Enter / Ctrl+Enter keyboard shortcut
   useEffect(() => {

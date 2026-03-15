@@ -14,7 +14,7 @@ function formatList(items, formatter) {
 
 function formatAssetCatalog(assets) {
   return formatList(assets, (asset) => (
-    `  - ${asset.emoji} ${asset.label} (id: "${asset.id}", unlock: ${asset.unlockXp} XP)\n` +
+    `  - ${asset.emoji} ${asset.label} (id: "${asset.id}", unlock: Level ${asset.unlockLevel || 1})\n` +
     `    Roles: ${asset.roles.join(', ')}\n` +
     `    Good for: ${asset.commonUses.join('; ')}\n` +
     `    Pairs well with: ${asset.commonPairings.length ? asset.commonPairings.join(', ') : 'none'}\n` +

@@ -28,9 +28,9 @@ function getOpacity(asset) {
   return 1 - (invisibility / 100);
 }
 
-function getUnlockLevelLabel(unlockXp) {
-  const requiredXp = Math.max(0, Number(unlockXp) || 0);
-  return `${requiredXp} XP`;
+function getUnlockLevelLabel(unlockLevel) {
+  const requiredLevel = Math.max(1, Number(unlockLevel) || 1);
+  return `Level ${requiredLevel}`;
 }
 
 function normalizeSelectionBox(box) {
@@ -131,7 +131,7 @@ export default function GamePreviewCanvas({
   onSpriteClick,
   onHistoryStateChange,
   onHistoryAction,
-  currentXp = 100,
+  currentLevel = 1,
   suppressSelectionChrome = false,
   showEditToolbar = true,
   showCanvasControls = true,
@@ -456,8 +456,8 @@ export default function GamePreviewCanvas({
 
   const addSpriteAssetToCanvas = (asset) => {
     if (!isEditMode) return;
-    const unlockXp = asset.unlockXp || 0;
-    if (unlockXp > currentXp) return;
+    const unlockLevel = asset.unlockLevel || 1;
+    if (unlockLevel > currentLevel) return;
 
     const rect = canvasRef.current?.getBoundingClientRect();
     const canvasWidth = rect?.width || 960;
@@ -485,7 +485,7 @@ export default function GamePreviewCanvas({
 
   const renderSpriteAssetCard = (asset) => {
     const isExtraAsset = prioritySpriteAssetIdSet.size > 0 && !prioritySpriteAssetIdSet.has(asset.id);
-    const isUnlocked = (asset.unlockXp || 0) <= currentXp;
+    const isUnlocked = (asset.unlockLevel || 1) <= currentLevel;
     const isEnabled = isUnlocked;
 
     return (
@@ -503,14 +503,14 @@ export default function GamePreviewCanvas({
         title={
           isUnlocked
             ? (isExtraAsset ? `${asset.label} is unlocked and optional for this project` : asset.label)
-            : `Unlocks at ${asset.unlockXp} XP`
+            : `Unlocks at ${getUnlockLevelLabel(asset.unlockLevel)}`
         }
       >
         <div className="text-3xl" style={{ transform: getTransform(asset) }}>{asset.emoji}</div>
         <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
-        {(asset.unlockXp || 0) > currentXp ? (
+        {(asset.unlockLevel || 1) > currentLevel ? (
           <div className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
-            🔒 {getUnlockLevelLabel(asset.unlockXp)}
+            🔒 {getUnlockLevelLabel(asset.unlockLevel)}
           </div>
         ) : null}
       </button>
@@ -1155,20 +1155,20 @@ export default function GamePreviewCanvas({
                   <button
                     key={asset.id}
                     type="button"
-                    draggable={(asset.unlockXp || 0) <= currentXp}
+                    draggable={(asset.unlockLevel || 1) <= currentLevel}
                     onDragStart={(e) => onAssetDragStart(e, asset, 'backdrop')}
                     onClick={() => {
-                      if ((asset.unlockXp || 0) > currentXp) return;
+                      if ((asset.unlockLevel || 1) > currentLevel) return;
                       applyBackdrop(asset);
                     }}
                     className={`relative overflow-hidden rounded-[24px] border-2 bg-[#f7f9fc] text-left shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${
-                      (asset.unlockXp || 0) <= currentXp
+                      (asset.unlockLevel || 1) <= currentLevel
                         ? `hover:border-[#9fd7f7] hover:bg-[#eaf6ff] ${backdropState?.id === asset.id ? 'border-[#13a4ff]' : 'border-[#d5dbe3]'}`
                         : 'cursor-not-allowed border-[#d9dbe0] bg-[#eef0f3] opacity-65 grayscale'
                     }`}
-                    title={(asset.unlockXp || 0) <= currentXp ? asset.label : `🔒 ${getUnlockLevelLabel(asset.unlockXp)}`}
+                    title={(asset.unlockLevel || 1) <= currentLevel ? asset.label : `🔒 ${getUnlockLevelLabel(asset.unlockLevel)}`}
                   >
-                    {(asset.unlockXp || 0) > currentXp ? (
+                    {(asset.unlockLevel || 1) > currentLevel ? (
                       <div className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-2 py-1 text-[11px] font-extrabold text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
                         🔒
                       </div>
@@ -1177,10 +1177,10 @@ export default function GamePreviewCanvas({
                       <img src={asset.src} alt={asset.label} className="h-full w-full object-cover" />
                     </div>
                     <div className="px-3 py-2 text-sm font-extrabold text-[#475569]">{asset.label}</div>
-                    {(asset.unlockXp || 0) > currentXp ? (
+                    {(asset.unlockLevel || 1) > currentLevel ? (
                       <div className="absolute right-3 top-3 z-10">
                         <div className="inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
-                          🔒 {getUnlockLevelLabel(asset.unlockXp)}
+                          🔒 {getUnlockLevelLabel(asset.unlockLevel)}
                         </div>
                       </div>
                     ) : null}

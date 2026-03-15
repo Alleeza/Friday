@@ -1,5 +1,6 @@
 import { BLOCK_PALETTE, DEFAULT_EVENT, EVENT_OPTIONS } from '../../data/builderCapabilities.js';
 import { sandboxAssets } from '../../data/sandboxAssets.js';
+import { calculateLevel } from '../../gamification/levels.js';
 
 const PALETTE_TO_PLANNER_CATEGORY = Object.freeze({
   Movement: 'movement',
@@ -405,7 +406,7 @@ function buildAssetCapability(asset) {
     id: asset.id,
     label: asset.label,
     emoji: asset.emoji,
-    unlockXp: asset.unlockXp || 0,
+    unlockLevel: asset.unlockLevel || 1,
     roles: semantics.roles,
     commonUses: semantics.uses,
     commonPairings: semantics.pairings,
@@ -473,7 +474,8 @@ export const PLANNER_BLOCK_CAPABILITIES = Object.freeze(
 );
 
 export function getPlannerAssetCapabilities(xp = 0) {
-  return PLANNER_ASSET_CAPABILITIES.filter((asset) => asset.unlockXp <= xp);
+  const level = calculateLevel(xp);
+  return PLANNER_ASSET_CAPABILITIES.filter((asset) => asset.unlockLevel <= level);
 }
 
 export function getPlannerEventCapabilities() {

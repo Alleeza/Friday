@@ -2,128 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Map } from 'lucide-react';
 import { useGamification } from '../hooks/useGamification';
 import { missionsData } from '../gamification/missions';
-import { evaluateStepChecks } from '../utils/stepChecker';
-
-const STEP_DETAILS = {
-  mission_1: {
-    add_bunny: {
-      description: 'Put a Bunny on the game screen.',
-      concept: 'Adding a character',
-    },
-    add_carrot: {
-      description: 'Put some carrots in the game for Bunny to grab.',
-      concept: 'Adding things to collect',
-    },
-    collect_carrots: {
-      description: 'Press Play and move Bunny to touch the carrots.',
-      concept: 'Testing your game',
-    },
-  },
-  mission_2: {
-    set_timer: {
-      description: 'Add a timer so the game can count down.',
-      concept: 'Timers',
-    },
-    collect_5_carrots: {
-      description: 'Try the game until Bunny can grab 5 carrots in time.',
-      concept: 'Goals',
-    },
-  },
-  mission_3: {
-    move_bunny: {
-      description: 'Add blocks that make Bunny move.',
-      concept: 'Movement',
-    },
-    avoid_obstacles: {
-      description: 'Make it to the end without hitting the obstacles.',
-      concept: 'Challenge rules',
-    },
-  },
-};
-const STAGE_TITLES = {
-  mission_1: 'Bring your Bunny to life',
-  mission_2: 'Add something to collect',
-  mission_3: 'Complete the challenge',
-};
-
-function distributeStepRewards(totalXp, stepCount) {
-  if (!stepCount) return [];
-  const baseReward = Math.floor(totalXp / stepCount);
-  const remainder = totalXp % stepCount;
-  return Array.from({ length: stepCount }, (_, index) => baseReward + (index < remainder ? 1 : 0));
-}
-
-function getStepDetails(missionId, step, stepXp) {
-  const fromMap = STEP_DETAILS[missionId]?.[step.id];
+import { buildPlanMissionView } from '../gamification/planProgress';
+function getStepDetails(step) {
   return {
-    description: fromMap?.description || step.description,
-    concept: fromMap?.concept || 'Mission progression',
-    reward: `+${stepXp} XP`,
+    description: step.description,
+    concept: null,
   };
 }
 
-function getPlanStepDetails(stage, step, stepXp) {
+function getPlanStepDetails(stage, step) {
   return {
     description: stage.success || stage.why || stage.objective || step.description,
     concept: stage.objective || 'Project stage',
-    reward: `+${stepXp} XP`,
-  };
-}
-
-function buildPlanMissionView(plan, workspaceState) {
-  const stages = plan?.stages || [];
-  if (!stages.length) return null;
-
-  const stageViews = stages.map((stage, stageIndex) => {
-    const steps = (stage.steps || []).map((description, stepIndex) => {
-      const checks = stage.stepChecks?.[stepIndex] ?? [];
-      const evaluation = checks.length && workspaceState
-        ? evaluateStepChecks(checks, workspaceState)
-        : { passed: false, pendingAiChecks: [] };
-      const isCompleted = evaluation.passed && (evaluation.pendingAiChecks?.length || 0) === 0;
-
-      return {
-        id: `${stage.id}-step-${stepIndex + 1}`,
-        description,
-        target: 1,
-        completed: isCompleted,
-        rewardXp: stage.stepXp?.[stepIndex] || 0,
-      };
-    });
-
-    const completedSteps = steps.filter((step) => step.completed).length;
-
-    return {
-      id: stage.id,
-      title: stage.label || `Stage ${stageIndex + 1}`,
-      description: stage.objective || stage.why || '',
-      reward_xp: steps.reduce((sum, step) => sum + step.rewardXp, 0),
-      steps,
-      sourceStage: stage,
-      completedSteps,
-      isComplete: steps.length > 0 && completedSteps === steps.length,
-    };
-  });
-
-  const firstIncompleteIndex = stageViews.findIndex((stage) => !stage.isComplete);
-  const currentIndex = firstIncompleteIndex === -1 ? Math.max(stageViews.length - 1, 0) : firstIncompleteIndex;
-  const currentMission = stageViews[currentIndex];
-  const missionProgress = Object.fromEntries(
-    currentMission.steps.map((step) => [step.id, step.completed ? 1 : 0])
-  );
-
-  return {
-    currentMission,
-    currentStageNumber: currentIndex + 1,
-    currentStageTitle: currentMission.title,
-    missionProgress,
-    stepRewards: currentMission.steps.map((step) => step.rewardXp),
-    completedSteps: currentMission.completedSteps,
-    totalSteps: currentMission.steps.length,
-    progressPercent: currentMission.steps.length > 0
-      ? (currentMission.completedSteps / currentMission.steps.length) * 100
-      : 0,
-    isAllComplete: stageViews.every((stage) => stage.isComplete),
   };
 }
 
@@ -143,21 +33,15 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
   const currentStageNumber = planMissionView?.currentStageNumber
     || (fallbackMission ? Math.max(1, missionsData.findIndex((mission) => mission.id === fallbackMission.id) + 1) : 1);
   const currentStageTitle = planMissionView?.currentStageTitle
-    || (fallbackMission ? (STAGE_TITLES[fallbackMission.id] || fallbackMission.title) : 'Current Stage');
+    || (fallbackMission ? fallbackMission.title : 'Current Stage');
   const missionSteps = currentMission?.steps || [];
   const missionProgress = planMissionView?.missionProgress || (currentMission ? (userProgress.mission_progress[currentMission.id] || {}) : {});
   const totalSteps = planMissionView?.totalSteps ?? missionSteps.length;
-  const stepRewards = planMissionView?.stepRewards || (currentMission ? distributeStepRewards(currentMission.reward_xp, totalSteps) : []);
   const completedSteps = planMissionView?.completedSteps
     ?? missionSteps.filter((step) => (missionProgress[step.id] || 0) >= step.target).length;
   const progressPercent = planMissionView?.progressPercent ?? (totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0);
   const isAllComplete = planMissionView?.isAllComplete ?? (completedSteps === totalSteps);
-  const activeStep = missionSteps.find((step) => (missionProgress[step.id] || 0) < step.target);
   const activeStepIndex = missionSteps.findIndex((step) => (missionProgress[step.id] || 0) < step.target);
-  const missionXpEarned = missionSteps.reduce(
-    (sum, step, index) => sum + ((missionProgress[step.id] || 0) >= step.target ? (stepRewards[index] || 0) : 0),
-    0,
-  );
   const stepCompletionMap = useMemo(
     () => Object.fromEntries(missionSteps.map((step) => [step.id, (missionProgress[step.id] || 0) >= step.target])),
     [missionProgress, missionSteps],
@@ -212,39 +96,30 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
           70% { transform: scale(1.18); opacity: 1; }
           100% { transform: scale(1); opacity: 1; }
         }
-        @keyframes cq-xp-flash {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.1); background: #dcfce7; color: #15803d; }
-          100% { transform: scale(1); }
-        }
       `}</style>
 
       <div className="flex flex-1 flex-col gap-3 p-3">
-        <div className="rounded-[24px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
+        <div className="rounded-[28px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#64748B]">Stage {currentStageNumber}</span>
-            <div className="shrink-0 rounded-full bg-[#89E219] px-3 py-1.5 text-[11px] font-black text-[#2F5F00] shadow-[inset_0_-2px_0_rgba(0,0,0,0.08)]">
-              {missionXpEarned} XP
-            </div>
           </div>
           <div className="mt-2 min-w-0">
             <h2 className="max-w-[240px] text-[18px] font-black leading-[1.04] tracking-[-0.03em] text-slate-900">{currentStageTitle}</h2>
             <p className="mt-1 text-[11px] font-medium leading-[1.35] text-[#475569]">{currentMission.description}</p>
           </div>
-        </div>
-
-        <div className="rounded-[28px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
-            <span>Mission Progress</span>
-            <span>{completedSteps}/{totalSteps} steps</span>
+          <div className="mt-4 border-t border-[#E5E5E5] pt-4">
+            <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
+              <span>Mission Progress</span>
+              <span>{completedSteps}/{totalSteps} steps</span>
+            </div>
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
+              <div
+                className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
           </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
-            <div
-              className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
         </div>
 
         <div className="flex flex-col gap-2">
@@ -257,10 +132,9 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
               const isChecked = count >= step.target;
               const isExpanded = expandedStepId === step.id;
               const isCelebrating = celebratingStepId === step.id;
-              const stepReward = stepRewards[index] || 0;
               const stepDetails = planMissionView
-                ? getPlanStepDetails(currentMission.sourceStage, step, stepReward)
-                : getStepDetails(currentMission.id, step, stepReward);
+                ? getPlanStepDetails(currentMission.sourceStage, step)
+                : getStepDetails(step);
               const isCurrent = !isChecked && index === activeStepIndex;
               const isLocked = !isChecked && activeStepIndex !== -1 && index > activeStepIndex;
               const cardClasses = isChecked
@@ -307,29 +181,13 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
                       {isChecked ? <Check className="h-4 w-4 stroke-[3]" /> : null}
                     </span>
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
                         <span className={`min-w-0 flex-1 text-[14px] font-bold leading-snug ${isChecked ? 'text-[#3D7A12]' : isCurrent ? 'text-white' : isLocked ? 'text-[#64748B]' : 'text-slate-800'}`}>
                           {step.description}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black whitespace-nowrap ${
-                              isChecked
-                                ? 'border border-[#DDE8C8] bg-white text-[#4F5D75]'
-                                : isLocked
-                                  ? 'bg-[#FAFAFA] text-[#98A2B3]'
-                                  : isCurrent
-                                    ? 'bg-white text-[#2F5F00]'
-                                    : 'bg-[#F7F7F7] text-[#334155]'
-                            }`}
-                            style={isCelebrating ? { animation: 'cq-xp-flash 420ms ease-out 1' } : undefined}
-                          >
-                            +{stepReward} XP
-                          </span>
-                          <span className={`shrink-0 ${isCurrent ? 'text-white/90' : isLocked ? 'text-[#98A2B3]' : 'text-slate-400'}`}>
-                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </span>
-                        </div>
+                        <span className={`shrink-0 ${isCurrent ? 'text-white/90' : isLocked ? 'text-[#98A2B3]' : 'text-slate-400'}`}>
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </span>
                       </div>
                       {step.target > 1 && isExpanded ? (
                         <div className="mt-0.5 flex items-center gap-2">
@@ -361,14 +219,12 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
                             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Description</p>
                             <p className="mt-1 text-[12px] font-medium leading-relaxed text-slate-700">{stepDetails.description}</p>
                           </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
-                            <p className="mt-1 text-[12px] font-bold text-slate-700">{stepDetails.concept}</p>
-                          </div>
-                          <div className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] ${isChecked ? 'border-[#DDE8C8] bg-white' : 'border-[#E5E7EB] bg-white'}`}>
-                            <span className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-400">Reward</span>
-                            <span className="text-[13px] font-extrabold text-[#58CC02]">{stepDetails.reward}</span>
-                          </div>
+                          {stepDetails.concept ? (
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Learning Concept</p>
+                              <p className="mt-1 text-[12px] font-bold text-slate-700">{stepDetails.concept}</p>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -384,7 +240,6 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
           {isAllComplete ? (
             <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-center">
               <span className="text-[13px] font-bold text-green-700">🎉 Mission Complete!</span>
-              <p className="mt-1 text-[11px] text-green-600">+{currentMission.reward_xp} XP earned</p>
             </div>
           ) : null}
         </div>

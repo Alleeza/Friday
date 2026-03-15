@@ -263,7 +263,7 @@ export default function SandboxBuilderPage({
   projectPlan = null,
   onCreateNewGame,
 }) {
-  const { processEvent } = useGamification();
+  const { processEvent, syncPlanProgress, userProgress } = useGamification();
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const canvasContainerRef = useRef(null);
   const runtimeRef = useRef(null);
@@ -331,6 +331,10 @@ export default function SandboxBuilderPage({
     }),
     [sceneInstances, scriptsByInstanceKey, runtimeSnapshot]
   );
+
+  useEffect(() => {
+    syncPlanProgress(projectPlan, progressWorkspaceState);
+  }, [projectPlan, progressWorkspaceState, syncPlanProgress]);
 
   const aiService = useMemo(() => createDefaultAIService(), []);
   const chatContextData = useMemo(
@@ -1849,7 +1853,7 @@ export default function SandboxBuilderPage({
                 initialSceneState={initialProjectState?.scene}
                 availableSpriteAssets={availableBuilderAssets}
                 prioritySpriteAssetIds={priorityBuilderAssetIds}
-                currentXp={0}
+                currentLevel={userProgress?.level || 1}
                 selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
                 onSceneChange={handleSceneChange}
                 onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}

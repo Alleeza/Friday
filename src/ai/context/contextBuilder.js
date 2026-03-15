@@ -59,7 +59,7 @@ function serializeScript(blocks) {
  * @param {{
  *   sceneInstances: Array<{ key: string, emoji: string, label: string, x: number, y: number, scale: number, rotation: number }>,
  *   scriptsByInstanceKey: Record<string, Array>,
- *   availableAssets: Array<{ id: string, emoji: string, label: string, unlockXp: number }>,
+ *   availableAssets: Array<{ id: string, emoji: string, label: string, unlockLevel: number }>,
  *   compileErrors: Record<string, string[]>,
  *   runtimeSnapshot: object | null,
  *   mode: 'edit' | 'play',

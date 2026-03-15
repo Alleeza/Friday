@@ -3,12 +3,13 @@
  *
  * All constants here are derived from or must match:
  *   - src/utils/scriptCompiler.js  (block + event names)
- *   - src/data/sandboxAssets.js    (asset definitions + XP thresholds)
+ *   - src/data/sandboxAssets.js    (asset definitions + level thresholds)
  *
  * Pure data and pure functions; no AI or React dependencies.
  */
 
 import { sandboxAssets } from '../../data/sandboxAssets.js';
+import { calculateLevel } from '../../gamification/levels.js';
 import { PLANNER_BLOCK_CAPABILITIES, PLANNER_EVENT_CAPABILITIES } from './plannerCapabilityCatalog.js';
 
 // ---------------------------------------------------------------------------
@@ -141,12 +142,13 @@ export function getDifficultyProfile(xp = 0) {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns assets the student can use given their XP.
+ * Returns assets the student can use given their current level.
  * @param {number} xp
- * @returns {Array<{ id: string, emoji: string, label: string, unlockXp: number }>}
+ * @returns {Array<{ id: string, emoji: string, label: string, unlockLevel: number }>}
  */
 export function getUnlockedAssets(xp = 0) {
-  return sandboxAssets.filter((asset) => asset.unlockXp <= xp);
+  const level = calculateLevel(xp);
+  return sandboxAssets.filter((asset) => (asset.unlockLevel || 1) <= level);
 }
 
 /**

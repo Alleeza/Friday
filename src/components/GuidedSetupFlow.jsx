@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
 import { usePlanSession } from '../hooks/usePlanSession.js';
+import { useGamification } from '../hooks/useGamification';
 import PlanReview from './PlanReview.jsx';
 import questyImage from '../imgages/profile.png';
 import questyHeroImage from '../imgages/Questy_Full_Body-removebg-preview.png';
@@ -8,7 +9,6 @@ import {
   getDefaultModelForProvider,
   getDefaultProviderName,
 } from '../ai/providerCatalog.js';
-import { useGamification } from '../hooks/useGamification.jsx';
 import { getXpForLevel } from '../gamification/levels.js';
 
 /* ─── Option data ─── */

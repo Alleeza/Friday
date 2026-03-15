@@ -186,7 +186,14 @@ function StepRow({ active, done, label, xp, onClick, tone = 'step' }) {
   );
 }
 
-export function StageProgressSection({ setupData, plan, workspaceState = null, provider = null }) {
+export function StageProgressSection({
+  setupData,
+  plan,
+  workspaceState = null,
+  provider = null,
+  compact = false,
+  className = '',
+}) {
   const [completedStepKeys, setCompletedStepKeys] = useState({});
   const [showSteps, setShowSteps] = useState(false);
   const [showBonusQuests, setShowBonusQuests] = useState(false);
@@ -284,8 +291,54 @@ export function StageProgressSection({ setupData, plan, workspaceState = null, p
     console.groupEnd();
   }, [currentStage, workspaceState, workspaceDebugText, stepDebugInfo]);
 
+  if (compact) {
+    return (
+      <section className={`quest-card w-full border border-[#E5E5E5] bg-[#F7F7F7] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] ${className}`.trim()}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 lg:max-w-[280px] lg:flex-[0_0_280px]">
+            <h2 className="font-display text-[28px] font-bold leading-none text-slate-800">Stage Progress</h2>
+            <p className="mt-2 text-[16px] font-extrabold leading-tight text-slate-700">{currentStage?.label || 'Current Stage'}</p>
+          </div>
+
+          <div className="relative min-w-0 flex-1 px-1 pb-1">
+            <div className="absolute left-4 right-4 top-5 h-[4px] rounded-full bg-[#d4dce6]" />
+            <div className="absolute left-4 top-5 h-[4px] rounded-full bg-[#1CB0F6] transition-all" style={{ width: `${activeLinePct}%` }} />
+
+            <div
+              className="relative grid gap-3"
+              style={{ gridTemplateColumns: `repeat(${Math.max(stages.length, 1)}, minmax(0, 1fr))` }}
+            >
+              {stages.map((stage, idx) => {
+                const isDone = done[idx];
+                const isActive = idx === currentIndex || (done.every(Boolean) && idx === stages.length - 1);
+                return (
+                  <div key={stage.id} className="text-center">
+                    <div
+                      className={`mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full border-[3px] text-sm font-extrabold ${
+                        isDone
+                          ? 'border-[#1CB0F6] bg-[#1CB0F6] text-white shadow-sm'
+                          : isActive
+                            ? 'border-[#7DD3FC] bg-white text-[#1CB0F6] shadow-[0_0_0_4px_rgba(28,176,246,0.18)]'
+                            : 'border-[#b9c4d2] bg-white text-[#8f9cad]'
+                      }`}
+                    >
+                      {isDone ? '✓' : idx + 1}
+                    </div>
+                    <p className={`text-[12px] font-bold leading-tight ${isActive ? 'text-[#1CB0F6]' : 'text-slate-600'}`}>
+                      {stage.label}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="quest-card w-full border border-[#e3e6eb] bg-[#f8fafc] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)]">
+    <section className={`quest-card w-full border border-[#E5E5E5] bg-[#F7F7F7] p-4 shadow-[0_4px_0_rgba(148,163,184,0.1)] ${className}`.trim()}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-3 pl-1">
           <h2 className="font-display text-3xl font-bold leading-none text-slate-800">Stage Progress</h2>

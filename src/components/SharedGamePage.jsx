@@ -16,6 +16,7 @@ function getLiveSandboxStageSize() {
 function normalizeProjectState(projectState) {
   return {
     setupData: projectState?.setupData || null,
+    plan: projectState?.plan || projectState?.setupData?.plan || null,
     scene: {
       placedAssets: Array.isArray(projectState?.scene?.placedAssets)
         ? projectState.scene.placedAssets.map((asset) => ({ ...asset }))

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDown, ChevronUp, Flame, Pencil, RotateCcw, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pencil, Play, Redo2, RotateCcw, Save, Share2, Square, Trash2, Undo2, X } from 'lucide-react';
 import AIChatPanel from './AIChatPanel';
 import BlockTutorialTooltip from './BlockTutorialTooltip';
 import GamePreviewCanvas from './GamePreviewCanvas';
@@ -13,6 +13,10 @@ import { StageProgressSection } from './ProjectRoadmapPage';
 import { sandboxAssets } from '../data/sandboxAssets';
 import { soundOptions } from '../data/soundLibrary';
 import questyImage from '../imgages/profile.png';
+import GamificationHUD from './GamificationHUD';
+import MissionPanel from './MissionPanel';
+import AchievementPanel from './AchievementPanel';
+import { useGamification } from '../hooks/useGamification';
 
 const eventOptions = [
   'game starts',
@@ -217,42 +221,28 @@ function getInstanceDisplayLabel(instances, instanceKey) {
   return `${instance.label} ${index + 1}`;
 }
 
-function BuilderTopNav({ onCreateNewGame }) {
+function BuilderTopNav({ onCreateNewGame, onOpenAchievements }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3.5 lg:px-6">
-        <button
-          type="button"
-          onClick={onCreateNewGame}
-          className="flex items-center gap-3 rounded-2xl transition hover:opacity-85"
-        >
+    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
+        <div className="flex items-center gap-3">
           <img
             src={questyImage}
             alt="Questy avatar"
-            className="h-12 w-auto rounded-xl object-contain"
+            className="h-10 w-auto rounded-xl object-contain"
           />
-          <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
-        </button>
+          <span className="font-display text-[22px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
+        </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
-            <Star className="h-3.5 w-3.5" />
-            Level 1
-            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
-              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] font-bold text-slate-600 sm:flex">
-            <Flame className="h-3.5 w-3.5 text-orange-400" /> 0
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <GamificationHUD onOpenAchievements={onOpenAchievements} />
 
           <button
             type="button"
             onClick={onCreateNewGame}
-            className="hidden items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2.5 text-[14px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none sm:inline-flex"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#58cc02] px-5 py-2 text-[13px] font-extrabold text-white shadow-[0_3px_0_#46a302] transition-all hover:brightness-95 active:translate-y-[1px] active:shadow-none"
           >
-            <span className="text-[18px] leading-none">+</span>
+            <span className="text-[16px] leading-none">+</span>
             Create New Game
           </button>
         </div>
@@ -273,6 +263,9 @@ export default function SandboxBuilderPage({
   projectPlan = null,
   onCreateNewGame,
 }) {
+  const { processEvent } = useGamification();
+  const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
+  const canvasContainerRef = useRef(null);
   const runtimeRef = useRef(null);
   const rafRef = useRef(null);
   const lastTickRef = useRef(0);
@@ -306,11 +299,17 @@ export default function SandboxBuilderPage({
   const [draggingPaletteBlock, setDraggingPaletteBlock] = useState(false);
   const [trashActive, setTrashActive] = useState(false);
   const [historyStack, setHistoryStack] = useState([]);
+  const [futureHistoryStack, setFutureHistoryStack] = useState([]);
+  const [canvasHistoryState, setCanvasHistoryState] = useState({ canUndo: false, canRedo: false });
+  const [canvasUndoSignal, setCanvasUndoSignal] = useState(0);
+  const [canvasRedoSignal, setCanvasRedoSignal] = useState(0);
+  const [activeHistoryDomain, setActiveHistoryDomain] = useState('scene');
   const [compileErrorsByInstance, setCompileErrorsByInstance] = useState({});
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [pendingEventValue, setPendingEventValue] = useState('');
   const [activeEventBlockId, setActiveEventBlockId] = useState(null);
   const [mode, setMode] = useState('edit');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [previewStageSize, setPreviewStageSize] = useState({ width: 1280, height: 720 });
 
   const priorityBuilderAssetIds = useMemo(
@@ -363,8 +362,28 @@ export default function SandboxBuilderPage({
   });
 
   useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === canvasContainerRef.current);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!canvasContainerRef.current) return;
+
+    if (document.fullscreenElement === canvasContainerRef.current) {
+      document.exitFullscreen().catch(() => {});
+      return;
+    }
+
+    canvasContainerRef.current.requestFullscreen?.().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const nextProjectState = {
       setupData: initialSetupData,
+      plan: projectPlan || initialSetupData?.plan || null,
       scene: normalizeSceneState(persistedSceneState),
       scriptsByInstanceKey: normalizeScriptsByInstance(scriptsByInstanceKey),
     };
@@ -372,7 +391,7 @@ export default function SandboxBuilderPage({
     if (snapshot === lastPublishedProjectRef.current) return;
     lastPublishedProjectRef.current = snapshot;
     onProjectStateChange?.(nextProjectState);
-  }, [initialSetupData, onProjectStateChange, persistedSceneState, scriptsByInstanceKey]);
+  }, [initialSetupData, onProjectStateChange, persistedSceneState, projectPlan, scriptsByInstanceKey]);
 
   useEffect(() => {
     const instanceKeys = new Set(sceneInstances.map((instance) => instance.key));
@@ -564,6 +583,8 @@ export default function SandboxBuilderPage({
     setActiveEventBlockId(null);
   };
 
+  const prevInstanceKeysRef = useRef(new Set(initialSceneInstances.map(i => i.key)));
+
   const handleSceneChange = useCallback(({ instances, selectedInstanceKey: nextKey, sceneState }) => {
     setSceneInstances(instances);
     if (sceneState) setPersistedSceneState(sceneState);
@@ -571,7 +592,15 @@ export default function SandboxBuilderPage({
     setEditorInstanceKey((current) => (
       current && !instances.some((instance) => instance.key === current) ? null : current
     ));
-  }, []);
+    // Detect newly added objects for gamification
+    const prevKeys = prevInstanceKeysRef.current;
+    instances.forEach((instance) => {
+      if (!prevKeys.has(instance.key)) {
+        processEvent({ type: 'ObjectAdded', payload: { type: instance.id, key: instance.key, label: instance.label } });
+      }
+    });
+    prevInstanceKeysRef.current = new Set(instances.map(i => i.key));
+  }, [processEvent]);
 
   useEffect(() => {
     if (!editorInstanceKey) return undefined;
@@ -596,6 +625,8 @@ export default function SandboxBuilderPage({
   }, [editorInstanceKey, editorStage, mode]);
 
   const pushHistorySnapshot = () => {
+    setActiveHistoryDomain('script');
+    setFutureHistoryStack([]);
     setHistoryStack((prev) => [...prev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
   };
 
@@ -624,6 +655,8 @@ export default function SandboxBuilderPage({
     });
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+    // Fire gamification BlockUsed event
+    processEvent({ type: 'BlockUsed', payload: { blockType: template.tone, blockId: template.id, action: text } });
   };
 
   const addInsideLoop = (loopId, template) => {
@@ -634,6 +667,8 @@ export default function SandboxBuilderPage({
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: [...block.children, instance] }));
     setSelectedBlock(text);
     setCompileErrorsByInstance((prev) => ({ ...prev, [editorInstanceKey]: [] }));
+    // Fire gamification BlockUsed event
+    processEvent({ type: 'BlockUsed', payload: { blockType: template.tone, blockId: template.id, action: text } });
   };
 
   const handleDragStart = (e, template) => {
@@ -833,11 +868,26 @@ export default function SandboxBuilderPage({
     updateSelectedScript((blocks) => blocks.map((block) => block.id !== loopId || block.type !== 'loop' ? block : { ...block, children: block.children.filter((child) => child.id !== childId) }));
   };
 
-  const handleUndo = () => {
+  const handleScriptUndo = () => {
+    setActiveHistoryDomain('script');
     setHistoryStack((prev) => {
       if (!prev.length) return prev;
       const next = [...prev];
       const last = next.pop();
+      setFutureHistoryStack((futurePrev) => [...futurePrev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
+      setScriptsByInstanceKey(last.scriptsByInstanceKey);
+      setSelectedBlock(last.selectedBlock);
+      return next;
+    });
+  };
+
+  const handleScriptRedo = () => {
+    setActiveHistoryDomain('script');
+    setFutureHistoryStack((prev) => {
+      if (!prev.length) return prev;
+      const next = [...prev];
+      const last = next.pop();
+      setHistoryStack((historyPrev) => [...historyPrev.slice(-29), { scriptsByInstanceKey: cloneScripts(scriptsByInstanceKey), selectedBlock }]);
       setScriptsByInstanceKey(last.scriptsByInstanceKey);
       setSelectedBlock(last.selectedBlock);
       return next;
@@ -1058,6 +1108,62 @@ export default function SandboxBuilderPage({
     rafRef.current = requestAnimationFrame(loop);
   };
 
+  const canScriptUndo = historyStack.length > 0;
+  const canScriptRedo = futureHistoryStack.length > 0;
+  const canSceneUndo = canvasHistoryState.canUndo;
+  const canSceneRedo = canvasHistoryState.canRedo;
+  const canUndo = activeHistoryDomain === 'scene'
+    ? canSceneUndo || canScriptUndo
+    : canScriptUndo || canSceneUndo;
+  const canRedo = activeHistoryDomain === 'scene'
+    ? canSceneRedo || canScriptRedo
+    : canScriptRedo || canSceneRedo;
+
+  const triggerUndo = () => {
+    if (activeHistoryDomain === 'scene') {
+      if (canSceneUndo) {
+        setCanvasUndoSignal((prev) => prev + 1);
+        return;
+      }
+      if (canScriptUndo) {
+        setActiveHistoryDomain('script');
+        handleScriptUndo();
+      }
+      return;
+    }
+
+    if (canScriptUndo) {
+      handleScriptUndo();
+      return;
+    }
+    if (canSceneUndo) {
+      setActiveHistoryDomain('scene');
+      setCanvasUndoSignal((prev) => prev + 1);
+    }
+  };
+
+  const triggerRedo = () => {
+    if (activeHistoryDomain === 'scene') {
+      if (canSceneRedo) {
+        setCanvasRedoSignal((prev) => prev + 1);
+        return;
+      }
+      if (canScriptRedo) {
+        setActiveHistoryDomain('script');
+        handleScriptRedo();
+      }
+      return;
+    }
+
+    if (canScriptRedo) {
+      handleScriptRedo();
+      return;
+    }
+    if (canSceneRedo) {
+      setActiveHistoryDomain('scene');
+      setCanvasRedoSignal((prev) => prev + 1);
+    }
+  };
   const quickEditorPosition = selectedInstance
     ? (() => {
         const quickEditorHeight = 72;
@@ -1539,86 +1645,277 @@ export default function SandboxBuilderPage({
 
   return (
     <>
-      <BuilderTopNav onCreateNewGame={onCreateNewGame} />
-      <main className="w-full space-y-4 px-4 py-4 lg:px-6">
-      {projectPlan ? (
-        <StageProgressSection
-          setupData={initialSetupData}
-          plan={projectPlan}
-          workspaceState={progressWorkspaceState}
-        />
-      ) : null}
-      <section>
-        <div ref={previewStageRef} className="relative h-[720px] w-full">
-          <GamePreviewCanvas
-            mode={mode}
-            runtimeSnapshot={runtimeSnapshot}
-            initialSceneState={initialProjectState?.scene}
-            availableSpriteAssets={availableBuilderAssets}
-            prioritySpriteAssetIds={priorityBuilderAssetIds}
-            selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
-            onSceneChange={handleSceneChange}
-            onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
-            onPlay={startRuntime}
-            onStop={stopRuntime}
-            onSave={onSaveProject}
-            saveState={saveState}
-            onPublish={onPublishProject}
-            publishState={publishState}
-            showPublishButton={hasSavedProject}
-            publishLabel="Share"
-            suppressSelectionChrome={editorStage === 'expanded'}
-            onSpriteClick={(instanceKey) => {
-              runtimeRef.current?.dispatch('sprite clicked', { instanceKey });
-              runtimeRef.current?.dispatch('object is tapped', { instanceKey });
-              if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
-            }}
+      <BuilderTopNav onCreateNewGame={onCreateNewGame} onOpenAchievements={() => setIsAchievementsOpen(true)} />
+      {isAchievementsOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close badges panel"
+            className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"
+            onClick={() => setIsAchievementsOpen(false)}
           />
-
-          {draggingScriptBlock && mode !== 'play' ? (
-            <div className="pointer-events-none absolute inset-0 z-20 bg-slate-950/18 transition-opacity duration-150" />
-          ) : null}
-
-          {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
-            <div ref={quickEditorRef} className="absolute z-30 flex flex-col gap-3" style={quickEditorPosition}>
-              {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
-              {renderAddEventPill()}
-            </div>
-          ) : null}
-
-          {draggingScriptBlock && mode !== 'play' ? (
-            <div
-              className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
-              onDragOver={(e) => {
-                const payload = readDragPayload(e);
-                if (!payload || payload.kind === 'palette-template') return;
-                e.preventDefault();
-                e.stopPropagation();
-                if (!trashActive) setTrashActive(true);
-              }}
-              onDragLeave={(e) => {
-                if (e.currentTarget.contains(e.relatedTarget)) return;
-                if (trashActive) setTrashActive(false);
-              }}
-              onDrop={handleTrashDrop}
+          <div className="relative z-10 w-full max-w-[560px]">
+            <button
+              type="button"
+              aria-label="Close badges panel"
+              onClick={() => setIsAchievementsOpen(false)}
+              className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
             >
-              <div
-                className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
-                  trashActive
-                    ? 'scale-110 border-rose-700 bg-rose-600 text-white'
-                    : 'border-rose-200 bg-white/95 text-rose-500'
-                }`}
-                aria-label="Delete dragged item"
-              >
-                <Trash2 size={28} strokeWidth={2.6} />
-              </div>
-            </div>
-          ) : null}
+              <X className="h-4 w-4" />
+            </button>
+            <AchievementPanel />
+          </div>
+        </div>
+      ) : null}
+      <main className="mx-auto w-full max-w-[1920px] space-y-4 px-4 py-4 lg:px-6">
+        {projectPlan ? (
+          <StageProgressSection
+            setupData={initialSetupData}
+            plan={projectPlan}
+            workspaceState={progressWorkspaceState}
+            compact
+          />
+        ) : null}
 
-          {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
-            <div className="pointer-events-none absolute inset-0 z-30 p-6">
-              <div className="pointer-events-auto absolute inset-x-6 top-5 bottom-6 flex flex-col gap-4">
-                <div className="flex items-center gap-4 rounded-[30px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
+        <section className="grid min-h-[720px] gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <MissionPanel />
+
+          <div className={`min-w-0 ${isFullscreen ? 'fixed inset-0 z-[65] bg-[#F7F7F7]' : 'flex flex-col gap-3'}`}>
+            {!isFullscreen ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-[#E5E5E5] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+                <div className="flex min-w-0 items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[#D7EAFE] bg-[#F4FBFF] px-3.5 py-2 text-[12px] font-extrabold text-[#1CB0F6] shadow-[0_3px_0_rgba(28,176,246,0.14)] transition hover:-translate-y-[1px] hover:bg-[#E8F7FF]"
+                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  >
+                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    Full Screen
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={triggerUndo}
+                    disabled={!canUndo || mode === 'play'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Undo2 size={14} />
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={triggerRedo}
+                    disabled={!canRedo || mode === 'play'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Redo2 size={14} />
+                    Redo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSaveProject}
+                    disabled={saveState === 'saving'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onPublishProject}
+                    disabled={!hasSavedProject || publishState === 'publishing'}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Share2 size={14} />
+                    {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                  </button>
+                  {mode === 'play' ? (
+                    <button
+                      type="button"
+                      onClick={stopRuntime}
+                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                    >
+                      <Square size={14} />
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startRuntime}
+                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                    >
+                      <Play size={14} />
+                      Play
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            <div
+              ref={(node) => {
+                canvasContainerRef.current = node;
+                previewStageRef.current = node;
+              }}
+              className={`relative flex min-h-[720px] min-w-0 flex-col overflow-hidden rounded-[30px] border border-[#E5E5E5] bg-[#F7F7F7] shadow-[0_16px_40px_rgba(15,23,42,0.08)] ${isFullscreen ? 'h-full w-full rounded-none border-0 shadow-none' : ''}`}
+            >
+              <div className="relative min-h-0 flex-1 p-3 sm:p-4">
+                {isFullscreen ? (
+                  <div className="absolute right-6 top-6 z-10 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={triggerUndo}
+                      disabled={!canUndo || mode === 'play'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Undo2 size={14} />
+                      Undo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={triggerRedo}
+                      disabled={!canRedo || mode === 'play'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Redo2 size={14} />
+                      Redo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleFullscreen}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#E5E5E5] bg-white text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7]"
+                      aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                      title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    >
+                      {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSaveProject}
+                      disabled={saveState === 'saving'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Save size={14} />
+                      {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved ✓' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onPublishProject}
+                      disabled={!hasSavedProject || publishState === 'publishing'}
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[12px] font-bold text-slate-600 shadow-[0_3px_0_rgba(0,0,0,0.05)] transition hover:-translate-y-[1px] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Share2 size={14} />
+                      {publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied!' : 'Share'}
+                    </button>
+                    {mode === 'play' ? (
+                      <button
+                        type="button"
+                        onClick={stopRuntime}
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                      >
+                        <Square size={14} />
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startRuntime}
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                      >
+                        <Play size={14} />
+                        Play
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+                {isFullscreen ? (
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="absolute left-6 top-6 z-20 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur-sm"
+                >
+                  <Minimize2 size={14} />
+                  Exit Fullscreen
+                </button>
+              ) : null}
+
+              <GamePreviewCanvas
+                mode={mode}
+                runtimeSnapshot={runtimeSnapshot}
+                initialSceneState={initialProjectState?.scene}
+                availableSpriteAssets={availableBuilderAssets}
+                prioritySpriteAssetIds={priorityBuilderAssetIds}
+                currentXp={0}
+                selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
+                onSceneChange={handleSceneChange}
+                onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}
+                onPlay={startRuntime}
+                onStop={stopRuntime}
+                onSave={onSaveProject}
+                saveState={saveState}
+                onPublish={onPublishProject}
+                publishState={publishState}
+                showPublishButton={false}
+                showSaveButton={false}
+                showEditToolbar={false}
+                showCanvasControls={false}
+                publishLabel="Share"
+                undoSignal={canvasUndoSignal}
+                redoSignal={canvasRedoSignal}
+                onHistoryStateChange={setCanvasHistoryState}
+                onHistoryAction={setActiveHistoryDomain}
+                suppressSelectionChrome={editorStage === 'expanded'}
+                onSpriteClick={(instanceKey) => {
+                  runtimeRef.current?.dispatch('sprite clicked', { instanceKey });
+                  runtimeRef.current?.dispatch('object is tapped', { instanceKey });
+                  if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
+                }}
+              />
+
+                {editorInstanceKey && mode !== 'play' && editorStage === 'event' && quickEditorPosition ? (
+                <div ref={quickEditorRef} className="absolute z-10 flex flex-col gap-3" style={quickEditorPosition}>
+                  {eventSections.map((section) => renderEventSelectorPill(section, section.eventBlock.id === activeEventSection?.eventBlock.id))}
+                  {renderAddEventPill()}
+                </div>
+                ) : null}
+
+                {draggingScriptBlock && mode !== 'play' ? (
+                <div
+                  className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2"
+                  onDragOver={(e) => {
+                    const payload = readDragPayload(e);
+                    if (!payload || payload.kind === 'palette-template') return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!trashActive) setTrashActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (e.currentTarget.contains(e.relatedTarget)) return;
+                    if (trashActive) setTrashActive(false);
+                  }}
+                  onDrop={handleTrashDrop}
+                >
+                  <div
+                    className={`grid h-16 w-16 place-items-center rounded-full border-2 shadow-[0_10px_24px_rgba(15,23,42,0.24)] transition ${
+                      trashActive
+                        ? 'scale-110 border-rose-700 bg-rose-600 text-white'
+                        : 'border-rose-200 bg-white/95 text-rose-500'
+                    }`}
+                    aria-label="Delete dragged item"
+                  >
+                    <Trash2 size={28} strokeWidth={2.6} />
+                  </div>
+                </div>
+                ) : null}
+
+                {editorInstanceKey && mode !== 'play' && editorStage === 'expanded' ? (
+                <div className="pointer-events-none absolute inset-0 z-30 p-6">
+                  <div className="pointer-events-auto absolute inset-x-6 top-5 bottom-6 flex flex-col gap-4">
+                    <div className="flex items-center gap-4 rounded-[30px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_24px_55px_rgba(15,23,42,0.14)]">
                   <div className="flex h-14 items-center gap-3 rounded-[16px] border border-[#d3dae3] bg-[#eef3f8] px-4">
                     <div className="text-[24px] leading-none">{selectedInstance?.emoji}</div>
                     <div className="text-[20px] font-extrabold leading-none text-slate-700">
@@ -1734,7 +2031,7 @@ export default function SandboxBuilderPage({
                     </button>
                     <button
                       type="button"
-                      onClick={handleUndo}
+                      onClick={handleScriptUndo}
                       disabled={!historyStack.length || mode === 'play'}
                       className="grid h-14 w-14 place-items-center rounded-full bg-[#d1d6de] text-white shadow-[0_8px_0_rgba(226,232,240,0.95)] transition hover:brightness-95 active:translate-y-[1px] active:shadow-[0_7px_0_rgba(226,232,240,0.85)] disabled:cursor-not-allowed disabled:bg-[#e5e7eb] disabled:text-white/75 disabled:shadow-[0_8px_0_rgba(241,245,249,0.95)]"
                       aria-label="Return to previous step"
@@ -1832,29 +2129,33 @@ export default function SandboxBuilderPage({
                   </div>
                 </div>
               </div>
+                </div>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-        </div>
-      </section>
-      <section>
-        <div className="w-full">
-          <AIChatPanel
-            messages={messages}
-            onSend={sendChat}
-            isStreaming={isChatStreaming}
-            onAbort={abortChatResponse}
-          />
-        </div>
-      </section>
-      {draggingPaletteBlock && mode !== 'play' ? (
-        <div className="pointer-events-none fixed inset-0 z-[80]">
-          <div
-            className={`absolute inset-0 transition ${
-              draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
-            }`}
-          />
-        </div>
-      ) : null}
+          </div>
+        </section>
+
+        <section>
+          <div className="w-full">
+            <AIChatPanel
+              messages={messages}
+              onSend={sendChat}
+              isStreaming={isChatStreaming}
+              onAbort={abortChatResponse}
+            />
+          </div>
+        </section>
+
+        {draggingPaletteBlock && mode !== 'play' ? (
+          <div className="pointer-events-none fixed inset-0 z-[80]">
+            <div
+              className={`absolute inset-0 transition ${
+                draggingPaletteBlock ? 'bg-slate-950/70' : 'bg-transparent'
+              }`}
+            />
+          </div>
+        ) : null}
       </main>
     </>
   );

@@ -28,6 +28,38 @@ function getOpacity(asset) {
   return 1 - (invisibility / 100);
 }
 
+function normalizeSelectionBox(box) {
+  if (!box) return null;
+  const left = Math.min(box.startX, box.currentX);
+  const top = Math.min(box.startY, box.currentY);
+  const right = Math.max(box.startX, box.currentX);
+  const bottom = Math.max(box.startY, box.currentY);
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function assetIntersectsSelectionBox(asset, selectionBox) {
+  if (!selectionBox) return false;
+  const frameSize = 180 * (asset.scale || 1);
+  const halfSize = frameSize / 2;
+  const assetLeft = asset.x - halfSize;
+  const assetRight = asset.x + halfSize;
+  const assetTop = asset.y - halfSize;
+  const assetBottom = asset.y + halfSize;
+  return !(
+    assetRight < selectionBox.left ||
+    assetLeft > selectionBox.right ||
+    assetBottom < selectionBox.top ||
+    assetTop > selectionBox.bottom
+  );
+}
+
 function buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState) {
   return {
     placedAssets: placedAssets.map((item) => ({ ...item })),
@@ -92,13 +124,18 @@ export default function GamePreviewCanvas({
   saveState = 'idle',
   publishState = 'idle',
   onSpriteClick,
+  onHistoryStateChange,
+  onHistoryAction,
   currentXp = 100,
   suppressSelectionChrome = false,
   showEditToolbar = true,
+  showCanvasControls = true,
   showSaveButton = true,
   showPublishButton = false,
   showTrayToggle = true,
   publishLabel = 'Share',
+  undoSignal = 0,
+  redoSignal = 0,
 }) {
   const canvasRef = useRef(null);
   const backdropRef = useRef(null);
@@ -120,14 +157,21 @@ export default function GamePreviewCanvas({
   const backdropMovedDuringDragRef = useRef(false);
   const backdropResizeStartRef = useRef(null);
   const backdropResizedDuringDragRef = useRef(false);
+  const suppressNextAssetClickRef = useRef(false);
   const onSceneChangeRef = useRef(onSceneChange);
   const initialSceneRef = useRef(normalizeSceneState(initialSceneState));
+  const lastUndoSignalRef = useRef(undoSignal);
+  const lastRedoSignalRef = useRef(redoSignal);
   const [trayOpen, setTrayOpen] = useState(false);
   const [trayTab, setTrayTab] = useState('sprites');
   const [placedAssets, setPlacedAssets] = useState(initialSceneRef.current.placedAssets);
   const [selectedPlacedAssetKey, setSelectedPlacedAssetKey] = useState(initialSceneRef.current.selectedPlacedAssetKey);
+  const [selectedPlacedAssetKeys, setSelectedPlacedAssetKeys] = useState(
+    initialSceneRef.current.selectedPlacedAssetKey ? [initialSceneRef.current.selectedPlacedAssetKey] : []
+  );
   const [backdropState, setBackdropState] = useState(initialSceneRef.current.backdropState);
   const [pastStates, setPastStates] = useState([]);
+  const [futureStates, setFutureStates] = useState([]);
   const [draggingPlacedAssetKey, setDraggingPlacedAssetKey] = useState(null);
   const [resizingPlacedAssetKey, setResizingPlacedAssetKey] = useState(null);
   const [draggingBackdrop, setDraggingBackdrop] = useState(false);
@@ -135,6 +179,7 @@ export default function GamePreviewCanvas({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [backdropDragOffset, setBackdropDragOffset] = useState({ x: 0, y: 0 });
   const [trashHover, setTrashHover] = useState(false);
+  const [selectionBox, setSelectionBox] = useState(null);
   const isEditMode = mode === 'edit';
   const isPlayMode = mode === 'play';
   const prioritySpriteAssetIdSet = useMemo(
@@ -230,8 +275,10 @@ export default function GamePreviewCanvas({
     source.start();
   };
 
-  const updateSelection = (nextKey) => {
+  const updateSelection = (nextKey, nextKeys = nextKey ? [nextKey] : []) => {
+    const normalizedKeys = Array.from(new Set(nextKeys.filter(Boolean)));
     setSelectedPlacedAssetKey(nextKey);
+    setSelectedPlacedAssetKeys(normalizedKeys);
     onSelectedInstanceChange?.(nextKey);
   };
 
@@ -241,10 +288,22 @@ export default function GamePreviewCanvas({
 
   useEffect(() => {
     if (selectedInstanceKey === undefined) return;
+    const normalizedKey = selectedInstanceKey || null;
     setSelectedPlacedAssetKey((current) => (
-      current === (selectedInstanceKey || null) ? current : selectedInstanceKey || null
+      current === normalizedKey ? current : normalizedKey
     ));
+    setSelectedPlacedAssetKeys((current) => {
+      if (!normalizedKey) return [];
+      return current.includes(normalizedKey) ? current : [normalizedKey];
+    });
   }, [selectedInstanceKey]);
+
+  useEffect(() => {
+    onHistoryStateChange?.({
+      canUndo: pastStates.length > 0,
+      canRedo: futureStates.length > 0,
+    });
+  }, [futureStates.length, onHistoryStateChange, pastStates.length]);
 
   useEffect(() => () => {
     if (wheelResizeTimeoutRef.current) {
@@ -254,6 +313,18 @@ export default function GamePreviewCanvas({
       audioContextRef.current.close().catch(() => {});
     }
   }, []);
+
+  const recordSceneHistory = (snapshot) => {
+    setPastStates((prev) => [...prev.slice(-29), snapshot]);
+    setFutureStates([]);
+    onHistoryAction?.('scene');
+  };
+
+  const restoreSceneState = (snapshot) => {
+    setPlacedAssets(snapshot.placedAssets);
+    updateSelection(snapshot.selectedPlacedAssetKey);
+    setBackdropState(snapshot.backdropState);
+  };
 
   useEffect(() => {
     const soundKeys = Object.entries(runtimeSnapshot?.assetsByKey || {})
@@ -287,6 +358,33 @@ export default function GamePreviewCanvas({
       window.removeEventListener('pointerdown', handleWindowPointerDown, true);
     };
   }, [isEditMode, trayOpen]);
+
+  useEffect(() => {
+    if (!isEditMode) return undefined;
+
+    const handleWindowKeyDown = (event) => {
+      if ((event.key !== 'Delete' && event.key !== 'Backspace') || !selectedPlacedAssetKeys.length) return;
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (
+          target.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      deletePlacedAssets(selectedPlacedAssetKeys);
+    };
+
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeyDown);
+    };
+  }, [isEditMode, selectedPlacedAssetKeys, placedAssets, backdropState]);
 
   useEffect(() => {
     const sceneState = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
@@ -340,7 +438,7 @@ export default function GamePreviewCanvas({
 
   const applyBackdrop = (backdrop) => {
     const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-    setPastStates((prev) => [...prev, snapshot]);
+    recordSceneHistory(snapshot);
     setBackdropState(clampBackdropState({
       id: backdrop.id,
       x: 0,
@@ -351,9 +449,33 @@ export default function GamePreviewCanvas({
     updateSelection(null);
   };
 
-  const getUnlockLevelLabel = (unlockXp = 0) => {
-    const normalizedXp = Math.max(0, Number(unlockXp) || 0);
-    return `Level ${Math.floor(normalizedXp / 10) + 1}`;
+  const addSpriteAssetToCanvas = (asset) => {
+    if (!isEditMode) return;
+    const unlockXp = asset.unlockXp || 0;
+    if (unlockXp > currentXp) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const canvasWidth = rect?.width || 960;
+    const canvasHeight = rect?.height || 640;
+    const initialScale = 1;
+    const halfSize = 90 * initialScale;
+    const existingCount = placedAssets.filter((placed) => placed.id === asset.id).length;
+    const spreadOffset = (existingCount % 4) * 28;
+    const x = Math.max(halfSize, Math.min((canvasWidth / 2) + spreadOffset, canvasWidth - halfSize));
+    const y = Math.max(70 + halfSize, Math.min((canvasHeight / 2) + spreadOffset, canvasHeight - halfSize));
+    const placed = {
+      ...asset,
+      x,
+      y,
+      scale: initialScale,
+      rotation: 0,
+      key: `${asset.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+
+    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    recordSceneHistory(snapshot);
+    setPlacedAssets((prev) => [...prev, placed]);
+    updateSelection(placed.key);
   };
 
   const renderSpriteAssetCard = (asset) => {
@@ -362,10 +484,12 @@ export default function GamePreviewCanvas({
     const isEnabled = isUnlocked;
 
     return (
-      <div
+      <button
+        type="button"
         key={asset.id}
         draggable={isEnabled}
         onDragStart={isEnabled ? (e) => onAssetDragStart(e, asset, 'sprite') : undefined}
+        onClick={() => addSpriteAssetToCanvas(asset)}
         className={`relative rounded-[24px] border-2 p-3 text-center shadow-[inset_0_-3px_0_rgba(148,163,184,0.2)] transition ${
           isEnabled
             ? 'cursor-grab border-[#d5dbe3] bg-[#f7f9fc] hover:border-[#9fd7f7] hover:bg-[#eaf6ff] active:cursor-grabbing'
@@ -379,12 +503,12 @@ export default function GamePreviewCanvas({
       >
         <div className="text-3xl" style={{ transform: getTransform(asset) }}>{asset.emoji}</div>
         <div className="mt-1 text-sm font-extrabold text-[#475569]">{asset.label}</div>
-      {(asset.unlockXp || 0) > currentXp ? (
-        <div className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
-          🔒 {getUnlockLevelLabel(asset.unlockXp)}
-        </div>
-      ) : null}
-      </div>
+        {(asset.unlockXp || 0) > currentXp ? (
+          <div className="mt-2 inline-flex max-w-full items-center rounded-full border border-[#d4d8de] bg-white/90 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#7b8794] shadow-[0_2px_0_rgba(148,163,184,0.12)]">
+            🔒 {getUnlockLevelLabel(asset.unlockXp)}
+          </div>
+        ) : null}
+      </button>
     );
   };
 
@@ -417,7 +541,7 @@ export default function GamePreviewCanvas({
         key: `${asset.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       };
       const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-      setPastStates((prev) => [...prev, snapshot]);
+      recordSceneHistory(snapshot);
       setPlacedAssets((prev) => [...prev, placed]);
       updateSelection(placed.key);
     } catch {
@@ -427,19 +551,29 @@ export default function GamePreviewCanvas({
 
   const handleUndo = () => {
     if (!isEditMode || !pastStates.length) return;
+    const currentSnapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
     const previous = pastStates[pastStates.length - 1];
     setPastStates((prev) => prev.slice(0, -1));
-    setPlacedAssets(previous.placedAssets);
-    updateSelection(previous.selectedPlacedAssetKey);
-    setBackdropState(previous.backdropState);
+    setFutureStates((prev) => [...prev, currentSnapshot]);
+    restoreSceneState(previous);
+  };
+
+  const handleRedo = () => {
+    if (!isEditMode || !futureStates.length) return;
+    const currentSnapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    const next = futureStates[futureStates.length - 1];
+    setFutureStates((prev) => prev.slice(0, -1));
+    setPastStates((prev) => [...prev.slice(-29), currentSnapshot]);
+    restoreSceneState(next);
   };
 
   const handleRestart = () => {
     if (!isEditMode || (!placedAssets.length && !backdropState)) return;
+    const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
+    recordSceneHistory(snapshot);
     setPlacedAssets([]);
     updateSelection(null);
     setBackdropState(null);
-    setPastStates([]);
     setDraggingPlacedAssetKey(null);
     setResizingPlacedAssetKey(null);
     setDraggingBackdrop(false);
@@ -461,17 +595,52 @@ export default function GamePreviewCanvas({
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
   };
 
-  const deletePlacedAsset = (assetKey) => {
-    if (!assetKey) return;
+  const deletePlacedAssets = (assetKeys) => {
+    const keysToDelete = Array.from(new Set((assetKeys || []).filter(Boolean)));
+    if (!keysToDelete.length) return;
     const snapshot = buildSnapshot(placedAssets, selectedPlacedAssetKey, backdropState);
-    setPastStates((prev) => [...prev, snapshot]);
-    setPlacedAssets((prev) => prev.filter((asset) => asset.key !== assetKey));
-    updateSelection(selectedPlacedAssetKey === assetKey ? null : selectedPlacedAssetKey);
+    recordSceneHistory(snapshot);
+    setPlacedAssets((prev) => prev.filter((asset) => !keysToDelete.includes(asset.key)));
+    const remainingSelectedKeys = selectedPlacedAssetKeys.filter((key) => !keysToDelete.includes(key));
+    const nextPrimary = remainingSelectedKeys.includes(selectedPlacedAssetKey)
+      ? selectedPlacedAssetKey
+      : (remainingSelectedKeys[remainingSelectedKeys.length - 1] || null);
+    updateSelection(nextPrimary, remainingSelectedKeys);
+  };
+
+  const deletePlacedAsset = (assetKey) => {
+    deletePlacedAssets([assetKey]);
+  };
+
+  const handleAssetSelection = (event, assetKey) => {
+    if (!isEditMode) return;
+
+    if (!(event.shiftKey || event.metaKey || event.ctrlKey)) {
+      updateSelection(assetKey);
+      return;
+    }
+
+    if (selectedPlacedAssetKeys.includes(assetKey)) {
+      const remainingKeys = selectedPlacedAssetKeys.filter((key) => key !== assetKey);
+      const nextPrimary = selectedPlacedAssetKey === assetKey
+        ? (remainingKeys[remainingKeys.length - 1] || null)
+        : selectedPlacedAssetKey;
+      updateSelection(nextPrimary, remainingKeys);
+      return;
+    }
+
+    updateSelection(assetKey, [...selectedPlacedAssetKeys, assetKey]);
   };
 
   const handlePlacedAssetPointerDown = (e, asset) => {
     if (!isEditMode || !canvasRef.current) return;
     e.stopPropagation();
+
+    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+      handleAssetSelection(e, asset.key);
+      return;
+    }
+
     const rect = canvasRef.current.getBoundingClientRect();
     updateSelection(asset.key);
     setDraggingPlacedAssetKey(asset.key);
@@ -545,6 +714,16 @@ export default function GamePreviewCanvas({
   const handleCanvasPointerMove = (e) => {
     if (!canvasRef.current || !isEditMode) return;
 
+    if (selectionBox) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      setSelectionBox((current) => (current ? {
+        ...current,
+        currentX: e.clientX - rect.left,
+        currentY: e.clientY - rect.top,
+      } : current));
+      return;
+    }
+
     if (resizingBackdrop && backdropResizeStartRef.current && backdropState) {
       const start = backdropResizeStartRef.current;
       const bounds = getBackdropScaleBounds(canvasRef.current.getBoundingClientRect());
@@ -599,9 +778,26 @@ export default function GamePreviewCanvas({
   const handleCanvasPointerUp = (e) => {
     if (!isEditMode) return;
 
+    if (selectionBox) {
+      const normalizedBox = normalizeSelectionBox(selectionBox);
+      const hasDragArea = normalizedBox && (normalizedBox.width > 6 || normalizedBox.height > 6);
+      if (hasDragArea) {
+        const selectedKeys = placedAssets
+          .filter((asset) => assetIntersectsSelectionBox(asset, normalizedBox))
+          .map((asset) => asset.key);
+        const primaryKey = selectedKeys[selectedKeys.length - 1] || null;
+        updateSelection(primaryKey, selectedKeys);
+        suppressNextAssetClickRef.current = true;
+      } else if (e?.target === canvasRef.current) {
+        updateSelection(null, []);
+      }
+      setSelectionBox(null);
+      return;
+    }
+
     if (draggingBackdrop) {
       if (backdropMovedDuringDragRef.current && backdropMoveStartRef.current) {
-        setPastStates((prev) => [...prev, backdropMoveStartRef.current]);
+        recordSceneHistory(backdropMoveStartRef.current);
       }
       setDraggingBackdrop(false);
       backdropMoveStartRef.current = null;
@@ -610,7 +806,7 @@ export default function GamePreviewCanvas({
 
     if (resizingBackdrop) {
       if (backdropResizedDuringDragRef.current && backdropResizeStartRef.current?.snapshot) {
-        setPastStates((prev) => [...prev, backdropResizeStartRef.current.snapshot]);
+        recordSceneHistory(backdropResizeStartRef.current.snapshot);
       }
       setResizingBackdrop(false);
       backdropResizeStartRef.current = null;
@@ -622,7 +818,7 @@ export default function GamePreviewCanvas({
       if (shouldDelete) {
         deletePlacedAsset(draggingPlacedAssetKey);
       } else if (movedDuringDragRef.current && moveStartSnapshotRef.current) {
-        setPastStates((prev) => [...prev, moveStartSnapshotRef.current]);
+        recordSceneHistory(moveStartSnapshotRef.current);
       }
       setDraggingPlacedAssetKey(null);
       setTrashHover(false);
@@ -632,7 +828,7 @@ export default function GamePreviewCanvas({
 
     if (resizingPlacedAssetKey) {
       if (resizedDuringDragRef.current && resizeStartRef.current?.snapshot) {
-        setPastStates((prev) => [...prev, resizeStartRef.current.snapshot]);
+        recordSceneHistory(resizeStartRef.current.snapshot);
       }
       setResizingPlacedAssetKey(null);
       resizeStartRef.current = null;
@@ -674,9 +870,9 @@ export default function GamePreviewCanvas({
   };
 
   useEffect(() => {
-    if (!isEditMode || (!draggingBackdrop && !resizingBackdrop)) return undefined;
+    if (!isEditMode || (!draggingBackdrop && !resizingBackdrop && !selectionBox)) return undefined;
     const onWindowPointerMove = (event) => handleCanvasPointerMove(event);
-    const onWindowPointerUp = () => handleCanvasPointerUp();
+    const onWindowPointerUp = (event) => handleCanvasPointerUp(event);
     window.addEventListener('pointermove', onWindowPointerMove);
     window.addEventListener('pointerup', onWindowPointerUp);
     window.addEventListener('pointercancel', onWindowPointerUp);
@@ -685,7 +881,7 @@ export default function GamePreviewCanvas({
       window.removeEventListener('pointerup', onWindowPointerUp);
       window.removeEventListener('pointercancel', onWindowPointerUp);
     };
-  }, [draggingBackdrop, isEditMode, resizingBackdrop]);
+  }, [draggingBackdrop, isEditMode, resizingBackdrop, selectionBox]);
 
   useEffect(() => {
     if (!isEditMode || !backdropState || backdropState.locked || draggingBackdrop || resizingBackdrop) return undefined;
@@ -704,7 +900,7 @@ export default function GamePreviewCanvas({
     e.preventDefault();
     if (!wheelResizeSnapshotRef.current) {
       wheelResizeSnapshotRef.current = buildSnapshot(placedAssets, asset.key, backdropState);
-      setPastStates((prev) => [...prev, wheelResizeSnapshotRef.current]);
+      recordSceneHistory(wheelResizeSnapshotRef.current);
     }
 
     setPlacedAssets((prev) => prev.map((item) => {
@@ -723,22 +919,53 @@ export default function GamePreviewCanvas({
     }, 180);
   };
 
+  useEffect(() => {
+    if (undoSignal === lastUndoSignalRef.current) return;
+    lastUndoSignalRef.current = undoSignal;
+    handleUndo();
+  }, [undoSignal]);
+
+  useEffect(() => {
+    if (redoSignal === lastRedoSignalRef.current) return;
+    lastRedoSignalRef.current = redoSignal;
+    handleRedo();
+  }, [redoSignal]);
+
   const visibleAssets = placedAssets.map((asset) => getVisualAsset(asset, runtimeSnapshot));
   const showSelectionChrome = isEditMode && !suppressSelectionChrome;
+  const normalizedSelectionBox = normalizeSelectionBox(selectionBox);
   const backdropTransform = backdropState
     ? `translate(${backdropState.x}px, ${backdropState.y}px) scale(${backdropState.scale})`
     : 'none';
   const saveLabel = saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save';
   const resolvedPublishLabel = publishState === 'publishing' ? 'Sharing...' : publishState === 'published' ? 'Copied' : publishLabel;
 
+  const startSelectionBox = (event) => {
+    if (!isEditMode || !canvasRef.current) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (controlsRef.current?.contains(target)) return;
+    if (trayRef.current?.contains(target)) return;
+    if (trayToggleRef.current?.contains(target)) return;
+    if (target.closest('[data-canvas-asset="true"]')) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const startX = event.clientX - rect.left;
+    const startY = event.clientY - rect.top;
+    setSelectionBox({
+      startX,
+      startY,
+      currentX: startX,
+      currentY: startY,
+    });
+  };
+
   return (
     <section
       ref={canvasRef}
       data-sandbox-canvas-root="true"
-      className="relative h-full overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]"
-      onClick={(e) => {
-        if (isEditMode && e.target === e.currentTarget) updateSelection(null);
-      }}
+      className="relative h-full select-none overflow-hidden rounded-[28px] border border-duo-line bg-[#ece7d2]"
+      onPointerDown={startSelectionBox}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
       onPointerCancel={handleCanvasPointerUp}
@@ -746,6 +973,18 @@ export default function GamePreviewCanvas({
       onDragOver={(e) => isEditMode && e.preventDefault()}
       onDrop={onCanvasDrop}
     >
+      <style>{`
+        @keyframes cq-bottom-drawer-in {
+          0% {
+            opacity: 0;
+            transform: translateY(32px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
       {selectedBackdrop ? (
         <div
           ref={backdropRef}
@@ -773,52 +1012,70 @@ export default function GamePreviewCanvas({
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.2),transparent_40%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.45)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.45)_1px,transparent_1px)] bg-[size:48px_48px] opacity-60" />
+      {normalizedSelectionBox ? (
+        <div
+          className="pointer-events-none absolute z-20 border-2 border-[#1CB0F6] bg-[#1CB0F6]/15"
+          style={{
+            left: normalizedSelectionBox.left,
+            top: normalizedSelectionBox.top,
+            width: normalizedSelectionBox.width,
+            height: normalizedSelectionBox.height,
+          }}
+        />
+      ) : null}
 
-      <div ref={controlsRef} className={`absolute right-4 top-4 z-10 flex items-center gap-2 ${draggingPlacedAssetKey ? 'pointer-events-none' : ''}`}>
-        {showEditToolbar ? (
-          <>
-            <button type="button" onClick={handleUndo} disabled={!isEditMode || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
-            <button type="button" onClick={handleRestart} disabled={!isEditMode || (!placedAssets.length && !backdropState)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
-          </>
-        ) : null}
-        {showSaveButton ? (
-          <button type="button" onClick={onSave} disabled={saveState === 'saving'} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
-            <Save size={24} />
-            {saveLabel}
-          </button>
-        ) : null}
-        {showPublishButton ? (
-          <button type="button" onClick={onPublish} disabled={publishState === 'publishing'} className="duo-btn-green inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
-            <Shapes size={24} />
-            {resolvedPublishLabel}
-          </button>
-        ) : null}
-        {isPlayMode ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={() => {
-          ensureAudioReady();
-          onPlay?.();
-        }} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
-      </div>
+      {showCanvasControls ? (
+        <div ref={controlsRef} className={`absolute right-4 top-4 z-10 flex items-center gap-2 ${draggingPlacedAssetKey ? 'pointer-events-none' : ''}`}>
+          {showEditToolbar ? (
+            <>
+              <button type="button" onClick={handleUndo} disabled={!isEditMode || !pastStates.length} className="grid h-14 w-14 place-items-center rounded-full bg-[#6f6f6f] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><Undo2 size={24} /></button>
+              <button type="button" onClick={handleRestart} disabled={!isEditMode || (!placedAssets.length && !backdropState)} className="grid h-14 w-14 place-items-center rounded-full bg-[#a5a5a5] text-white shadow disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={24} /></button>
+            </>
+          ) : null}
+          {showSaveButton ? (
+            <button type="button" onClick={onSave} disabled={saveState === 'saving'} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
+              <Save size={24} />
+              {saveLabel}
+            </button>
+          ) : null}
+          {showPublishButton ? (
+            <button type="button" onClick={onPublish} disabled={publishState === 'publishing'} className="duo-btn-green inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl disabled:cursor-not-allowed disabled:opacity-70">
+              <Shapes size={24} />
+              {resolvedPublishLabel}
+            </button>
+          ) : null}
+          {isPlayMode ? <button onClick={onStop} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Square size={24} />Stop</button> : <button onClick={() => {
+            ensureAudioReady();
+            onPlay?.();
+          }} className="duo-btn-blue inline-flex items-center gap-2 rounded-full px-7 py-3 text-3xl"><Play size={24} />Play</button>}
+        </div>
+      ) : null}
 
       {isPlayMode ? <div className="absolute left-4 top-4 z-10 rounded-2xl border border-[#d3dae3] bg-white/90 px-4 py-2 text-sm font-extrabold text-slate-700 shadow">Timer: {Math.ceil(runtimeSnapshot?.variables?.time ?? 0)}s | Score: {Math.round(runtimeSnapshot?.variables?.score ?? 0)}</div> : null}
 
       {visibleAssets.map((asset) => {
-        const isSelected = selectedPlacedAssetKey === asset.key;
+        const isSelected = selectedPlacedAssetKeys.includes(asset.key);
         const scale = asset.scale || 1;
         const frameSize = 180 * scale;
         const emojiSize = 96 * scale;
         return (
           <div
             key={asset.key}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none ${isEditMode && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-20'} ${isEditMode && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : isPlayMode ? 'cursor-pointer' : ''}`}
+            data-canvas-asset="true"
+            className={`absolute -translate-x-1/2 -translate-y-1/2 touch-none select-none ${isEditMode && draggingPlacedAssetKey === asset.key ? 'z-40 cursor-grabbing' : 'z-20'} ${isEditMode && draggingPlacedAssetKey !== asset.key ? 'cursor-grab' : isPlayMode ? 'cursor-pointer' : ''}`}
             style={{ left: asset.x, top: asset.y, width: frameSize, height: frameSize, opacity: getOpacity(asset) }}
             title={asset.label}
             onClick={(e) => {
               e.stopPropagation();
-              if (isEditMode) updateSelection(asset.key);
+              if (suppressNextAssetClickRef.current) {
+                suppressNextAssetClickRef.current = false;
+                return;
+              }
+              if (isEditMode) handleAssetSelection(e, asset.key);
               if (isPlayMode) onSpriteClick?.(asset.key);
             }}
             onPointerDown={(e) => handlePlacedAssetPointerDown(e, asset)}
-            onWheel={isSelected ? (e) => handleSelectedAssetWheel(e, asset) : undefined}
+            onWheel={selectedPlacedAssetKey === asset.key ? (e) => handleSelectedAssetWheel(e, asset) : undefined}
           >
             {asset.speechText ? (
               <div className="pointer-events-none absolute -top-10 left-1/2 z-30 w-max max-w-[220px] -translate-x-1/2">
@@ -830,39 +1087,64 @@ export default function GamePreviewCanvas({
             ) : null}
             {isSelected && showSelectionChrome ? (
               <>
-                <div className="absolute inset-0 border-[3px] border-[#19a2ff]" />
+                <div className="pointer-events-none absolute inset-0 rounded-[2px] border-[3px] border-[#19a2ff]" />
                 <div className="absolute -left-[7px] -top-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, -1)} />
                 <div className="absolute -right-[7px] -top-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, -1)} />
                 <div className="absolute -bottom-[7px] -left-[7px] h-[14px] w-[14px] cursor-nesw-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, -1, 1)} />
                 <div className="absolute -bottom-[7px] -right-[7px] h-[14px] w-[14px] cursor-nwse-resize border-2 border-[#19a2ff] bg-white" onPointerDown={(e) => handleResizeHandlePointerDown(e, asset, 1, 1)} />
               </>
             ) : null}
-            <div className="grid h-full w-full place-items-center bg-transparent leading-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
-            {asset.costume && asset.costume !== 'default' ? <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-slate-600 shadow">{asset.costume}</div> : null}
+            <div className="grid h-full w-full place-items-center bg-transparent leading-none select-none" style={{ fontSize: emojiSize, transform: getTransform(asset) }}>{asset.emoji}</div>
           </div>
         );
       })}
 
-      {selectedPlacedAsset && showSelectionChrome ? <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow"><div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1" style={{ transform: getTransform(selectedPlacedAsset) }}>{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div></div> : null}
-      {showTrayToggle && isEditMode && !draggingPlacedAssetKey ? <button ref={trayToggleRef} onClick={() => setTrayOpen((v) => !v)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">{trayOpen ? <X size={30} /> : '+'}</button> : null}
+      {showSelectionChrome && selectedPlacedAssetKeys.length > 1 ? (
+        <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow">
+          <div className="flex items-center gap-3 text-xl font-bold text-slate-800">
+            <span className="rounded-xl bg-slate-100 px-2 py-1">◻</span>
+            {selectedPlacedAssetKeys.length} assets selected
+          </div>
+        </div>
+      ) : selectedPlacedAsset && showSelectionChrome ? (
+        <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-[20px] border border-duo-line bg-white px-4 py-2 shadow">
+          <div className="flex items-center gap-3 text-2xl font-bold text-slate-800"><span className="rounded-xl bg-slate-100 px-2 py-1">{selectedPlacedAsset.emoji}</span>{selectedPlacedAsset.label}</div>
+        </div>
+      ) : null}
+      {showTrayToggle && isEditMode && !draggingPlacedAssetKey && !trayOpen ? <button ref={trayToggleRef} onClick={() => setTrayOpen(true)} className="absolute bottom-4 left-1/2 z-20 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-b-4 border-[#666a65] bg-[#7f827c] text-5xl font-display text-white shadow">+</button> : null}
 
       {trayOpen && isEditMode ? (
-        <div ref={trayRef} className="absolute bottom-24 left-1/2 z-20 w-[900px] max-w-[94%] -translate-x-1/2 rounded-[34px] border-2 border-[#d7dde4] bg-white p-5 shadow-[0_8px_0_rgba(148,163,184,0.22)]">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div
+          ref={trayRef}
+          className="absolute inset-x-4 bottom-4 z-20 flex h-[42%] min-h-[280px] max-h-[420px] flex-col overflow-hidden rounded-[30px] border-2 border-[#d7dde4] bg-white px-5 py-4 shadow-[0_8px_0_rgba(148,163,184,0.22)]"
+          style={{ animation: 'cq-bottom-drawer-in 220ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        >
+          <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#64748b]">Drag Assets Into The Sandbox</p>
               {trayTab === 'backdrops' ? (
                 <p className="mt-1 text-sm font-bold text-slate-500">Pick a backdrop, adjust it once, then lock it into place.</p>
               ) : null}
             </div>
-            <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
-              <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>
-              <button type="button" onClick={() => setTrayTab('backdrops')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'backdrops' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Image size={16} />Backdrop Assets</button>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-[22px] border-2 border-[#d7dde4] bg-[#f8fafc] p-1 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                <button type="button" onClick={() => setTrayTab('sprites')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'sprites' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Shapes size={16} />Emoji Assets</button>
+                <button type="button" onClick={() => setTrayTab('backdrops')} className={`inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-extrabold transition ${trayTab === 'backdrops' ? 'bg-white text-[#0d76ab] shadow-[0_3px_0_rgba(148,163,184,0.18)]' : 'text-slate-500 hover:text-slate-700'}`}><Image size={16} />Backdrop Assets</button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTrayOpen(false)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#d7dde4] bg-white text-slate-500 shadow-[0_3px_0_rgba(148,163,184,0.14)] transition hover:bg-slate-50"
+                aria-label="Close assets drawer"
+              >
+                <X size={20} />
+              </button>
             </div>
           </div>
 
+          <div className="relative min-h-0 flex-1">
           {trayTab === 'backdrops' ? (
-            <div className="max-h-[360px] overflow-y-auto pr-1">
+            <div className="h-full overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
                 {trayAssets.map((asset) => (
                   <button
@@ -902,10 +1184,10 @@ export default function GamePreviewCanvas({
               </div>
             </div>
           ) : (
-            <div className="max-h-[360px] space-y-5 overflow-y-auto pr-1">
+            <div className="h-full space-y-4 overflow-y-auto pr-1">
               {spriteAssetSections.map((section) => (
-                <section key={section.id} className="rounded-[28px] border border-[#e2e8f0] bg-[#f8fafc] p-4 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
-                  <div className="mb-3 flex items-start justify-between gap-3">
+                <section key={section.id} className="rounded-[24px] border border-[#e2e8f0] bg-[#f8fafc] p-3 shadow-[inset_0_-2px_0_rgba(148,163,184,0.12)]">
+                  <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#64748b]">{section.title}</p>
                     </div>
@@ -920,6 +1202,8 @@ export default function GamePreviewCanvas({
               ))}
             </div>
           )}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white via-white/85 to-transparent" />
+          </div>
         </div>
       ) : null}
 

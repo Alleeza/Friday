@@ -2,12 +2,19 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { calculateLevel, levelUnlocks } from '../gamification/levels';
 import { achievementsData } from '../gamification/achievements';
 import { missionsData } from '../gamification/missions';
+import {
+  getGamificationUserId,
+  loadGamificationProgress,
+  saveGamificationProgress,
+} from '../api/gamificationProgress';
 
 const GamificationContext = createContext(null);
 
-export function GamificationProvider({ children }) {
-  const [userProgress, setUserProgress] = useState({
-    userId: 'questy_user_1',
+const LOCAL_STORAGE_KEY = 'gamification_progress';
+
+function createDefaultUserProgress() {
+  return {
+    userId: getGamificationUserId(),
     total_xp: 0,
     level: 1,
     current_mission: 'mission_1',
@@ -17,28 +24,99 @@ export function GamificationProvider({ children }) {
     unlocked_events: [],
     unlocked_actions: [],
     unlocked_skins: [],
-    mission_progress: {} // { missionId: { stepId: progressCount } }
-  });
+    mission_progress: {},
+  };
+}
+
+function normalizeUserProgress(progress = {}) {
+  const base = createDefaultUserProgress();
+
+  return {
+    ...base,
+    ...progress,
+    userId: progress.userId || base.userId,
+    total_xp: Number.isFinite(progress.total_xp) ? progress.total_xp : base.total_xp,
+    level: Number.isFinite(progress.level) ? progress.level : calculateLevel(Number.isFinite(progress.total_xp) ? progress.total_xp : base.total_xp),
+    completed_missions: Array.isArray(progress.completed_missions) ? progress.completed_missions : base.completed_missions,
+    achievements: Array.isArray(progress.achievements) ? progress.achievements : base.achievements,
+    unlocked_items: Array.isArray(progress.unlocked_items) ? progress.unlocked_items : base.unlocked_items,
+    unlocked_events: Array.isArray(progress.unlocked_events) ? progress.unlocked_events : base.unlocked_events,
+    unlocked_actions: Array.isArray(progress.unlocked_actions) ? progress.unlocked_actions : base.unlocked_actions,
+    unlocked_skins: Array.isArray(progress.unlocked_skins) ? progress.unlocked_skins : base.unlocked_skins,
+    mission_progress: progress.mission_progress && typeof progress.mission_progress === 'object'
+      ? progress.mission_progress
+      : base.mission_progress,
+  };
+}
+
+export function GamificationProvider({ children }) {
+  const [userProgress, setUserProgress] = useState(() => createDefaultUserProgress());
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const [notification, setNotification] = useState(null);
   const [eventsHistory, setEventsHistory] = useState([]);
 
-  // Load from local storage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('gamification_progress');
-    if (saved) {
+    let cancelled = false;
+
+    async function hydrateProgress() {
+      let fallbackProgress = null;
+      if (typeof window !== 'undefined') {
+        const saved = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) {
+          try {
+            fallbackProgress = normalizeUserProgress(JSON.parse(saved));
+          } catch (error) {
+            console.error('Failed to parse gamification progress', error);
+          }
+        }
+      }
+
+      if (fallbackProgress && !cancelled) {
+        setUserProgress(fallbackProgress);
+      }
+
       try {
-        setUserProgress(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse gamification progress", e);
+        const remote = await loadGamificationProgress();
+        if (!cancelled && remote?.progress) {
+          setUserProgress(normalizeUserProgress(remote.progress));
+        }
+      } catch (error) {
+        console.error('Failed to load gamification progress from API', error);
+      } finally {
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
       }
     }
+
+    hydrateProgress();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Save to local storage on change
   useEffect(() => {
-    localStorage.setItem('gamification_progress', JSON.stringify(userProgress));
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userProgress));
+    }
   }, [userProgress]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    let cancelled = false;
+    saveGamificationProgress(userProgress).catch((error) => {
+      if (!cancelled) {
+        console.error('Failed to save gamification progress to API', error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, userProgress]);
 
   const showNotification = useCallback((type, title, message, timeout = 5000) => {
     const id = Date.now();

@@ -192,8 +192,6 @@ export default function SharedGamePage({ projectId, shareId }) {
   const project = publication?.project || normalizeProjectState(null);
   const title = project.setupData?.idea || project.setupData?.title || 'Shared Friday Game';
   const publishedAtText = publication?.publishedAt ? new Date(publication.publishedAt).toLocaleString() : 'Unknown';
-  const sceneAssetCount = project.scene?.placedAssets?.length || 0;
-  const scriptCount = Object.keys(project.scriptsByInstanceKey || {}).length;
 
   return (
     <>
@@ -204,10 +202,7 @@ export default function SharedGamePage({ projectId, shareId }) {
             <div className="flex flex-col gap-5 px-5 py-5 lg:flex-row lg:items-end lg:justify-between lg:px-6">
               <div className="max-w-4xl">
                 <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-sky-500">Read-Only Share Link</p>
-                <h1 className="mt-2 font-display text-[2.35rem] leading-none tracking-[-0.03em] text-slate-900 lg:text-[3rem]">{title}</h1>
-                <p className="mt-3 max-w-2xl text-sm font-bold leading-6 text-slate-500">
-                  This page mirrors the published game snapshot in the sandbox player. You can play it, but editing stays locked to the original project.
-                </p>
+                <h1 className="mt-2 font-display text-[1.9rem] leading-none tracking-[-0.03em] text-slate-900 lg:text-[2.35rem]">{title}</h1>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="rounded-[22px] border border-[#dbe4ee] bg-[#f8fbff] px-4 py-3 text-sm font-bold text-slate-600">
@@ -219,26 +214,6 @@ export default function SharedGamePage({ projectId, shareId }) {
               </div>
             </div>
 
-            <div className="grid gap-3 border-t border-[#edf2f7] bg-[#fbfdff] px-5 py-4 md:grid-cols-3 lg:px-6">
-              <div className="rounded-[24px] border border-[#d8e9f7] bg-white px-4 py-3 shadow-[0_4px_0_rgba(37,168,239,0.08)]">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">Mode</p>
-                <div className="mt-2 flex items-center gap-2 text-[15px] font-extrabold text-slate-800">
-                  {mode === 'play' ? <Square className="h-4 w-4 text-[#1CB0F6]" /> : <Play className="h-4 w-4 text-[#58cc02]" />}
-                  {mode === 'play' ? 'Live simulation' : 'Sandbox preview'}
-                </div>
-              </div>
-              <div className="rounded-[24px] border border-[#d8e9f7] bg-white px-4 py-3 shadow-[0_4px_0_rgba(37,168,239,0.08)]">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">Published Scene</p>
-                <p className="mt-2 text-[15px] font-extrabold text-slate-800">{sceneAssetCount} placed assets</p>
-              </div>
-              <div className="rounded-[24px] border border-[#d8e9f7] bg-white px-4 py-3 shadow-[0_4px_0_rgba(37,168,239,0.08)]">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">Shared Build</p>
-                <div className="mt-2 flex items-center gap-2 text-[15px] font-extrabold text-slate-800">
-                  <Share2 className="h-4 w-4 text-[#1CB0F6]" />
-                  {scriptCount} scripted objects
-                </div>
-              </div>
-            </div>
           </section>
 
           {loadError ? (
@@ -252,11 +227,26 @@ export default function SharedGamePage({ projectId, shareId }) {
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf2f7] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] px-4 py-3 lg:px-5">
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#8fa0ba]">Game Player</p>
-                  <p className="mt-1 text-sm font-bold text-slate-600">Styled to match the CodeQuest sandbox preview.</p>
                 </div>
-                <div className="rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-3 py-1.5 text-[12px] font-extrabold text-[#3a7d0a]">
-                  Click Play to start
-                </div>
+                {mode === 'play' ? (
+                  <button
+                    type="button"
+                    onClick={stopRuntime}
+                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRuntime}
+                    className="inline-flex items-center gap-1.5 rounded-2xl bg-[#1CB0F6] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_4px_0_#0099E5] transition hover:-translate-y-[1px] hover:bg-[#0099E5]"
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Play
+                  </button>
+                )}
               </div>
 
               <div className="relative h-[calc(100vh-21rem)] min-h-[620px] w-full bg-[#eef3f8]">
@@ -272,6 +262,7 @@ export default function SharedGamePage({ projectId, shareId }) {
                     if (runtimeRef.current) setRuntimeSnapshot(runtimeRef.current.getSnapshot());
                   }}
                   showEditToolbar={false}
+                  showCanvasControls={false}
                   showSaveButton={false}
                   showTrayToggle={false}
                 />

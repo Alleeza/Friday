@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, Flame, Star, X } from 'lucide-react';
+import { Sparkles, ArrowRight, ArrowLeft, Lightbulb, BrainCircuit, Zap, Check, X } from 'lucide-react';
 import { usePlanSession } from '../hooks/usePlanSession.js';
 import PlanReview from './PlanReview.jsx';
 import questyImage from '../imgages/profile.png';
@@ -40,15 +40,8 @@ const questyWaveAnimation = {
 
 /* ─── Shared Nav ─── */
 function TopNav({ step, onGoHome }) {
-  const { userProgress } = useGamification();
-  const currentLevelXp = getXpForLevel(userProgress.level);
-  const nextLevelXp = getXpForLevel(userProgress.level + 1);
-  const xpIntoLevel = Math.max(0, userProgress.total_xp - currentLevelXp);
-  const xpNeededForNext = Math.max(nextLevelXp - currentLevelXp, 1);
-  const progressPercent = Math.min(100, Math.max(0, (xpIntoLevel / xpNeededForNext) * 100));
-
   return (
-    <header className="sticky top-0 z-30 border-b border-[#d9efc0] bg-[#f4fce8]/95 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1140px] items-center justify-between px-6 py-3.5 lg:px-10">
         {/* Logo */}
         <button
@@ -64,23 +57,8 @@ function TopNav({ step, onGoHome }) {
           <span className="font-display text-[24px] font-bold leading-none tracking-[-0.02em] text-slate-800">CodeQuest</span>
         </button>
 
-        {/* Right side — progress indicators */}
+        {/* Right side */}
         <div className="flex items-center gap-3">
-          {/* Level badge */}
-          <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
-            <Star className="h-3.5 w-3.5" />
-            {`Level ${userProgress.level}`}
-            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
-              <div className="h-full rounded-full bg-[#58cc02]" style={{ width: `${progressPercent}%` }} />
-            </div>
-            <span className="text-[11px] font-extrabold text-[#4a8c12]">{`${xpIntoLevel}/${xpNeededForNext} XP`}</span>
-          </div>
-
-          {/* Streak */}
-          <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] font-bold text-slate-600 sm:flex">
-            <Flame className="h-3.5 w-3.5 text-orange-400" /> 0
-          </div>
-
           {/* CTA */}
           {step !== 'idea' && (
             <button

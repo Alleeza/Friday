@@ -127,6 +127,26 @@ function buildPlanMissionView(plan, workspaceState) {
   };
 }
 
+function getConciseStageDescription(description) {
+  if (!description) return '';
+
+  const normalized = description
+    .replace(/the things to collect/gi, 'collectibles')
+    .replace(/that make the route interesting/gi, '')
+    .replace(/\s+,/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (normalized.length <= 60) return normalized.replace(/,\s*$/, '.');
+
+  const firstClause = normalized.split(',').slice(0, 2).join(',').trim();
+  if (firstClause && firstClause.length <= 60) {
+    return `${firstClause}.`.replace(/\.\./g, '.');
+  }
+
+  return `${normalized.slice(0, 57).trimEnd()}...`;
+}
+
 export default function MissionPanel({ plan = null, workspaceState = null }) {
   const { userProgress } = useGamification();
   const [expandedStepId, setExpandedStepId] = useState(null);
@@ -158,6 +178,10 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
     (sum, step, index) => sum + ((missionProgress[step.id] || 0) >= step.target ? (stepRewards[index] || 0) : 0),
     0,
   );
+  const missionXpTotal = planMissionView?.currentMission?.reward_xp
+    || currentMission?.reward_xp
+    || stepRewards.reduce((sum, reward) => sum + reward, 0);
+  const conciseStageDescription = getConciseStageDescription(currentMission.description);
   const stepCompletionMap = useMemo(
     () => Object.fromEntries(missionSteps.map((step) => [step.id, (missionProgress[step.id] || 0) >= step.target])),
     [missionProgress, missionSteps],
@@ -224,32 +248,31 @@ export default function MissionPanel({ plan = null, workspaceState = null }) {
           <div className="flex items-center justify-between gap-3">
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#64748B]">Stage {currentStageNumber}</span>
             <div className="shrink-0 rounded-full bg-[#89E219] px-3 py-1.5 text-[11px] font-black text-[#2F5F00] shadow-[inset_0_-2px_0_rgba(0,0,0,0.08)]">
-              {missionXpEarned} XP
+              {missionXpEarned}/{missionXpTotal} XP
             </div>
           </div>
           <div className="mt-2 min-w-0">
             <h2 className="max-w-[240px] text-[18px] font-black leading-[1.04] tracking-[-0.03em] text-slate-900">{currentStageTitle}</h2>
-            <p className="mt-1 text-[11px] font-medium leading-[1.35] text-[#475569]">{currentMission.description}</p>
+            <p className="mt-1 truncate text-[11px] font-medium leading-[1.35] text-[#475569]">{conciseStageDescription}</p>
           </div>
-        </div>
-
-        <div className="rounded-[28px] border border-[#E5E5E5] bg-white px-4 py-4 shadow-[0_4px_0_rgba(0,0,0,0.04)]">
-          <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
-            <span>Mission Progress</span>
-            <span>{completedSteps}/{totalSteps} steps</span>
+          <div className="mt-4 border-t border-[#EEF2F7] pt-4">
+            <div className="flex items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.12em] text-[#64748B]">
+              <span>Mission Progress</span>
+              <span>{completedSteps}/{totalSteps} steps</span>
+            </div>
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
+              <div
+                className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
           </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E5E5E5]">
-            <div
-              className="h-full rounded-full bg-[#58CC02] transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="mt-3 text-right text-[10px] font-black text-[#58CC02]">{Math.round(progressPercent)}% completed</div>
         </div>
 
         <div className="flex flex-col gap-2">
           <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#475569]">
-            {`Stage ${currentStageNumber}: ${currentStageTitle}`.toUpperCase()}
+            Task Checklist
           </div>
           <ul className="flex flex-col gap-3">
             {currentMission.steps.map((step, index) => {

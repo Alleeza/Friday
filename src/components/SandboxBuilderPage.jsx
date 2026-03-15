@@ -263,7 +263,7 @@ export default function SandboxBuilderPage({
   projectPlan = null,
   onCreateNewGame,
 }) {
-  const { processEvent, userProgress } = useGamification();
+  const { processEvent } = useGamification();
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const canvasContainerRef = useRef(null);
   const runtimeRef = useRef(null);
@@ -1849,7 +1849,7 @@ export default function SandboxBuilderPage({
                 initialSceneState={initialProjectState?.scene}
                 availableSpriteAssets={availableBuilderAssets}
                 prioritySpriteAssetIds={priorityBuilderAssetIds}
-                currentXp={userProgress.total_xp}
+                currentXp={0}
                 selectedInstanceKey={editorStage === 'expanded' ? null : focusedInstanceKey}
                 onSceneChange={handleSceneChange}
                 onSelectedInstanceChange={(nextKey) => selectInstance(nextKey, Boolean(nextKey) && mode !== 'play')}

@@ -136,8 +136,8 @@ export function GamificationProvider({ children }) {
     async function hydrateProgress() {
       try {
         const remote = await loadGamificationProgress();
-        if (!cancelled && remote?.progress) {
-          setUserProgress(normalizeUserProgress(remote.progress));
+        if (!cancelled && remote) {
+          setUserProgress(normalizeUserProgress(remote));
         }
       } catch (error) {
         console.error('Failed to load gamification progress from API', error);

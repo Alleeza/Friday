@@ -9,12 +9,19 @@ import {
   distributeStepRewards,
   sumNumericValues,
 } from '../gamification/progressUtils';
+import {
+  getGamificationUserId,
+  loadGamificationProgress,
+  saveGamificationProgress,
+} from '../api/gamificationProgress';
 
 const GamificationContext = createContext(null);
 
+const LOCAL_STORAGE_KEY = 'gamification_progress';
+
 function createDefaultUserProgress() {
   return {
-    userId: 'questy_user_1',
+    userId: getGamificationUserId(),
     progress_mode: 'legacy',
     bonus_xp: 0,
     total_xp: 0,
@@ -42,9 +49,11 @@ function normalizeXpMap(rawMap) {
 }
 
 function finalizeUserProgress(rawProgress) {
+  const defaults = createDefaultUserProgress();
   const progress = {
-    ...createDefaultUserProgress(),
+    ...defaults,
     ...rawProgress,
+    userId: rawProgress?.userId || defaults.userId,
     progress_mode: rawProgress?.progress_mode === 'plan' ? 'plan' : 'legacy',
     completed_missions: Array.isArray(rawProgress?.completed_missions) ? rawProgress.completed_missions : [],
     achievements: Array.isArray(rawProgress?.achievements) ? rawProgress.achievements : [],
@@ -78,11 +87,10 @@ function finalizeUserProgress(rawProgress) {
   };
 }
 
-function normalizeUserProgress(savedProgress) {
-  const defaults = createDefaultUserProgress();
+function normalizeUserProgress(progress = {}) {
   return finalizeUserProgress({
-    ...defaults,
-    ...savedProgress,
+    ...createDefaultUserProgress(),
+    ...progress,
   });
 }
 
@@ -108,7 +116,7 @@ function loadSavedUserProgress() {
   }
 
   try {
-    const saved = window.localStorage.getItem('gamification_progress');
+    const saved = window.localStorage.getItem(LOCAL_STORAGE_KEY);
     return saved ? normalizeUserProgress(JSON.parse(saved)) : createDefaultUserProgress();
   } catch (error) {
     console.error('Failed to parse gamification progress', error);
@@ -118,15 +126,54 @@ function loadSavedUserProgress() {
 
 export function GamificationProvider({ children }) {
   const [userProgress, setUserProgress] = useState(() => loadSavedUserProgress());
-
+  const [isHydrated, setIsHydrated] = useState(false);
   const [notification, setNotification] = useState(null);
   const [eventsHistory, setEventsHistory] = useState([]);
 
-  // Save to local storage on change
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateProgress() {
+      try {
+        const remote = await loadGamificationProgress();
+        if (!cancelled && remote?.progress) {
+          setUserProgress(normalizeUserProgress(remote.progress));
+        }
+      } catch (error) {
+        console.error('Failed to load gamification progress from API', error);
+      } finally {
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
+      }
+    }
+
+    hydrateProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return;
-    window.localStorage.setItem('gamification_progress', JSON.stringify(userProgress));
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userProgress));
   }, [userProgress]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    let cancelled = false;
+    saveGamificationProgress(userProgress).catch((error) => {
+      if (!cancelled) {
+        console.error('Failed to save gamification progress to API', error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, userProgress]);
 
   const showNotification = useCallback((type, title, message, timeout = 5000) => {
     const id = Date.now();
@@ -191,23 +238,22 @@ export function GamificationProvider({ children }) {
   }, [showNotification]);
 
   const processGamificationEvent = useCallback((event) => {
-    setEventsHistory(prevHistory => {
+    setEventsHistory((prevHistory) => {
       const newHistory = [...prevHistory, { ...event, timestamp: Date.now() }];
-      
-      setUserProgress(prev => {
+
+      setUserProgress((prev) => {
         let next = { ...prev };
         let stateChanged = false;
         const notificationsToFire = [];
-        
-        // 1. Legacy mission progress (used only when a plan-based mission view is not available)
+
         if (next.progress_mode !== 'plan' && next.current_mission && !next.completed_missions.includes(next.current_mission)) {
-          const mData = missionsData.find(m => m.id === next.current_mission);
+          const mData = missionsData.find((mission) => mission.id === next.current_mission);
           if (mData) {
             const mProg = { ...(next.mission_progress[mData.id] || {}) };
             const legacyStepXp = { ...(next.legacy_step_xp || {}) };
             const stepRewards = distributeStepRewards(mData.reward_xp, mData.steps.length);
             let stepAdvanced = false;
-            
+
             mData.steps.forEach((step, stepIndex) => {
               const currentVal = mProg[step.id] || 0;
               if (currentVal < step.target) {
@@ -223,20 +269,20 @@ export function GamificationProvider({ children }) {
                 }
               }
             });
-            
+
             if (stepAdvanced) {
               next.mission_progress = { ...next.mission_progress, [mData.id]: mProg };
               next.legacy_step_xp = legacyStepXp;
               stateChanged = true;
-              
-              const allDone = mData.steps.every(s => (mProg[s.id] || 0) >= s.target);
+
+              const allDone = mData.steps.every((step) => (mProg[step.id] || 0) >= step.target);
               if (allDone) {
                 next.completed_missions = [...next.completed_missions, mData.id];
-                notificationsToFire.push({ type: 'mission', title: '⭐ Mission Complete!', message: `${mData.title} completed`});
-                
-                const mIndex = missionsData.findIndex(m => m.id === mData.id);
-                if (mIndex < missionsData.length - 1) {
-                  next.current_mission = missionsData[mIndex + 1].id;
+                notificationsToFire.push({ type: 'mission', title: '⭐ Mission Complete!', message: `${mData.title} completed` });
+
+                const missionIndex = missionsData.findIndex((mission) => mission.id === mData.id);
+                if (missionIndex < missionsData.length - 1) {
+                  next.current_mission = missionsData[missionIndex + 1].id;
                 } else {
                   next.current_mission = null;
                 }
@@ -244,18 +290,19 @@ export function GamificationProvider({ children }) {
             }
           }
         }
-        
-        // 2. Achievements
-        achievementsData.forEach(ach => {
-          if (!next.achievements.includes(ach.id)) {
-            if (ach.condition(newHistory, next)) {
-              next.achievements = [...next.achievements, ach.id];
-              notificationsToFire.push({ type: 'achievement', title: `🏆 Achievement Unlocked: ${ach.name}`, message: ach.description });
-              stateChanged = true;
-            }
+
+        achievementsData.forEach((achievement) => {
+          if (!next.achievements.includes(achievement.id) && achievement.condition(newHistory, next)) {
+            next.achievements = [...next.achievements, achievement.id];
+            notificationsToFire.push({
+              type: 'achievement',
+              title: `🏆 Achievement Unlocked: ${achievement.name}`,
+              message: achievement.description,
+            });
+            stateChanged = true;
           }
         });
-        
+
         if (!stateChanged) return prev;
 
         const finalized = finalizeUserProgress(next);
@@ -270,7 +317,7 @@ export function GamificationProvider({ children }) {
 
         return finalized;
       });
-      
+
       return newHistory;
     });
   }, [showNotification]);
@@ -283,7 +330,8 @@ export function GamificationProvider({ children }) {
       notification,
       showNotification,
       addXp,
-    }}>
+    }}
+    >
       {children}
     </GamificationContext.Provider>
   );

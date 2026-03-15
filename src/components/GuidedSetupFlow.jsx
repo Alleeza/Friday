@@ -9,6 +9,7 @@ import {
   getDefaultModelForProvider,
   getDefaultProviderName,
 } from '../ai/providerCatalog.js';
+import { getXpForLevel } from '../gamification/levels.js';
 
 /* ─── Option data ─── */
 const STYLES = [
@@ -39,8 +40,15 @@ const questyWaveAnimation = {
 
 /* ─── Shared Nav ─── */
 function TopNav({ step, onGoHome }) {
+  const { userProgress } = useGamification();
+  const currentLevelXp = getXpForLevel(userProgress.level);
+  const nextLevelXp = getXpForLevel(userProgress.level + 1);
+  const xpIntoLevel = Math.max(0, userProgress.total_xp - currentLevelXp);
+  const xpNeededForNext = Math.max(nextLevelXp - currentLevelXp, 1);
+  const progressPercent = Math.min(100, Math.max(0, (xpIntoLevel / xpNeededForNext) * 100));
+
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-[#d9efc0] bg-[#f4fce8]/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1140px] items-center justify-between px-6 py-3.5 lg:px-10">
         {/* Logo */}
         <button
@@ -61,10 +69,11 @@ function TopNav({ step, onGoHome }) {
           {/* Level badge */}
           <div className="hidden items-center gap-2 rounded-full border border-[#d6eec2] bg-[#f0fbe4] px-4 py-1.5 text-[13px] font-bold text-[#3a7d0a] sm:flex">
             <Star className="h-3.5 w-3.5" />
-            Level 1
+            {`Level ${userProgress.level}`}
             <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#d6eec2]">
-              <div className="h-full w-[10%] rounded-full bg-[#58cc02]" />
+              <div className="h-full rounded-full bg-[#58cc02]" style={{ width: `${progressPercent}%` }} />
             </div>
+            <span className="text-[11px] font-extrabold text-[#4a8c12]">{`${xpIntoLevel}/${xpNeededForNext} XP`}</span>
           </div>
 
           {/* Streak */}
@@ -225,7 +234,7 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
           STEP 1 — HERO IDEA INPUT
       ═══════════════════════════════════════════ */}
       {step === 'idea' && (
-        <main className="min-h-[calc(100vh-57px)] overflow-hidden bg-[radial-gradient(circle_at_top,#f2ffe6_0%,#ffffff_38%,#f8fcff_100%)]">
+        <main className="min-h-[calc(100vh-57px)] overflow-hidden bg-[linear-gradient(180deg,#ffffff_0%,#f8fcff_100%)]">
           <div className="mx-auto flex h-full max-w-[1140px] items-center justify-center px-6 py-8 lg:px-10">
             <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="p-2 md:p-4">
@@ -246,10 +255,6 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                     }
 
                   `}</style>
-                  <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d9efc0] bg-[#f4fce8] px-4 py-2 text-[12px] font-extrabold uppercase tracking-[0.12em] text-[#4a8c12] shadow-[0_3px_0_rgba(88,204,2,0.12)]">
-                    <Sparkles className="h-4 w-4" />
-                    Let’s Build Something Fun
-                  </div>
                   <div className="mb-5">
                     <img
                       src={questyHeroImage}
@@ -265,13 +270,8 @@ export default function GuidedSetupFlow({ onComplete, onLaunchExample, onGoHome 
                   <p className="mt-3 max-w-[620px] text-[16px] font-medium leading-7 text-slate-500 sm:text-[17px]">
                     Tell Questy your idea and we&apos;ll turn it into a playful starter plan with assets, goals, and first steps.
                   </p>
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-bold text-slate-600">
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🐰 Character</span>
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🏁 Goal</span>
-                    <span className="rounded-full border border-[#d8e9f7] bg-[#f8fcff] px-3 py-1.5 shadow-[0_2px_0_rgba(37,168,239,0.08)]">🪨 Obstacle</span>
-                  </div>
 
-                  <form ref={formRef} onSubmit={handleInitialSubmit} className="mt-6 w-full max-w-[1040px]">
+                  <form ref={formRef} onSubmit={handleInitialSubmit} className="mt-12 w-full max-w-[1040px]">
                     <div className="overflow-hidden rounded-[32px] border-2 border-[#d7e3f0] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] shadow-[0_12px_0_rgba(15,23,42,0.04)]">
                       <label htmlFor="idea-input" className="flex items-center gap-2 border-b border-[#edf1f7] px-6 py-4 text-left text-[13px] font-extrabold uppercase tracking-[0.12em] text-[#8fa0ba]">
                         <Lightbulb className="h-4 w-4 text-amber-400" />

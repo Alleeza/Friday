@@ -223,7 +223,7 @@ function getInstanceDisplayLabel(instances, instanceKey) {
 
 function BuilderTopNav({ onCreateNewGame, onOpenAchievements }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e5e7e5] bg-white/95 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-[#d9efc0] bg-[#f4fce8]/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
           <img
@@ -1500,7 +1500,7 @@ export default function SandboxBuilderPage({
                 className="h-10 w-[126px] min-w-0 rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
               >
                 {assetOptions.map((option) => (
-                  <option key={`${eventBlock.id}-left-${option.value}`} value={option.value}>
+                  <option key={`${eventBlock.id}-left-${option.value}`} value={option.value} className="bg-white text-slate-800">
                     {option.label}
                   </option>
                 ))}
@@ -1515,7 +1515,7 @@ export default function SandboxBuilderPage({
                 className="h-10 w-[98px] min-w-0 appearance-none bg-transparent px-3 text-center text-[16px] font-black text-white outline-none"
               >
                 {eventOptions.map((eventName) => (
-                  <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
+                  <option key={`${eventBlock.id}-${eventName}`} value={eventName} className="bg-white text-slate-800">
                     {eventName}
                   </option>
                 ))}
@@ -1530,7 +1530,7 @@ export default function SandboxBuilderPage({
                 className="h-10 w-[136px] min-w-0 rounded-full border-2 border-white/85 bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
               >
                 {collisionTargetOptions.map((option) => (
-                  <option key={`${eventBlock.id}-right-${option.value}`} value={option.value}>
+                  <option key={`${eventBlock.id}-right-${option.value}`} value={option.value} className="bg-white text-slate-800">
                     {option.label}
                   </option>
                 ))}
@@ -1549,7 +1549,7 @@ export default function SandboxBuilderPage({
                   className="h-10 min-w-[130px] max-w-[170px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
                 >
                   {assetOptions.map((option) => (
-                    <option key={`${eventBlock.id}-tap-${option.value}`} value={option.value}>
+                    <option key={`${eventBlock.id}-tap-${option.value}`} value={option.value} className="bg-white text-slate-800">
                       {option.label}
                     </option>
                   ))}
@@ -1565,7 +1565,7 @@ export default function SandboxBuilderPage({
                   className="h-10 min-w-[130px] max-w-[170px] rounded-full border-[3px] border-[#1dd9cb] bg-[#f8f9fb] px-3 pr-7 text-[16px] font-extrabold text-slate-700 outline-none"
                 >
                   {keyPressOptions.map((option) => (
-                    <option key={`${eventBlock.id}-key-${option.value}`} value={option.value}>
+                    <option key={`${eventBlock.id}-key-${option.value}`} value={option.value} className="bg-white text-slate-800">
                       {option.label}
                     </option>
                   ))}
@@ -1581,7 +1581,7 @@ export default function SandboxBuilderPage({
                 className="h-10 min-w-0 appearance-none bg-transparent px-3 pr-6 text-[16px] font-black text-white outline-none"
               >
                 {eventOptions.map((eventName) => (
-                  <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
+                  <option key={`${eventBlock.id}-${eventName}`} value={eventName} className="bg-white text-slate-800">
                     {eventName === 'object is tapped' ? 'is tapped' : eventName === 'key is pressed' ? 'is pressed' : eventName}
                   </option>
                 ))}
@@ -1598,7 +1598,7 @@ export default function SandboxBuilderPage({
               className="h-10 min-w-0 max-w-[220px] rounded-full border-[3px] border-white bg-white px-4 pr-7 text-[16px] font-black text-slate-800 outline-none"
             >
               {eventOptions.map((eventName) => (
-                <option key={`${eventBlock.id}-${eventName}`} value={eventName}>
+                <option key={`${eventBlock.id}-${eventName}`} value={eventName} className="bg-white text-slate-800">
                   {eventName}
                 </option>
               ))}
